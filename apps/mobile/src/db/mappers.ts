@@ -1,4 +1,10 @@
-import { money, type CategoryRule, type Transaction, type TransactionSide } from '@finant/core';
+import {
+  money,
+  type Budget,
+  type CategoryRule,
+  type Transaction,
+  type TransactionSide,
+} from '@finant/core';
 
 export interface TransactionRow {
   id: string;
@@ -60,5 +66,18 @@ export function toRule(row: RuleRow): CategoryRule {
     enabled: row.enabled === 1,
     learned: row.learned === 1,
     match: JSON.parse(row.match_json) as CategoryRule['match'],
+  };
+}
+
+export interface BudgetRow {
+  category_id: string;
+  limit_minor: number;
+  currency: string;
+}
+
+export function toBudget(row: BudgetRow): Budget {
+  return {
+    categoryId: row.category_id,
+    monthlyLimit: money(row.limit_minor, row.currency),
   };
 }

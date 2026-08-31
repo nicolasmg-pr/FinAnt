@@ -11,3 +11,4 @@ export * from './aggregate';
 export * from './recurring';
 export * from './forecast';
 export * from './dedupe';
+export * from './budget';
