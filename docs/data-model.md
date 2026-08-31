@@ -10,6 +10,21 @@ Amounts are **signed integer minor units** (`amount_minor`) plus an ISO 4217
 is not an acceptable rounding story for someone's rent. Conversion and formatting
 live in `packages/core/src/money.ts`.
 
+## Ledger side
+
+Every transaction carries `side` (`income` | `expense`) as well as its signed
+`amount_minor`. Sign alone cannot express a refund: a EUR 20 restaurant refund
+is a **positive** amount that belongs on the **expense** side, where it reduces
+the month's spending. A hand-kept ledger and a card statement both treat it that
+way, and counting it as income leaves the net right while making both totals
+wrong.
+
+`summariseMonth()` therefore groups by `side` and sums signed within it, flipping
+the expense side to a positive magnitude at the end. A source that states the
+side explicitly passes its own value (the ledger block in a workbook import,
+`CdtDbtInd` in camt.053, a debit/credit column pair in a CSV); a source that
+only gives a signed amount uses `sideFromAmount()`.
+
 ## Tables
 
 - `accounts` — one row per connected bank account, plus one local "My records"
@@ -37,7 +52,13 @@ CREATE UNIQUE INDEX idx_tx_hash ON transactions(account_id, import_hash);
 - `external_id` is the provider's `transactionId` — the reliable key when a bank
   supplies one.
 - `import_hash` is an FNV-1a hash of `account | booking date | amount | normalised
-  description`, for file imports, which have no stable id.
+  description | discriminator`, for file imports, which have no stable id.
+- The **discriminator** separates rows a source repeats verbatim. A hand-kept
+  sheet can legitimately list `comida fuera 20.00` three times in one month;
+  without it all three collapse to one hash and two real movements are swallowed.
+  It is an occurrence counter among identical rows, not a row number — a row
+  number shifts when a row is inserted above, which would make every row below
+  re-import as new.
 
 Inserts use `INSERT OR IGNORE` and count `changes` to report what was new. A
 re-imported CSV or an overlapping bank sync therefore cannot double a figure.

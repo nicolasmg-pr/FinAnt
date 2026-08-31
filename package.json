@@ -18,7 +18,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix && prettier --write \"**/*.{ts,tsx,json,md}\"",
     "typecheck": "tsc -b packages/core packages/importers packages/i18n --pretty && npm run typecheck --workspace=@finant/mobile",
-    "inspect:csv": "tsx scripts/inspect-csv.ts"
+    "inspect:csv": "tsx scripts/inspect-csv.ts",
+    "verify:workbook": "tsx scripts/verify-workbook.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

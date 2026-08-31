@@ -45,6 +45,7 @@ export async function ingest(drafts: readonly DraftTransaction[]): Promise<Inges
       valueDate: draft.valueDate,
       amountMinor: draft.amount.minor,
       currency: draft.amount.currency,
+      side: draft.side,
       description: draft.description,
       counterparty: draft.counterparty,
       reference: draft.reference,

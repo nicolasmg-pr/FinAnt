@@ -17,6 +17,7 @@ monthly income/expenses plus a year forecast. Euro area, English/Spanish/German.
 - Typecheck: `npm run typecheck`
 - Lint/format: `npm run lint:fix`
 - Inspect an unknown CSV: `npm run inspect:csv -- <file.csv>`
+- Reconcile the tracker import: `npm run verify:workbook -- <file.xlsx>`
 - Bundle check without a simulator: `cd apps/mobile && npx expo export --platform ios`
 
 ## Conventions
@@ -35,6 +36,8 @@ monthly income/expenses plus a year forecast. Euro area, English/Spanish/German.
 
 - Money is signed integer minor units plus an ISO 4217 code. No float arithmetic
   on any balance, ever.
+- A transaction carries `side` as well as a sign: a refund is a positive amount
+  on the expense side. Aggregate by `side`, never by sign alone.
 - Dates are plain `YYYY-MM-DD` / `YYYY-MM` strings. Never route a booking date
   through a Date/timestamp — it moves 1 March into February west of UTC.
 - Dedupe is enforced by unique indexes, not by application discipline.

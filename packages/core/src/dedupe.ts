@@ -14,12 +14,24 @@ export function importHashOf(input: {
   bookingDate: string;
   amountMinor: number;
   description: string;
+  /**
+   * Distinguishes rows a source repeats verbatim. A hand-kept spreadsheet can
+   * legitimately list "comida fuera 20.00" three times in one month; without a
+   * discriminator all three collapse to one hash and two real movements are
+   * silently swallowed as duplicates.
+   *
+   * Pass a value that is stable across re-imports of the same file. An
+   * occurrence counter among identical rows is stable; a row number is not,
+   * because inserting a row above shifts every one below it.
+   */
+  discriminator?: string | number;
 }): string {
   const payload = [
     input.accountId,
     input.bookingDate,
     String(input.amountMinor),
     normalise(input.description),
+    input.discriminator === undefined ? '' : String(input.discriminator),
   ].join('|');
   let hash = 0x811c9dc5;
   for (let i = 0; i < payload.length; i += 1) {

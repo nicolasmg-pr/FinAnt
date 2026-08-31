@@ -62,6 +62,11 @@ export const BUILT_IN_CATEGORIES: readonly Category[] = [
   cat('sport', 'Sport & fitness', 'expense', '#7CB342', 'activity'),
   cat('gifts-donations', 'Gifts & donations', 'expense', '#C0CA33', 'gift'),
 
+  // Settling money already spent. Kept as expense categories, not transfers, so
+  // they stay inside every total exactly as the source ledger counts them.
+  cat('card-payment', 'Credit card payment', 'expense', '#7C3AED', 'credit-card'),
+  cat('shared-costs', 'Shared costs', 'expense', '#0891B2', 'users'),
+
   // Money movement
   cat('taxes', 'Taxes', 'expense', '#546E7A', 'file-text'),
   cat('fees-interest', 'Bank fees & interest', 'expense', '#78909C', 'percent'),

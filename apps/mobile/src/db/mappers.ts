@@ -1,4 +1,4 @@
-import { money, type CategoryRule, type Transaction } from '@finant/core';
+import { money, type CategoryRule, type Transaction, type TransactionSide } from '@finant/core';
 
 export interface TransactionRow {
   id: string;
@@ -7,6 +7,7 @@ export interface TransactionRow {
   value_date: string | null;
   amount_minor: number;
   currency: string;
+  side: string;
   description: string;
   counterparty: string | null;
   reference: string | null;
@@ -27,6 +28,7 @@ export function toTransaction(row: TransactionRow): Transaction {
     bookingDate: row.booking_date,
     valueDate: row.value_date,
     amount: money(row.amount_minor, row.currency),
+    side: row.side as TransactionSide,
     description: row.description,
     counterparty: row.counterparty,
     reference: row.reference,

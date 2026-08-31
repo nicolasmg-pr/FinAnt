@@ -96,6 +96,18 @@ export const MIGRATIONS: readonly { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    version: 2,
+    sql: `
+      -- Sign alone cannot express a refund: a positive amount can belong on the
+      -- expense side, where it reduces spending. Existing rows are backfilled
+      -- from their sign, which is correct for everything imported so far.
+      ALTER TABLE transactions ADD COLUMN side TEXT NOT NULL DEFAULT 'expense';
+      UPDATE transactions SET side = CASE WHEN amount_minor > 0 THEN 'income' ELSE 'expense' END;
+
+      CREATE INDEX idx_tx_side ON transactions(side);
+    `,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;

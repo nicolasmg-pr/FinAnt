@@ -41,14 +41,26 @@ export type TransactionSource = 'gocardless' | 'file-import' | 'manual';
 
 export type CategorySource = 'auto' | 'manual' | 'none';
 
+/**
+ * Which side of the ledger a movement belongs to, independent of its sign.
+ *
+ * Sign alone cannot express a refund. A EUR 20 restaurant refund is a positive
+ * amount that belongs on the expense side, where it *reduces* the month's
+ * spending — which is how a hand-kept ledger and a card statement both treat
+ * it. Counting it as income would leave the net right and both totals wrong.
+ */
+export type TransactionSide = 'income' | 'expense';
+
 export interface Transaction {
   readonly id: string;
   readonly accountId: string;
   /** Date the bank booked it. Drives every monthly aggregate. */
   readonly bookingDate: ISODate;
   readonly valueDate: ISODate | null;
-  /** Signed: negative is an expense, positive is income. */
+  /** Signed. Normally negative on the expense side, positive on the income
+   * side; a refund is a positive amount that stays on the expense side. */
   readonly amount: Money;
+  readonly side: TransactionSide;
   readonly description: string;
   readonly counterparty: string | null;
   readonly reference: string | null;

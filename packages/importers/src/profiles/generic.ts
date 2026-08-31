@@ -24,8 +24,12 @@ export const GENERIC_CSV: ImportProfile = {
     },
     reference: { headerAny: ['referencia', 'mandatsreferenz', 'reference', 'kundenreferenz'] },
     amount: { headerAny: ['importe', 'betrag', 'amount', 'monto'] },
-    debit: { headerAny: ['cargo', 'debe', 'soll', 'debit', 'salida'] },
-    credit: { headerAny: ['abono', 'haber', 'haben', 'credit', 'entrada'] },
+    debit: {
+      headerAny: ['cargo', 'debe', 'soll', 'debit', 'salida', 'gastos', 'gasto', 'expense', 'ausgabe'],
+    },
+    credit: {
+      headerAny: ['abono', 'haber', 'haben', 'credit', 'entrada', 'ingresos', 'ingreso', 'income', 'einnahme'],
+    },
     currency: { headerAny: ['divisa', 'moneda', 'waehrung', 'currency'] },
     balance: { headerAny: ['saldo', 'kontostand', 'balance'] },
   },

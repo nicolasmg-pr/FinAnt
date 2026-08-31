@@ -65,7 +65,7 @@ export const de: Translations = {
     issues_one: '{{count}} Zeile konnte nicht gelesen werden',
     issues_other: '{{count}} Zeilen konnten nicht gelesen werden',
     confirm: 'Importieren',
-    googleSheets: 'Meine Google-Sheets-Tabelle',
+    supportedFormats: 'Excel- oder Google-Sheets-Tabelle (.xlsx), Bank-CSV oder camt.053-XML',
   },
   banks: {
     title: 'Bankverbindungen',
@@ -146,6 +146,8 @@ export const de: Translations = {
     leisure: 'Freizeit und Kultur',
     sport: 'Sport und Fitness',
     'gifts-donations': 'Geschenke und Spenden',
+    'card-payment': 'Kreditkartenzahlung',
+    'shared-costs': 'Geteilte Kosten',
     taxes: 'Steuern',
     'fees-interest': 'Bankgebühren und Zinsen',
     savings: 'Sparen und Anlegen',

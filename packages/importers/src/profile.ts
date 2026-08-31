@@ -1,4 +1,12 @@
-import { importHashOf, money, type CurrencyCode, type Money, type TransactionSource } from '@finant/core';
+import {
+  importHashOf,
+  money,
+  sideFromAmount,
+  type CurrencyCode,
+  type Money,
+  type TransactionSide,
+  type TransactionSource,
+} from '@finant/core';
 import type { CsvTable } from './csv';
 import { parseAmount, parseDate, type DateFormat, type DecimalSeparator } from './values';
 
@@ -53,6 +61,8 @@ export interface DraftTransaction {
   readonly bookingDate: string;
   readonly valueDate: string | null;
   readonly amount: Money;
+  /** Which side of the ledger the row belongs to, regardless of its sign. */
+  readonly side: TransactionSide;
   readonly description: string;
   readonly counterparty: string | null;
   readonly reference: string | null;
@@ -154,18 +164,30 @@ export function applyProfile(
     const currency = idx.currency >= 0 ? (cell(row, idx.currency) || defaultCurrency) : defaultCurrency;
 
     let amount: Money | null = null;
+    // A debit/credit pair states the side explicitly; a single signed column
+    // only implies it, so the side is derived from the sign in that case.
+    let side: TransactionSide | null = null;
+
     if (idx.amount >= 0) {
       amount = parseAmount(cell(row, idx.amount), currency, separator);
       if (amount && profile.signConvention === 'expense-positive') {
         amount = money(-amount.minor, amount.currency);
       }
+      if (amount) side = sideFromAmount(amount);
     } else {
       const debit = idx.debit >= 0 ? parseAmount(cell(row, idx.debit), currency, separator) : null;
       const credit = idx.credit >= 0 ? parseAmount(cell(row, idx.credit), currency, separator) : null;
-      if (debit && debit.minor !== 0) amount = money(-Math.abs(debit.minor), currency);
-      else if (credit && credit.minor !== 0) amount = money(Math.abs(credit.minor), currency);
+      if (debit && debit.minor !== 0) {
+        // Preserve the sign: a negative value in a debit column is a refund,
+        // which belongs on the expense side and reduces it.
+        amount = money(-debit.minor, currency);
+        side = 'expense';
+      } else if (credit && credit.minor !== 0) {
+        amount = money(credit.minor, currency);
+        side = 'income';
+      }
     }
-    if (!amount) {
+    if (!amount || !side) {
       fail('Unreadable or missing amount');
       return;
     }
@@ -183,6 +205,7 @@ export function applyProfile(
       bookingDate,
       valueDate: parseDate(optionalCell(row, header, profile.columns.valueDate), dateFormat),
       amount,
+      side,
       description,
       counterparty: optionalCell(row, header, profile.columns.counterparty) || null,
       reference: optionalCell(row, header, profile.columns.reference) || null,

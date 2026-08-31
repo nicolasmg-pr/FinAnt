@@ -101,6 +101,9 @@ export function parseCamt053(xml: string, context: { accountId: string }): Impor
         bookingDate,
         valueDate: date(entry?.['ValDt']),
         amount: signed,
+        // The indicator is the bank's own statement of side; a credit entry on a
+        // debit line is a refund and must not read as income.
+        side: indicator === 'DBIT' ? 'expense' : 'income',
         description,
         counterparty,
         reference: text(tx?.['Refs']?.['MndtId']) || null,

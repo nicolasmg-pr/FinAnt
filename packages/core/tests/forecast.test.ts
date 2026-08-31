@@ -93,3 +93,38 @@ describe('forecastYear', () => {
     expect(f.months).toHaveLength(12);
   });
 });
+
+describe('refunds on the expense side', () => {
+  // A hand-kept ledger writes a refund as a negative row inside the expense
+  // block: it reduces that month's spending rather than counting as income.
+  const txs = [
+    tx({ date: '2026-01-25', amount: 2000, description: 'NOMINA' }),
+    tx({ date: '2026-01-10', amount: -100, description: 'COMIDA FUERA' }),
+    tx({ date: '2026-01-11', amount: 20, description: 'COMIDA FUERA', side: 'expense' }),
+  ];
+
+  it('reduces the expense total instead of inflating income', () => {
+    const s = summariseMonth(txs, '2026-01', 'EUR');
+    expect(s.income.minor).toBe(200000);
+    expect(s.expenses.minor).toBe(8000);
+    expect(s.net.minor).toBe(192000);
+  });
+
+  it('reduces the category the refund belongs to', () => {
+    const s = summariseMonth(
+      txs.map((t) => ({ ...t, categoryId: 'food-restaurants' })),
+      '2026-01',
+      'EUR',
+    );
+    const food = s.expensesByCategory.find((c) => c.categoryId === 'food-restaurants');
+    expect(food?.total.minor).toBe(8000);
+    expect(food?.count).toBe(2);
+  });
+
+  it('never reports a negative share', () => {
+    const onlyRefund = [tx({ date: '2026-02-11', amount: 20, description: 'X', side: 'expense' })];
+    const s = summariseMonth(onlyRefund, '2026-02', 'EUR');
+    expect(s.expenses.minor).toBe(-2000);
+    expect(s.expensesByCategory[0]?.share).toBe(0);
+  });
+});

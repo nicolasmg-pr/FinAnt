@@ -1,8 +1,12 @@
 import type { ImportProfile } from '../profile';
 import { GENERIC_CSV } from './generic';
-import { GOOGLE_SHEETS_TRACKER } from './google-sheets';
 
-export { GENERIC_CSV, GOOGLE_SHEETS_TRACKER };
+export { GENERIC_CSV };
+export { PRESUPUESTO_XLSX } from './presupuesto';
 
-/** Detection order: specific profiles first, generic last. */
-export const BUILT_IN_PROFILES: readonly ImportProfile[] = [GOOGLE_SHEETS_TRACKER, GENERIC_CSV];
+/**
+ * CSV profiles, in detection order: specific first, generic last.
+ * The `PresupuestoYYYY.xlsx` tracker is a workbook profile, not a CSV one, and
+ * is applied directly rather than detected from a header row.
+ */
+export const BUILT_IN_PROFILES: readonly ImportProfile[] = [GENERIC_CSV];

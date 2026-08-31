@@ -64,7 +64,7 @@ export const en = {
     issues_one: '{{count}} row could not be read',
     issues_other: '{{count}} rows could not be read',
     confirm: 'Import',
-    googleSheets: 'My Google Sheets tracker',
+    supportedFormats: 'Excel or Google Sheets tracker (.xlsx), bank CSV, or camt.053 XML',
   },
   banks: {
     title: 'Bank connections',
@@ -144,6 +144,8 @@ export const en = {
     leisure: 'Leisure & culture',
     sport: 'Sport & fitness',
     'gifts-donations': 'Gifts & donations',
+    'card-payment': 'Credit card payment',
+    'shared-costs': 'Shared costs',
     taxes: 'Taxes',
     'fees-interest': 'Bank fees & interest',
     savings: 'Savings & investments',

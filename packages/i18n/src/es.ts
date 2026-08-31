@@ -65,7 +65,7 @@ export const es: Translations = {
     issues_one: 'No se pudo leer {{count}} fila',
     issues_other: 'No se pudieron leer {{count}} filas',
     confirm: 'Importar',
-    googleSheets: 'Mi hoja de Google Sheets',
+    supportedFormats: 'Hoja de Excel o Google Sheets (.xlsx), CSV del banco o XML camt.053',
   },
   banks: {
     title: 'Conexiones bancarias',
@@ -146,6 +146,8 @@ export const es: Translations = {
     leisure: 'Ocio y cultura',
     sport: 'Deporte y gimnasio',
     'gifts-donations': 'Regalos y donaciones',
+    'card-payment': 'Pago tarjeta de crédito',
+    'shared-costs': 'Gastos compartidos',
     taxes: 'Impuestos',
     'fees-interest': 'Comisiones e intereses',
     savings: 'Ahorro e inversión',

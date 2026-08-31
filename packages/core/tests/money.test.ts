@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { add, formatMoney, money, parseDecimal, sum, toDecimalString } from '../src/money';
+import { importHashOf } from '../src/dedupe';
 
 describe('money', () => {
   it('parses decimal strings without float drift', () => {
@@ -32,5 +33,23 @@ describe('money', () => {
   it('formats per locale', () => {
     expect(formatMoney(money(-123456, 'EUR'), 'de-DE')).toContain('1.234,56');
     expect(formatMoney(money(-123456, 'EUR'), 'en-GB')).toContain('1,234.56');
+  });
+});
+
+describe('importHashOf', () => {
+  const base = { accountId: 'a', bookingDate: '2025-01-01', amountMinor: -2000, description: 'comida fuera' };
+
+  it('is stable across runs for the same input', () => {
+    expect(importHashOf(base)).toBe(importHashOf(base));
+  });
+
+  it('separates rows a source repeats verbatim', () => {
+    const first = importHashOf({ ...base, discriminator: 0 });
+    const second = importHashOf({ ...base, discriminator: 1 });
+    expect(first).not.toBe(second);
+  });
+
+  it('keeps a discriminated hash distinct from an undiscriminated one', () => {
+    expect(importHashOf(base)).not.toBe(importHashOf({ ...base, discriminator: 0 }));
   });
 });

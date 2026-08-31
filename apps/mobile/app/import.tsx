@@ -9,9 +9,12 @@ import {
   BUILT_IN_PROFILES,
   detectProfile,
   GENERIC_CSV,
-  GOOGLE_SHEETS_TRACKER,
+  importWorkbook,
   parseCamt053,
+  PRESUPUESTO_XLSX,
   readCsv,
+  readXlsx,
+  yearFromFileName,
   type DraftTransaction,
   type ImportIssue,
   type ImportProfile,
@@ -24,10 +27,13 @@ import { radius, spacing, useTheme } from '../src/theme';
 
 interface Staged {
   fileName: string;
-  profile: ImportProfile | null;
+  /** Human-readable name of the format that was used. */
+  formatLabel: string;
   transactions: readonly DraftTransaction[];
   issues: readonly ImportIssue[];
 }
+
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 /**
  * File import. Everything happens on the device: the picked file is read from
@@ -45,7 +51,15 @@ export default function ImportScreen() {
   const pick = async (forcedProfile?: ImportProfile) => {
     setError(null);
     const result = await DocumentPicker.getDocumentAsync({
-      type: ['text/csv', 'text/comma-separated-values', 'text/xml', 'application/xml', 'text/plain', '*/*'],
+      type: [
+        XLSX_MIME,
+        'text/csv',
+        'text/comma-separated-values',
+        'text/xml',
+        'application/xml',
+        'text/plain',
+        '*/*',
+      ],
       copyToCacheDirectory: true,
     });
     if (result.canceled || !result.assets[0]) return;
@@ -53,20 +67,53 @@ export default function ImportScreen() {
     const asset = result.assets[0];
     setBusy(true);
     try {
-      // Async read: a multi-megabyte export would block the UI thread on textSync().
-      const text = await new File(asset.uri).text();
       const accountId = await getOrCreateLocalAccount();
+      const file = new File(asset.uri);
+
+      // An .xlsx is a zip, so it is detected by the archive magic bytes rather
+      // than by a filename extension or a MIME type the picker may not set.
+      const head = (await file.bytes()).subarray(0, 4);
+      const isZip = head[0] === 0x50 && head[1] === 0x4b;
+
+      if (isZip) {
+        const workbook = readXlsx(await file.bytes());
+        const year = yearFromFileName(asset.name);
+        const parsed = importWorkbook(workbook, PRESUPUESTO_XLSX, { accountId, year });
+        setStaged({
+          fileName: asset.name,
+          formatLabel: `${PRESUPUESTO_XLSX.label} · ${year}`,
+          transactions: parsed.transactions,
+          issues: parsed.issues,
+        });
+        return;
+      }
+
+      const text = await file.text();
 
       if (text.trimStart().startsWith('<')) {
         const parsed = parseCamt053(text, { accountId });
-        setStaged({ fileName: asset.name, profile: null, transactions: parsed.transactions, issues: parsed.issues });
+        setStaged({
+          fileName: asset.name,
+          formatLabel: 'camt.053',
+          transactions: parsed.transactions,
+          issues: parsed.issues,
+        });
         return;
       }
 
       const table = readCsv(text);
       const profile = forcedProfile ?? detectProfile(table.header, BUILT_IN_PROFILES) ?? GENERIC_CSV;
-      const parsed = applyProfile(readCsv(text, { headerRow: profile.headerRow ?? 0 }), profile, { accountId });
-      setStaged({ fileName: asset.name, profile, transactions: parsed.transactions, issues: parsed.issues });
+      const parsed = applyProfile(
+        readCsv(text, { headerRow: profile.headerRow ?? 0 }),
+        profile,
+        { accountId },
+      );
+      setStaged({
+        fileName: asset.name,
+        formatLabel: profile.label,
+        transactions: parsed.transactions,
+        issues: parsed.issues,
+      });
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
@@ -93,9 +140,7 @@ export default function ImportScreen() {
         <Pressable onPress={() => void pick()} disabled={busy} style={[styles.button, { backgroundColor: theme.accent }]}>
           <Text style={styles.buttonText}>{t('import.pickFile')}</Text>
         </Pressable>
-        <Pressable onPress={() => void pick(GOOGLE_SHEETS_TRACKER)} disabled={busy}>
-          <Text style={{ color: theme.accent, textAlign: 'center' }}>{t('import.googleSheets')}</Text>
-        </Pressable>
+        <Text style={{ color: theme.textMuted, fontSize: 12 }}>{t('import.supportedFormats')}</Text>
         {error ? <Text style={{ color: theme.expense }}>{error}</Text> : null}
       </Card>
 
@@ -103,7 +148,7 @@ export default function ImportScreen() {
         <>
           <Card
             title={t('import.preview')}
-            subtitle={staged.profile ? t('import.detectedProfile', { profile: staged.profile.label }) : 'camt.053'}
+            subtitle={t('import.detectedProfile', { profile: staged.formatLabel })}
           >
             <Text style={{ color: theme.text }}>
               {t('import.rowsReady', { count: staged.transactions.length })}

@@ -22,24 +22,64 @@ Parsing rules worth knowing:
 - **Unreadable rows become issues, never exceptions.** A 400-row import is not
   lost because row 212 is a merged subtotal cell. The import screen lists them.
 
-### The personal Google Sheets tracker
+## The personal Presupuesto tracker (.xlsx) — primary target
 
-`src/profiles/google-sheets.ts` is the primary target and is currently a
-**placeholder** — it maps the header names most personal trackers use, and its
-`categoryMap` translates a sheet's own category labels onto FinAnt category ids
-so existing classification survives the import instead of being re-guessed.
+`packages/importers/src/profiles/presupuesto.ts`, applied by
+`importWorkbook()` over the reader in `src/xlsx.ts`. An `.xlsx` is a zip of XML
+parts; only the workbook, its relationships and the shared string table are read
+(`fflate` + `fast-xml-parser`). Formulas are not evaluated — the cached value the
+spreadsheet last wrote is used, which is what the owner sees on screen.
 
-To pin it to the real sheet:
+Layout, as read from the real workbook:
+
+| Element | Where |
+|---|---|
+| Month sheets | `Enero` … `Diciembre`, one per month |
+| Header | Row 1: `Conceptos \| Ingresos \| Total \| Conceptos \| Gastos \| Total \| \| Resultado` |
+| Income block | Concepts in `A`, amounts in `B`, from row 2 |
+| Expense block | Concepts in `D`, amounts in `E`, from row 2 |
+| Totals | `C2` / `F2` / `H2` hold SUM formulas — outside the scanned columns, never imported |
+| Ignored sheets | `Totales`, `Backend`, `Venta Objetivos` — not listed in `monthSheets` |
+
+Three properties of this source drove design decisions elsewhere:
+
+- **No date column.** The month comes from the sheet name and the year from the
+  filename (`Presupuesto2025.xlsx`). Every movement is booked on the **1st** of
+  its month. One fixed, documented day keeps monthly and yearly figures exact —
+  the only granularity this ledger ever had — and leaves the missing precision
+  visible instead of plausible. Spreading rows over invented days would look
+  more precise while being less true.
+- **The same concept means different things per block.** `kaution` is a deposit
+  paid on the expense side and the same deposit returned on the income side;
+  `intereses` is a bank charge one way and interest earned the other. The profile
+  therefore holds one category map per direction, not one flat map.
+- **Negative rows inside the expense block are refunds.** They reduce that
+  month's spending rather than counting as income — which is why a transaction
+  carries a `side` alongside its signed amount. See `docs/data-model.md`.
+
+Concept matching is accent- and case-insensitive, so `Transporte Público`,
+`transporte publico` and `TRANSPORTE PUBLICO` all resolve to one category.
+
+### Verifying a change to the profile
 
 ```bash
-# File > Download > Comma-separated values (.csv) in Google Sheets
-npm run inspect:csv -- ~/Downloads/my-tracker.csv
+npm run verify:workbook -- ~/Downloads/Presupuesto2025.xlsx
 ```
 
-It prints the delimiter, every column with sample values and a type guess, and a
-profile skeleton to paste over the placeholder. Then add a hand-written fixture
-in `packages/importers/tests/fixtures/` so a later sheet change fails a test
-rather than an import. Real exports never go in the repository.
+Imports the workbook and reconciles both sides of every month against the
+sheet's own SUM totals, then lists any concept with no category mapping. It
+exits non-zero on a mismatch. The file is read locally and nothing leaves the
+machine; real exports never enter the repository — `packages/importers/tests/`
+generates its fixtures in code instead.
+
+## Other CSV exports
+
+`GENERIC_CSV` in `src/profiles/generic.ts` matches the header names most
+European bank exports use in English, Spanish and German, including
+income/expense column pairs. `ImportProfile` is data, not code, so a new layout
+is a new object rather than a new parser. Use
+`npm run inspect:csv -- <file.csv>` to print a profile skeleton from an unknown
+file.
 
 ## camt.053 (ISO 20022)
 

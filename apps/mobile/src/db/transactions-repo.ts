@@ -1,5 +1,5 @@
 import * as Crypto from 'expo-crypto';
-import type { Transaction, YearMonth } from '@finant/core';
+import type { Transaction, TransactionSide, YearMonth } from '@finant/core';
 import { getDatabase } from './database';
 import { toTransaction, type TransactionRow } from './mappers';
 
@@ -13,6 +13,7 @@ export interface NewTransaction {
   valueDate: string | null;
   amountMinor: number;
   currency: string;
+  side: TransactionSide;
   description: string;
   counterparty: string | null;
   reference: string | null;
@@ -40,16 +41,17 @@ export async function insertTransactions(batch: readonly NewTransaction[]): Prom
     for (const tx of batch) {
       const result = await db.runAsync(
         `INSERT OR IGNORE INTO transactions (
-           id, account_id, booking_date, value_date, amount_minor, currency,
+           id, account_id, booking_date, value_date, amount_minor, currency, side,
            description, counterparty, reference, category_id, category_source,
            source, external_id, import_hash, notes, excluded_from_stats, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?);`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?);`,
         newId(),
         tx.accountId,
         tx.bookingDate,
         tx.valueDate,
         tx.amountMinor,
         tx.currency,
+        tx.side,
         tx.description,
         tx.counterparty,
         tx.reference,

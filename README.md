@@ -39,8 +39,10 @@ anyone else — the credential handling has to change first.
 
 Works with no bank connection at all:
 
-- **Your Google Sheets tracker** — export as CSV and import it. Run
-  `npm run inspect:csv -- <file.csv>` to generate the column mapping.
+- **Your `PresupuestoYYYY.xlsx` tracker** — imported directly, sheet per month,
+  income and expense blocks, 1,399 movements from the 2025 workbook reconciling
+  exactly against its own monthly totals. Check a change with
+  `npm run verify:workbook -- <file.xlsx>`.
 - **Any bank CSV** — Spanish, German and English headers are recognised.
 - **camt.053 XML** — the ISO 20022 statement format every SEPA bank can export.
 

@@ -1,4 +1,5 @@
 import { money } from '../src/money';
+import { sideFromAmount } from '../src/side';
 import { importHashOf } from '../src/dedupe';
 import type { Transaction } from '../src/types';
 
@@ -11,6 +12,8 @@ export function tx(partial: {
   counterparty?: string;
   categoryId?: string | null;
   excludedFromStats?: boolean;
+  /** Overrides the sign-derived side, for refund cases. */
+  side?: 'income' | 'expense';
 }): Transaction {
   seq += 1;
   const amountMinor = Math.round(partial.amount * 100);
@@ -20,6 +23,7 @@ export function tx(partial: {
     bookingDate: partial.date,
     valueDate: null,
     amount: money(amountMinor, 'EUR'),
+    side: partial.side ?? sideFromAmount(money(amountMinor, 'EUR')),
     description: partial.description,
     counterparty: partial.counterparty ?? null,
     reference: null,

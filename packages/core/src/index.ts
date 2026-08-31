@@ -1,6 +1,7 @@
 export * from './money';
 export * from './types';
 export * from './dates';
+export * from './side';
 export * from './normalise';
 export * from './categories';
 export * from './categorise';

@@ -1,4 +1,4 @@
-import { importHashOf, money } from '@finant/core';
+import { importHashOf, money, sideFromAmount } from '@finant/core';
 import type { DraftTransaction } from '@finant/importers';
 import { readGoCardlessCredentials } from '../security/keys';
 import {
@@ -203,6 +203,10 @@ export const goCardlessDeviceProvider: BankProvider = {
           bookingDate,
           valueDate: tx.valueDate ?? null,
           amount: money(minor, currency),
+          // GoCardless gives a signed amount and no explicit side. A card refund
+          // therefore arrives as income; the owner can move it to the expense
+          // side from the movement detail if that matters to them.
+          side: sideFromAmount(money(minor, currency)),
           description,
           counterparty: tx.creditorName ?? tx.debtorName ?? null,
           reference: tx.endToEndId ?? null,
