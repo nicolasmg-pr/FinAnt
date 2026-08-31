@@ -1,0 +1,65 @@
+import { describe, expect, it } from 'vitest';
+import { categorise, learnRuleFrom } from '../src/categorise';
+import { DEFAULT_RULES } from '../src/default-rules';
+import { merchantKey, normalise } from '../src/normalise';
+import { tx } from './factory';
+
+describe('normalise', () => {
+  it('strips diacritics and punctuation so ES/DE narratives collapse', () => {
+    expect(normalise('CAFÉ MARÍA*ES')).toBe('cafe maria es');
+    expect(normalise('Straße 12')).toBe('strasse 12');
+  });
+
+  it('extracts a merchant key free of card and reference noise', () => {
+    expect(merchantKey('COMPRA TARJ. 5401 MERCADONA MADRID 12/03')).toContain('mercadona');
+    expect(merchantKey('COMPRA TARJ. 5401 MERCADONA MADRID 12/03')).not.toContain('5401');
+  });
+});
+
+describe('categorise', () => {
+  it('files Spanish, German and English narratives into the same category', () => {
+    for (const description of ['COMPRA TARJ MERCADONA', 'REWE SAGT DANKE', 'LIDL GMBH']) {
+      expect(categorise(tx({ date: '2026-01-05', amount: -42, description }), DEFAULT_RULES).categoryId)
+        .toBe('food-groceries');
+    }
+  });
+
+  it('only treats a salary narrative as income when money came in', () => {
+    const incoming = tx({ date: '2026-01-25', amount: 2600, description: 'NOMINA ENERO' });
+    const outgoing = tx({ date: '2026-01-26', amount: -2600, description: 'DEVOLUCION NOMINA ENERO' });
+    expect(categorise(incoming, DEFAULT_RULES).categoryId).toBe('income-salary');
+    expect(categorise(outgoing, DEFAULT_RULES).categoryId).not.toBe('income-salary');
+  });
+
+  it('keeps cash withdrawals and taxes out of discretionary buckets', () => {
+    expect(categorise(tx({ date: '2026-01-05', amount: -100, description: 'REINTEGRO CAJERO' }), DEFAULT_RULES).categoryId)
+      .toBe('cash');
+    expect(categorise(tx({ date: '2026-01-05', amount: -300, description: 'FINANZAMT MUENCHEN STEUER' }), DEFAULT_RULES).categoryId)
+      .toBe('taxes');
+  });
+
+  it('falls back to uncategorised rather than guessing', () => {
+    const result = categorise(tx({ date: '2026-01-05', amount: -20, description: 'XJ4 998211' }), DEFAULT_RULES);
+    expect(result.categoryId).toBe('uncategorised');
+    expect(result.ruleId).toBeNull();
+  });
+
+  it('is deterministic when two rules tie on priority', () => {
+    const t = tx({ date: '2026-01-05', amount: -10, description: 'AMAZON PRIME' });
+    const first = categorise(t, DEFAULT_RULES);
+    const second = categorise(t, [...DEFAULT_RULES].reverse());
+    expect(first).toEqual(second);
+  });
+
+  it('learns a rule from a manual correction that outranks shipped rules', () => {
+    const t = tx({ date: '2026-01-05', amount: -35, description: 'AMAZON MKTPL', counterparty: 'AMAZON MKTPL' });
+    const learned = learnRuleFrom(t, 'shopping', () => 'learned-1');
+    expect(learned).not.toBeNull();
+    expect(learned!.priority).toBeGreaterThan(400);
+    expect(categorise(t, [...DEFAULT_RULES, learned!]).categoryId).toBe('shopping');
+  });
+
+  it('declines to learn from a narrative with no merchant identity', () => {
+    expect(learnRuleFrom(tx({ date: '2026-01-05', amount: -5, description: '12 34' }), 'shopping', () => 'x')).toBeNull();
+  });
+});

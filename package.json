@@ -1,0 +1,32 @@
+{
+  "name": "finant",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "npm run start --workspace=@finant/mobile",
+    "android": "npm run android --workspace=@finant/mobile",
+    "ios": "npm run ios --workspace=@finant/mobile",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix && prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "typecheck": "tsc -b packages/core packages/importers packages/i18n --pretty && npm run typecheck --workspace=@finant/mobile",
+    "inspect:csv": "tsx scripts/inspect-csv.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "eslint": "^9.17.0",
+    "eslint-config-expo": "^10.0.0",
+    "prettier": "^3.4.2",
+    "typescript": "~6.0.3",
+    "vitest": "^3.0.0",
+    "tsx": "^4.19.2"
+  }
+}

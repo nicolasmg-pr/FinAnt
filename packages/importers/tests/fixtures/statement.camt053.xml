@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+  <BkToCstmrStmt>
+    <Stmt>
+      <Id>STMT-2026-01</Id>
+      <Acct><Id><IBAN>ES9121000418450200051332</IBAN></Id><Ccy>EUR</Ccy></Acct>
+      <Ntry>
+        <Amt Ccy="EUR">52.40</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <BkgDt><Dt>2026-01-05</Dt></BkgDt>
+        <ValDt><Dt>2026-01-05</Dt></ValDt>
+        <AcctSvcrRef>REF-0001</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <Refs><EndToEndId>E2E-0001</EndToEndId></Refs>
+          <RltdPties><Cdtr><Nm>MERCADONA SA</Nm></Cdtr></RltdPties>
+          <RmtInf><Ustrd>COMPRA TARJ 5401 MERCADONA</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">2600.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <BkgDt><Dt>2026-01-07</Dt></BkgDt>
+        <NtryDtls><TxDtls>
+          <Refs><EndToEndId>NOTPROVIDED</EndToEndId></Refs>
+          <RltdPties><Dbtr><Nm>ACME SL</Nm></Dbtr></RltdPties>
+          <RmtInf><Ustrd>NOMINA ENERO</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

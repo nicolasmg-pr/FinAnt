@@ -1,0 +1,40 @@
+# Secrets — never commit real values, only .env.example
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Expo / React Native
+.expo/
+.expo-shared/
+apps/mobile/ios/
+apps/mobile/android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Local databases and bank exports (contain real financial data)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+fixtures/private/
+
+# Tooling
+coverage/
+.eslintcache
+.vitest/
+
+# OS
+.DS_Store
+Thumbs.db
