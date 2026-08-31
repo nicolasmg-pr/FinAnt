@@ -1,6 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import { BUILT_IN_CATEGORIES, DEFAULT_RULES } from '@finant/core';
-import { getOrCreateDatabaseKey } from '../security/keys';
+import { destroyDatabaseKey, getOrCreateDatabaseKey } from '../security/keys';
 import { LATEST_VERSION, MIGRATIONS } from './schema';
 
 const DATABASE_NAME = 'finant.db';
@@ -19,11 +19,38 @@ async function open(): Promise<SQLite.SQLiteDatabase> {
   const key = await getOrCreateDatabaseKey();
   const db = await SQLite.openDatabaseAsync(DATABASE_NAME);
   await db.execAsync(`PRAGMA key = "x'${key}'";`);
+  await assertEncrypted(db);
   await db.execAsync('PRAGMA journal_mode = WAL;');
   await db.execAsync('PRAGMA foreign_keys = ON;');
   await migrate(db);
   await seed(db);
   return db;
+}
+
+/**
+ * Refuses to continue on a build without SQLCipher.
+ *
+ * Plain SQLite ignores an unknown `PRAGMA key` silently — no error, no warning,
+ * and every movement then lands in a plaintext file. `cipher_version` is the one
+ * statement that answers only on a SQLCipher build, so it is the check that
+ * separates an encrypted database from a convincing-looking accident.
+ */
+async function assertEncrypted(db: SQLite.SQLiteDatabase): Promise<void> {
+  let version: string | undefined;
+  try {
+    const row = await db.getFirstAsync<{ cipher_version: string }>('PRAGMA cipher_version;');
+    version = row?.cipher_version;
+  } catch {
+    version = undefined;
+  }
+  if (version) return;
+
+  await db.closeAsync();
+  throw new Error(
+    'SQLCipher is unavailable in this build, so the database would be written in ' +
+      'plaintext. Refusing to open it. Run a native build with the expo-sqlite ' +
+      'useSQLCipher option enabled — Expo Go cannot provide it.',
+  );
 }
 
 async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
@@ -89,18 +116,22 @@ export function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   return opening;
 }
 
-/** Drops every row and the encryption key. Used by Settings > Erase all data. */
+/**
+ * Deletes the database file and the encryption key. Used by Settings > Erase all
+ * data.
+ *
+ * Row-by-row `DELETE` is not enough: the rows stay in the file's free pages
+ * until something reuses them. Dropping the file and then the key leaves nothing
+ * to recover and nothing to recover it with. The next `getDatabase()` mints a
+ * fresh key and a seeded, empty database.
+ */
 export async function eraseEverything(): Promise<void> {
-  const db = await getDatabase();
-  await db.execAsync(`
-    DELETE FROM transactions;
-    DELETE FROM budgets;
-    DELETE FROM rules;
-    DELETE FROM categories;
-    DELETE FROM accounts;
-    DELETE FROM import_profiles;
-    DELETE FROM settings;
-  `);
-  await db.closeAsync();
+  if (instance) {
+    await instance.closeAsync();
+  }
   instance = null;
+  opening = null;
+
+  await SQLite.deleteDatabaseAsync(DATABASE_NAME);
+  await destroyDatabaseKey();
 }
