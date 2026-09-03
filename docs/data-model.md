@@ -35,7 +35,7 @@ only gives a signed amount uses `sideFromAmount()`.
   next statement from that bank preselects it. Migration 3 dropped the
   aggregator consent columns; `provider` now only ever holds a
   `TransactionSource`.
-- `transactions` — the ledger. See dedupe below.
+- `transactions` — the ledger. See dedupe, soft delete and transfers below.
 - `categories` — shipped taxonomy plus any the owner adds. Ids are stable and
   never renamed; rules and history point at them.
 - `rules` — categorisation rules, `match_json` holding a `RuleMatch` tree.
@@ -78,6 +78,33 @@ next overlapping statement import hits `INSERT OR IGNORE` and reports it as a
 duplicate instead of bringing it back. Every read in
 `apps/mobile/src/db/transactions-repo.ts` filters `deleted_at IS NULL`, and the
 domain `Transaction` type never carries the column.
+
+## Transfers between own accounts
+
+A move of 50 € from one of the owner's accounts to another books as −50 € in
+the first and +50 € in the second. Neither is income or expense.
+`matchTransfers()` in `packages/core/src/transfers.ts` pairs them: different
+accounts, same currency, exactly opposite amounts, booked within
+`TRANSFER_MAX_DAYS` (3) of each other, neither categorised by hand, neither
+excluded, neither already paired. Debits are visited by date then id and each
+takes the closest unmatched credit, so the result is deterministic and
+one-to-one.
+
+`transfer_peer_id` (migration 5) holds the other half's id on both rows, and
+both rows are set to `transfer-internal` with `category_source = 'auto'`. That
+category already fails `countsTowardStats()`, so totals need no new rule; the
+link is what lets the detail screen show the counterpart.
+
+`detectTransfers()` (`apps/mobile/src/services/transfers.ts`) runs the matcher
+over the whole ledger after every import and once on app start: the second
+half usually arrives later, in a statement from the other bank. It is
+idempotent because linked rows are never candidates again.
+
+Changing the category of a linked row by hand clears `transfer_peer_id` on
+both rows. The other side keeps `transfer-internal` and is not re-paired,
+because the row the owner touched is now `manual` and off limits to the
+matcher. If the other side was wrong too, the owner fixes it by hand. There is
+no manual pairing UI for transfers the matcher misses.
 
 ## What is excluded from statistics
 
