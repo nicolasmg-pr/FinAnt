@@ -66,6 +66,15 @@ Inserts use `INSERT OR IGNORE` and count `changes` to report what was new. A
 re-imported statement, or two exports whose date ranges overlap, therefore cannot
 double a figure.
 
+## Deleting a movement
+
+`deleted_at` (migration 4) marks a movement the owner removed. The row stays in
+the table so `idx_tx_hash` and `idx_tx_external` keep holding its identity: the
+next overlapping statement import hits `INSERT OR IGNORE` and reports it as a
+duplicate instead of bringing it back. Every read in
+`apps/mobile/src/db/transactions-repo.ts` filters `deleted_at IS NULL`, and the
+domain `Transaction` type never carries the column.
+
 ## What is excluded from statistics
 
 `countsTowardStats()` in `packages/core/src/aggregate.ts` drops:

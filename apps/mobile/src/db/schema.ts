@@ -120,6 +120,17 @@ export const MIGRATIONS: readonly { version: number; sql: string }[] = [
       ALTER TABLE accounts DROP COLUMN last_synced_at;
     `,
   },
+  {
+    version: 4,
+    sql: `
+      -- Deleting a movement must survive the next overlapping statement import.
+      -- A hard delete would let INSERT OR IGNORE bring the row straight back,
+      -- because the unique indexes only guard rows that still exist. So a
+      -- deleted row keeps its place in the table and every read filters it out.
+      ALTER TABLE transactions ADD COLUMN deleted_at TEXT;
+      CREATE INDEX idx_tx_deleted ON transactions(deleted_at);
+    `,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;

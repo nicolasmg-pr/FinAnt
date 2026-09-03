@@ -75,7 +75,7 @@ export async function listTransactionsBetween(from: string, to: string): Promise
   const db = await getDatabase();
   const rows = await db.getAllAsync<TransactionRow>(
     `SELECT * FROM transactions
-      WHERE booking_date >= ? AND booking_date <= ?
+      WHERE booking_date >= ? AND booking_date <= ? AND deleted_at IS NULL
       ORDER BY booking_date DESC, created_at DESC;`,
     from,
     to,
@@ -95,16 +95,27 @@ export async function listTransactionsForMonth(month: YearMonth): Promise<Transa
 export async function listAllTransactions(): Promise<Transaction[]> {
   const db = await getDatabase();
   const rows = await db.getAllAsync<TransactionRow>(
-    'SELECT * FROM transactions ORDER BY booking_date DESC, created_at DESC;',
+    'SELECT * FROM transactions WHERE deleted_at IS NULL ORDER BY booking_date DESC, created_at DESC;',
   );
   return rows.map(toTransaction);
+}
+
+/** One movement by id, or null when it never existed or has been deleted. */
+export async function getTransaction(id: string): Promise<Transaction | null> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<TransactionRow>(
+    'SELECT * FROM transactions WHERE id = ? AND deleted_at IS NULL;',
+    id,
+  );
+  return row ? toTransaction(row) : null;
 }
 
 export async function countUncategorised(): Promise<number> {
   const db = await getDatabase();
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) AS count FROM transactions
-      WHERE category_id IS NULL OR category_id = 'uncategorised';`,
+      WHERE deleted_at IS NULL
+        AND (category_id IS NULL OR category_id = 'uncategorised');`,
   );
   return row?.count ?? 0;
 }
@@ -128,16 +139,25 @@ export async function setExcludedFromStats(transactionId: string, excluded: bool
   );
 }
 
+/**
+ * Soft delete. The row stays in the table so the unique indexes keep holding
+ * its identity: the next overlapping statement import then skips it as a
+ * duplicate instead of bringing it back. Every read filters `deleted_at`.
+ */
 export async function deleteTransaction(transactionId: string): Promise<void> {
   const db = await getDatabase();
-  await db.runAsync('DELETE FROM transactions WHERE id = ?;', transactionId);
+  await db.runAsync(
+    'UPDATE transactions SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL;',
+    new Date().toISOString(),
+    transactionId,
+  );
 }
 
 /** Earliest and latest booking dates on record, for the year picker. */
 export async function dataRange(): Promise<{ from: string; to: string } | null> {
   const db = await getDatabase();
   const row = await db.getFirstAsync<{ from: string | null; to: string | null }>(
-    'SELECT MIN(booking_date) AS "from", MAX(booking_date) AS "to" FROM transactions;',
+    'SELECT MIN(booking_date) AS "from", MAX(booking_date) AS "to" FROM transactions WHERE deleted_at IS NULL;',
   );
   return row?.from && row.to ? { from: row.from, to: row.to } : null;
 }
