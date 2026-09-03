@@ -89,6 +89,10 @@ export const de: Translations = {
     result: 'Import abgeschlossen',
     imported_one: '{{count}} Umsatz importiert',
     imported_other: '{{count}} Umsätze importiert',
+    account: 'Konto',
+    newAccount: 'Neues Konto',
+    accountName: 'Kontoname',
+    accountRequired: 'Gib dem neuen Konto einen Namen.',
   },
   settings: {
     title: 'Einstellungen',

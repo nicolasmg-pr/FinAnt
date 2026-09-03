@@ -89,6 +89,10 @@ export const es: Translations = {
     result: 'Importación terminada',
     imported_one: '{{count}} movimiento importado',
     imported_other: '{{count}} movimientos importados',
+    account: 'Cuenta',
+    newAccount: 'Cuenta nueva',
+    accountName: 'Nombre de la cuenta',
+    accountRequired: 'Pon un nombre a la cuenta nueva.',
   },
   settings: {
     title: 'Ajustes',
