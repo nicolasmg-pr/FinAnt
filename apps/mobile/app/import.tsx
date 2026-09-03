@@ -22,7 +22,7 @@ import {
 import { Amount } from '../src/components/Amount';
 import { Card } from '../src/components/Card';
 import { getOrCreateLocalAccount } from '../src/db/accounts-repo';
-import { ingest } from '../src/services/ingest';
+import { ingest, type IngestResult } from '../src/services/ingest';
 import { radius, spacing, useTheme } from '../src/theme';
 
 interface Staged {
@@ -47,9 +47,11 @@ export default function ImportScreen() {
   const [staged, setStaged] = useState<Staged | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<IngestResult | null>(null);
 
   const pick = async (forcedProfile?: ImportProfile) => {
     setError(null);
+    setResult(null);
     const result = await DocumentPicker.getDocumentAsync({
       type: [
         XLSX_MIME,
@@ -125,8 +127,10 @@ export default function ImportScreen() {
     if (!staged) return;
     setBusy(true);
     try {
-      await ingest(staged.transactions);
-      router.back();
+      // Stay on screen: the owner should see how many rows were new and how
+      // many the unique indexes already held before the modal closes.
+      setResult(await ingest(staged.transactions));
+      setStaged(null);
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
@@ -143,6 +147,23 @@ export default function ImportScreen() {
         <Text style={{ color: theme.textMuted, fontSize: 12 }}>{t('import.supportedFormats')}</Text>
         {error ? <Text style={{ color: theme.expense }}>{error}</Text> : null}
       </Card>
+
+      {result ? (
+        <Card title={t('import.result')}>
+          <Text style={{ color: theme.text }}>{t('import.imported', { count: result.inserted })}</Text>
+          {result.duplicates > 0 ? (
+            <Text style={{ color: theme.textMuted }}>
+              {t('import.duplicatesSkipped', { count: result.duplicates })}
+            </Text>
+          ) : null}
+          <Pressable
+            onPress={() => router.back()}
+            style={[styles.button, { backgroundColor: theme.accent }]}
+          >
+            <Text style={styles.buttonText}>{t('common.done')}</Text>
+          </Pressable>
+        </Card>
+      ) : null}
 
       {staged ? (
         <>
