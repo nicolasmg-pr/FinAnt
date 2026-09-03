@@ -2,7 +2,7 @@ import { UNCATEGORISED_ID } from './categories';
 import { merchantKey, normalise } from './normalise';
 import type { CategoryRule, MatchField, RuleMatch, Transaction } from './types';
 
-interface MatchTarget {
+export interface MatchTarget {
   readonly description: string;
   readonly counterparty: string;
   readonly reference: string;
@@ -10,7 +10,14 @@ interface MatchTarget {
   readonly amountMinor: number;
 }
 
-function targetOf(tx: Pick<Transaction, 'description' | 'counterparty' | 'reference' | 'amount'>): MatchTarget {
+/**
+ * The normalised shape every `RuleMatch` is evaluated against. Exported so
+ * other rule engines (exclusion rules) reuse this matcher instead of growing a
+ * second one that drifts from it.
+ */
+export function targetOf(
+  tx: Pick<Transaction, 'description' | 'counterparty' | 'reference' | 'amount'>,
+): MatchTarget {
   const description = normalise(tx.description);
   const counterparty = normalise(tx.counterparty ?? '');
   const reference = normalise(tx.reference ?? '');
@@ -80,7 +87,9 @@ export function categorise(
       best = rule;
     }
   }
-  return best ? { categoryId: best.categoryId, ruleId: best.id } : { categoryId: UNCATEGORISED_ID, ruleId: null };
+  return best
+    ? { categoryId: best.categoryId, ruleId: best.id }
+    : { categoryId: UNCATEGORISED_ID, ruleId: null };
 }
 
 /**

@@ -14,3 +14,4 @@ export * from './dedupe';
 export * from './budget';
 export * from './period';
 export * from './transfers';
+export * from './exclusion';

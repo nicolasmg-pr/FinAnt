@@ -142,6 +142,34 @@ export const MIGRATIONS: readonly { version: number; sql: string }[] = [
       CREATE INDEX idx_tx_transfer_peer ON transactions(transfer_peer_id);
     `,
   },
+  {
+    version: 7,
+    sql: `
+      -- Standing instructions to keep a kind of movement out of the statistics,
+      -- learned when the owner excludes one movement and asks for the rest.
+      --
+      -- Its own table, not a row in "rules" with a null category: an exclusion
+      -- rule has no category and never will. rules.category_id is NOT NULL with
+      -- a foreign key onto categories, and that constraint is what stops a
+      -- categorisation rule from pointing at a category that no longer exists.
+      -- Making the column nullable to fit a second kind of rule in there would
+      -- weaken the guarantee for every shipped rule, and every read of "rules"
+      -- would then have to remember to filter out the rows that are not
+      -- categorisations at all. Two questions, two tables. There is no priority
+      -- column either: exclusion is not a contest between rules, any enabled
+      -- rule that matches is enough.
+      --
+      -- Exclusion affects statistics only. It never changes an amount, a side
+      -- or a balance: the movement stays in the ledger exactly as booked.
+      CREATE TABLE exclusion_rules (
+        id TEXT PRIMARY KEY NOT NULL,
+        match_json TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        learned INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
