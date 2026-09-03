@@ -1,10 +1,15 @@
 import { readCsv, readRows, type CsvTable } from '../csv';
+import { extractPdfPages } from '../pdf/index';
+import { pdfTable } from '../pdf/table';
 import { detectProfile, findHeaderRow, type ImportProfile } from '../profile';
+import type { PdfTableSpec } from '../pdf/table';
 import { GENERIC_CSV } from './generic';
 import { ING_UMSATZANZEIGE } from './ing';
+import { TRADE_REPUBLIC_PDF, TRADE_REPUBLIC_PDF_TABLE } from './trade-republic';
 
 export { GENERIC_CSV };
 export { ING_UMSATZANZEIGE };
+export { TRADE_REPUBLIC_PDF, TRADE_REPUBLIC_PDF_TABLE };
 export { PRESUPUESTO_XLSX } from './presupuesto';
 
 /**
@@ -49,4 +54,32 @@ export function readStatementCsv(
     if (match) return read(match, match.headerRow ?? i);
   }
   return read(GENERIC_CSV, GENERIC_CSV.headerRow ?? findHeaderRow(rows, HEADER_SEARCH_DEPTH));
+}
+
+/** PDF statement profiles, tried in order against a document's pages. */
+export const BUILT_IN_PDF_PROFILES: readonly {
+  readonly profile: ImportProfile;
+  readonly table: PdfTableSpec;
+}[] = [{ profile: TRADE_REPUBLIC_PDF, table: TRADE_REPUBLIC_PDF_TABLE }];
+
+/**
+ * Reads a PDF statement into the same table shape a CSV produces.
+ *
+ * A PDF carries no header row to detect a profile from, so each profile's table
+ * spec is tried in turn and the first one that finds its header on a page wins.
+ * A document no profile recognises raises rather than returning an empty table:
+ * there is no generic fallback here, because guessing a movements table out of
+ * arbitrary PDF geometry mis-reads statements silently, and a wrong amount
+ * looks exactly like a right one.
+ */
+export function readStatementPdf(bytes: Uint8Array): {
+  table: CsvTable;
+  profile: ImportProfile;
+} {
+  const pages = extractPdfPages(bytes);
+  for (const candidate of BUILT_IN_PDF_PROFILES) {
+    const table = pdfTable(pages, candidate.table);
+    if (table.rows.length > 0) return { table, profile: candidate.profile };
+  }
+  throw new Error('This PDF does not match any statement layout FinAnt can read.');
 }

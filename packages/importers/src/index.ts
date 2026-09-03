@@ -3,6 +3,8 @@ export * from './text';
 export * from './values';
 export * from './profile';
 export * from './profiles/index';
+export * from './pdf/index';
+export * from './pdf/table';
 export * from './xlsx';
 export * from './workbook';
 export * from './camt053';

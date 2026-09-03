@@ -158,6 +158,73 @@ is a new object rather than a new parser. Use
 `npm run inspect:csv -- <file.csv>` to print a profile skeleton from an unknown
 file.
 
+## Trade Republic — statement (PDF)
+
+`TRADE_REPUBLIC_PDF` in `src/profiles/trade-republic.ts`, exported as
+`Certificado de saldo y movimientos.pdf`. The filename is Spanish; the document
+is German.
+
+FinAnt reads the PDF itself, on the device. The reader lives in
+`src/pdf/` and is written out rather than taken from pdf.js, because Hermes
+cannot compile pdf.js: `hermesc` rejects its dynamic worker import outright,
+and a Babel rewrite that gets past compilation then runs into missing DOM
+globals. Measured on a real 53-page statement, this reader returns the same
+7,118 positioned text items pdf.js does, in well under a tenth of a second,
+with `fflate` as its only dependency.
+
+### How a table is recovered
+
+A PDF has no tables — only glyphs at coordinates. `pdfTable` finds the header
+row by its labels, learns the column positions from where those labels sit, and
+assigns every other item to the column whose header it is nearest to. Nearest
+wins rather than a boundary between columns, because `SALDO`'s values are
+right-aligned and start *left* of their own header.
+
+Rows are anchored on the running balance: it is the one column a statement never
+leaves blank, while each amount column is empty on every row of the other
+direction. A row then owns everything down to just above the next anchor, which
+is how a wrapped description stays with its movement.
+
+Three guards, each of which this statement needs:
+
+- `anchorPattern` — the certificate's "generated on" footer sits nearest the
+  `SALDO` column and would otherwise open a row of its own, once per page.
+- a row pitch bound — the last row on a page has no next anchor to stop at, so
+  it is bounded by the page's own typical row spacing.
+- `requiredColumns` — the last pages carry a second table, a trade settlement
+  list, whose columns fall near these ones. It has no `TYP` column, so
+  requiring one keeps its rows out of the movement list.
+
+### The table
+
+```
+DATUM | TYP | BESCHREIBUNG | ZAHLUNGSEINGANG | ZAHLUNGSAUSGANG | SALDO
+```
+
+`ZAHLUNGSEINGANG` and `ZAHLUNGSAUSGANG` are a debit/credit pair, so the side of
+the ledger comes from *which column* an amount is in and never from a sign.
+That is why the PDF is turned into a `CsvTable` and handed to `applyProfile`:
+the pair is already handled there, and a second implementation would be a
+second chance to get a sign wrong.
+
+`DATUM` is split across two lines — `05 Sept.` above the row and `2026` below —
+and the month is a name, in German or Spanish. `parseDate` reads month names in
+all three supported languages when no numeric format is pinned.
+
+`TYP` is a closed vocabulary (`Kartentransaktion`, `SEPA-Lastschrift`,
+`Überweisung`, `Handel`, `Zinsen`, `Ertrag`, `Bonus`), so it is mapped to
+`reference` rather than to the narrative. The rules still match on it, because
+they match against `any`.
+
+### Verifying a change to this profile
+
+The statement carries a running balance, which makes it self-checking: for
+consecutive rows, `SALDO(n) + Betrag(n+1) = SALDO(n+1)` — the rows run oldest
+first. On the owner's real export, 642 of 643 rows parse and **all 642 links
+reconcile**, which verifies every date, amount, sign and row boundary at once.
+The one remaining row is reported as an issue: its date cell absorbs the
+heading of the section that follows it on the last page.
+
 ## camt.053 (ISO 20022)
 
 `src/camt053.ts`. Every SEPA bank can produce camt.053, so it covers any
