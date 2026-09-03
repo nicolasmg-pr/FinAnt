@@ -58,7 +58,13 @@ export default function DashboardScreen() {
 
   if (transactions.length === 0 && !loading) {
     return (
-      <ScrollView contentContainerStyle={[styles.screen, { backgroundColor: theme.background }]}>
+      // The colour goes on the ScrollView, not its content container: the
+      // container is only as tall as the card, so everything below it fell
+      // through to the navigator's own scene colour and left a grey seam.
+      <ScrollView
+        style={{ backgroundColor: theme.background }}
+        contentContainerStyle={styles.screen}
+      >
         <Card title={t('dashboard.title')}>
           <Text style={{ color: theme.textMuted }}>{t('dashboard.noData')}</Text>
         </Card>
