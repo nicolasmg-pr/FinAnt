@@ -107,6 +107,7 @@ export const de: Translations = {
   },
   banks: {
     title: 'Banken',
+    viewMovements: 'Umsätze ansehen',
     empty: 'Noch keine Banken. Füge eine mit dem Saldo hinzu, den sie heute hält.',
     add: 'Bank hinzufügen',
     edit: 'Bank bearbeiten',

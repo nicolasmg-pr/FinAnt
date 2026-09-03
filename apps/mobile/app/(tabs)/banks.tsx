@@ -9,7 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   add,
@@ -128,6 +128,7 @@ function totalOf(views: readonly AccountView[]): Money | null {
 export default function BanksScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const router = useRouter();
   const { transactions, accounts, reload } = useAppData();
   const [institutions, setInstitutions] = useState<InstitutionRow[]>([]);
   const [bankDraft, setBankDraft] = useState<BankDraft | null>(null);
@@ -188,6 +189,20 @@ export default function BanksScreen() {
   const openBankEdit = (institution: InstitutionRow) => {
     setFormError(null);
     setBankDraft({ id: institution.id, name: institution.name, balanceText: '', dateText: today });
+  };
+
+  /**
+   * Opens the movements list narrowed to these accounts. `at` changes on every
+   * push, so the list re-applies the filter even when the same bank is opened
+   * twice — expo-router would otherwise hand it identical params and the screen
+   * would look like it ignored the tap.
+   */
+  const openMovements = (accountIds: readonly string[]) => {
+    if (accountIds.length === 0) return;
+    router.push({
+      pathname: '/transactions',
+      params: { accountIds: accountIds.join(','), at: String(Date.now()) },
+    });
   };
 
   const openBalance = (view: AccountView) => {
@@ -316,9 +331,20 @@ export default function BanksScreen() {
                 {t('banks.movements', { count: bank.movementCount })}
               </Text>
             </Pressable>
+            <Pressable
+              onPress={() => openMovements(bank.accounts.map((view) => view.row.id))}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.meta, { color: theme.accent }]}>{t('banks.viewMovements')}</Text>
+            </Pressable>
 
             {bank.accounts.map((view) => (
-              <AccountLine key={view.row.id} view={view} onAssert={() => openBalance(view)} />
+              <AccountLine
+                key={view.row.id}
+                view={view}
+                onAssert={() => openBalance(view)}
+                onOpenMovements={() => openMovements([view.row.id])}
+              />
             ))}
           </Card>
         ))}
@@ -327,7 +353,11 @@ export default function BanksScreen() {
           <Card title={t('banks.unassigned')}>
             {unassigned.map((view) => (
               <View key={view.row.id} style={styles.unassigned}>
-                <AccountLine view={view} onAssert={() => openBalance(view)} />
+                <AccountLine
+                  view={view}
+                  onAssert={() => openBalance(view)}
+                  onOpenMovements={() => openMovements([view.row.id])}
+                />
                 {institutions.length > 0 ? (
                   <>
                     <Text style={[styles.meta, { color: theme.textMuted }]}>
@@ -531,7 +561,15 @@ export default function BanksScreen() {
  * One account under its bank: what it holds, how many movements it owns, and a
  * warning when the balance the owner asserted no longer matches the history.
  */
-function AccountLine({ view, onAssert }: { view: AccountView; onAssert: () => void }) {
+function AccountLine({
+  view,
+  onAssert,
+  onOpenMovements,
+}: {
+  view: AccountView;
+  onAssert: () => void;
+  onOpenMovements: () => void;
+}) {
   const theme = useTheme();
   const { t } = useTranslation();
   // The drift is the negation of what arrived behind the anchor, so this is the
@@ -539,18 +577,19 @@ function AccountLine({ view, onAssert }: { view: AccountView; onAssert: () => vo
   const arrived = money(-view.driftMinor, view.row.currency);
 
   return (
-    // TODO: pressing an account should open the movements list filtered to it.
     <View style={[styles.account, { borderTopColor: theme.border }]}>
-      <View style={styles.row}>
-        <Text style={[styles.accountName, { color: theme.text }]} numberOfLines={1}>
-          {view.row.name}
-        </Text>
-        {view.balance ? (
-          <Amount value={view.balance} tone="neutral" style={styles.accountValue} />
-        ) : (
-          <Text style={{ color: theme.textMuted, fontSize: 13 }}>{t('banks.noBalance')}</Text>
-        )}
-      </View>
+      <Pressable onPress={onOpenMovements} accessibilityRole="button">
+        <View style={styles.row}>
+          <Text style={[styles.accountName, { color: theme.text }]} numberOfLines={1}>
+            {view.row.name}
+          </Text>
+          {view.balance ? (
+            <Amount value={view.balance} tone="neutral" style={styles.accountValue} />
+          ) : (
+            <Text style={{ color: theme.textMuted, fontSize: 13 }}>{t('banks.noBalance')}</Text>
+          )}
+        </View>
+      </Pressable>
 
       <Text style={[styles.meta, { color: theme.textMuted }]}>
         {t('banks.movements', { count: view.movementCount })}
