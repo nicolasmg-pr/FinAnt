@@ -23,6 +23,8 @@ export const es: Translations = {
   dashboard: {
     title: 'Resumen',
     thisMonth: 'Este mes',
+    sincePayroll: 'Desde el {{date}}',
+    payPeriodHint: 'Contado desde tu última nómina. El balance es lo que queda de ella.',
     income: 'Ingresos',
     expenses: 'Gastos',
     net: 'Balance',
@@ -48,6 +50,7 @@ export const es: Translations = {
     uncategorisedBanner_other: '{{count}} movimientos sin categoría',
     changeCategory: 'Cambiar categoría',
     applyToSimilar: 'Aplicar también a movimientos similares a partir de ahora',
+    salaryHint: 'Los movimientos de nómina abren un nuevo mes en el resumen.',
     excludeFromStats: 'Excluir de las estadísticas',
     markInternal: 'Marcar como traspaso entre mis cuentas',
     addManual: 'Añadir movimiento',
