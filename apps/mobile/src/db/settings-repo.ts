@@ -24,3 +24,8 @@ export const SETTING_CURRENCY = 'currency';
 export const SETTING_APP_LOCK = 'appLock';
 /** Account id preselected on the import screen: the one the last import went to. */
 export const SETTING_LAST_IMPORT_ACCOUNT = 'lastImportAccount';
+/**
+ * Ids of shipped rules the owner deleted, as a JSON array. Without it the
+ * launch-time install would bring every one of them back on the next launch.
+ */
+export const SETTING_RETIRED_SHIPPED_RULES = 'retiredShippedRules';

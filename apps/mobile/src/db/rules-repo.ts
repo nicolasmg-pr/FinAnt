@@ -1,6 +1,7 @@
-import type { CategoryRule } from '@finant/core';
+import { isShippedRuleId, parseRetiredShippedRules, type CategoryRule } from '@finant/core';
 import { getDatabase } from './database';
 import { toRule, type RuleRow } from './mappers';
+import { readSetting, SETTING_RETIRED_SHIPPED_RULES, writeSetting } from './settings-repo';
 import { newId } from './transactions-repo';
 
 export async function listRules(): Promise<CategoryRule[]> {
@@ -31,7 +32,21 @@ export async function saveRule(rule: Omit<CategoryRule, 'id'> & { id?: string })
   return id;
 }
 
+/**
+ * Deleting one of our own rules leaves a tombstone, so the launch-time install
+ * does not put it straight back. A learned rule needs none: it was never in the
+ * shipped set, so nothing would ever reinstall it.
+ */
 export async function deleteRule(id: string): Promise<void> {
   const db = await getDatabase();
   await db.runAsync('DELETE FROM rules WHERE id = ?;', id);
+  if (!isShippedRuleId(id)) return;
+  const retired = await listRetiredShippedRules();
+  if (retired.includes(id)) return;
+  await writeSetting(SETTING_RETIRED_SHIPPED_RULES, JSON.stringify([...retired, id]));
+}
+
+/** Shipped rules the owner has deleted. */
+export async function listRetiredShippedRules(): Promise<string[]> {
+  return parseRetiredShippedRules(await readSetting(SETTING_RETIRED_SHIPPED_RULES));
 }

@@ -129,6 +129,25 @@ which is exactly what this flow exists to prevent. Soft-deleted movements are
 reassigned too. Rules pointing at the category go with it, and the confirmation
 says how many.
 
+### Shipped rules reach an existing device too
+
+`syncDefaultRules()` runs alongside `syncBuiltInCategories()` on every launch
+and inserts the shipped rules the database does not already hold. Installing
+them once, on a fresh database, was why the two insurance rules would have
+arrived on an already-seeded device with no rule able to fire.
+
+It never rewrites an existing rule: a shipped rule the owner disabled or
+re-pointed stays as they left it. And it never brings a deleted one back —
+`deleteRule` writes the id into the `retiredShippedRules` setting when it
+belongs to the shipped set, and the install skips anything tombstoned. Without
+that, a plain `INSERT OR IGNORE` over `DEFAULT_RULES` would resurrect a deleted
+rule on every launch, forever. A learned rule leaves no tombstone, because
+nothing would ever reinstall it.
+
+The tombstones are read straight off the handle being opened rather than
+through `settings-repo`: the sync runs inside `open()`, and anything calling
+`getDatabase()` from there would await the very open it is part of.
+
 ## Banks and balances
 
 A **bank groups accounts**; the balance itself lives on the account, because

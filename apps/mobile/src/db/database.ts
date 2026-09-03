@@ -1,7 +1,13 @@
 import * as SQLite from 'expo-sqlite';
-import { BUILT_IN_CATEGORIES, DEFAULT_RULES } from '@finant/core';
+import {
+  BUILT_IN_CATEGORIES,
+  DEFAULT_RULES,
+  parseRetiredShippedRules,
+  shippedRulesToInstall,
+} from '@finant/core';
 import { destroyDatabaseKey, getOrCreateDatabaseKey } from '../security/keys';
 import { LATEST_VERSION, MIGRATIONS } from './schema';
+import { SETTING_RETIRED_SHIPPED_RULES } from './settings-repo';
 
 const DATABASE_NAME = 'finant.db';
 
@@ -24,7 +30,7 @@ async function open(): Promise<SQLite.SQLiteDatabase> {
   await db.execAsync('PRAGMA foreign_keys = ON;');
   await migrate(db);
   await syncBuiltInCategories(db);
-  await seed(db);
+  await syncDefaultRules(db);
   return db;
 }
 
@@ -123,24 +129,44 @@ export async function syncBuiltInCategories(db: SQLite.SQLiteDatabase): Promise<
 }
 
 /**
- * Installs the shipped rules on a fresh database.
+ * Installs the shipped rules a database is missing, on every launch.
  *
- * Categories are no longer seeded here — `syncBuiltInCategories()` owns them
- * and runs first, so this only has to decide about rules. Rules keep the
- * once-only behaviour on purpose: a shipped rule the owner disabled or a
- * learned rule that now outranks it must not be re-installed behind them.
+ * Categories are handled by `syncBuiltInCategories()`, which runs first; this
+ * is the same idea for rules and exists for the same reason. Installing once on
+ * a fresh database meant a rule added in a later release never reached a device
+ * that had already been seeded — the two insurance rules would have shipped
+ * with no way of ever running.
+ *
+ * What it does not do matters as much:
+ *
+ * - an existing rule is never rewritten, so a shipped rule the owner disabled
+ *   or re-pointed stays as they left it;
+ * - a shipped rule the owner deleted is not reinstalled, because `deleteRule`
+ *   records a tombstone and `shippedRulesToInstall` skips it. Without that, a
+ *   plain `INSERT OR IGNORE` would bring it back on every launch, forever.
  */
-async function seed(db: SQLite.SQLiteDatabase): Promise<void> {
-  const existing = await db.getFirstAsync<{ count: number }>(
-    'SELECT COUNT(*) AS count FROM rules;',
+async function syncDefaultRules(db: SQLite.SQLiteDatabase): Promise<void> {
+  const rows = await db.getAllAsync<{ id: string }>('SELECT id FROM rules;');
+  // Read off the handle being opened, not through the repositories: this runs
+  // inside `open()`, and anything that called `getDatabase()` here would await
+  // the very open it is part of.
+  const setting = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM settings WHERE key = ?;',
+    SETTING_RETIRED_SHIPPED_RULES,
   );
-  if ((existing?.count ?? 0) > 0) return;
+  const retired = parseRetiredShippedRules(setting?.value ?? null);
+  const missing = shippedRulesToInstall(
+    DEFAULT_RULES,
+    rows.map((row) => row.id),
+    retired,
+  );
+  if (missing.length === 0) return;
 
   const now = new Date().toISOString();
   await db.withTransactionAsync(async () => {
-    for (const rule of DEFAULT_RULES) {
+    for (const rule of missing) {
       await db.runAsync(
-        `INSERT INTO rules (id, category_id, priority, enabled, learned, match_json, created_at)
+        `INSERT OR IGNORE INTO rules (id, category_id, priority, enabled, learned, match_json, created_at)
          VALUES (?, ?, ?, 1, 0, ?, ?);`,
         rule.id,
         rule.categoryId,
