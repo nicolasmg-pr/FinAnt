@@ -2,11 +2,13 @@ import { useCallback, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Link, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { exclusionKeyOf, type ExclusionRule } from '@finant/core';
+import { exclusionKeyOf, recategorise, type ExclusionRule } from '@finant/core';
 import { SUPPORTED_LOCALES, type Locale } from '@finant/i18n';
 import { Card } from '../../src/components/Card';
 import { eraseEverything } from '../../src/db/database';
 import { deleteExclusionRule, listExclusionRules } from '../../src/db/exclusion-rules-repo';
+import { listRules } from '../../src/db/rules-repo';
+import { applyRecategorisations, listAllTransactions } from '../../src/db/transactions-repo';
 import { currentLocale, setLocale } from '../../src/i18n';
 import { radius, spacing, useTheme } from '../../src/theme';
 
@@ -17,6 +19,8 @@ export default function SettingsScreen() {
   const { t } = useTranslation();
   const [locale, setActiveLocale] = useState<Locale>(currentLocale());
   const [exclusions, setExclusions] = useState<readonly ExclusionRule[]>([]);
+  const [reapplying, setReapplying] = useState(false);
+  const [reapplied, setReapplied] = useState<number | null>(null);
 
   // Reloaded on focus: a rule is usually created on the movement screen, and
   // the owner comes straight here to check what it now covers.
@@ -60,6 +64,26 @@ export default function SettingsScreen() {
   const chooseLocale = async (next: Locale) => {
     await setLocale(next);
     setActiveLocale(next);
+  };
+
+  /**
+   * Re-runs the rules over what is already on record. A correction to a shipped
+   * rule is worth nothing if it only reaches statements not yet imported —
+   * this is what carries it to the movements the broken rule already filed.
+   * Manual classifications and matched transfers are left alone; `recategorise`
+   * decides that, not this screen.
+   */
+  const reapplyRules = async () => {
+    setReapplying(true);
+    setReapplied(null);
+    try {
+      const [transactions, rules] = await Promise.all([listAllTransactions(), listRules()]);
+      setReapplied(await applyRecategorisations(recategorise(transactions, rules)));
+    } catch (cause) {
+      Alert.alert(t('settings.reapplyRules'), (cause as Error).message);
+    } finally {
+      setReapplying(false);
+    }
   };
 
   const confirmErase = () => {
@@ -134,6 +158,20 @@ export default function SettingsScreen() {
             </View>
           ))
         )}
+      </Card>
+
+      <Card title={t('settings.rulesTitle')}>
+        <Text style={{ color: theme.textMuted }}>{t('settings.rulesBody')}</Text>
+        <Pressable onPress={() => void reapplyRules()} disabled={reapplying}>
+          <Text style={{ color: theme.accent, fontWeight: '600' }}>
+            {reapplying ? t('common.loading') : t('settings.reapplyRules')}
+          </Text>
+        </Pressable>
+        {reapplied !== null ? (
+          <Text style={{ color: theme.textMuted, fontSize: 13 }}>
+            {t('settings.reapplyRulesDone', { count: reapplied })}
+          </Text>
+        ) : null}
       </Card>
 
       <Card title={t('settings.data')}>

@@ -179,6 +179,12 @@ export const de: Translations = {
     autoExcluded_other: '{{count}} Buchungen durch deine Regeln aus der Statistik ausgeschlossen',
   },
   settings: {
+    rulesTitle: 'Regeln zur Zuordnung',
+    rulesBody:
+      'Wendet die Regeln erneut auf alles bereits Importierte an. Von Hand zugeordnete Umsätze und erkannte Übertragungen zwischen eigenen Konten bleiben unverändert.',
+    reapplyRules: 'Regeln erneut anwenden',
+    reapplyRulesDone_one: '{{count}} Umsatz neu zugeordnet.',
+    reapplyRulesDone_other: '{{count}} Umsätze neu zugeordnet.',
     title: 'Einstellungen',
     language: 'Sprache',
     currency: 'Hauptwährung',

@@ -40,6 +40,14 @@ export function matches(rule: RuleMatch, target: MatchTarget): boolean {
       return fieldValue(target, rule.field).includes(normalise(rule.value));
     case 'startsWith':
       return fieldValue(target, rule.field).startsWith(normalise(rule.value));
+    case 'word': {
+      // Normalised text is words separated by single spaces, so padding both
+      // sides turns a substring test into a word-boundary one, and a value of
+      // several words still matches as a phrase.
+      const needle = normalise(rule.value);
+      if (needle === '') return false;
+      return ` ${fieldValue(target, rule.field)} `.includes(` ${needle} `);
+    }
     case 'regex':
       // Rules are authored by us or by the device owner; there is no untrusted
       // author, but a bad pattern must not take the import down.
@@ -113,4 +121,43 @@ export function learnRuleFrom(
     learned: true,
     match: { kind: 'contains', field: 'any', value: key },
   };
+}
+
+export interface Recategorisation {
+  readonly id: string;
+  readonly categoryId: string;
+  readonly ruleId: string | null;
+}
+
+/**
+ * Re-runs the rules over movements already on record, and reports only the ones
+ * whose category would change.
+ *
+ * Shipped rules get corrected — one of them filed a year of German transfers as
+ * electricity bills — and a correction is worth nothing if it only applies to
+ * statements not yet imported. Two kinds of row are never touched:
+ *
+ * - anything the owner classified by hand (`categorySource === 'manual'`),
+ *   which is the whole point of recording that a choice was manual;
+ * - a movement paired as an internal transfer, because its category was set by
+ *   the transfer matcher rather than by a rule, and re-running the rules over
+ *   it would silently unpick the pairing.
+ *
+ * A row no rule matches any more comes back as `uncategorised`, which is
+ * honest: it says the classification was withdrawn rather than leaving a
+ * category nothing justifies.
+ */
+export function recategorise(
+  transactions: readonly Transaction[],
+  rules: readonly CategoryRule[],
+): Recategorisation[] {
+  const changes: Recategorisation[] = [];
+  for (const tx of transactions) {
+    if (tx.categorySource === 'manual') continue;
+    if (tx.transferPeerId !== null) continue;
+    const { categoryId, ruleId } = categorise(tx, rules);
+    if (categoryId === tx.categoryId) continue;
+    changes.push({ id: tx.id, categoryId, ruleId });
+  }
+  return changes;
 }

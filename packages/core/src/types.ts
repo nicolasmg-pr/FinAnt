@@ -83,6 +83,12 @@ export type MatchField = 'description' | 'counterparty' | 'reference' | 'any';
 export type RuleMatch =
   | { readonly kind: 'contains'; readonly field: MatchField; readonly value: string }
   | { readonly kind: 'startsWith'; readonly field: MatchField; readonly value: string }
+  /**
+   * Whole-word containment. `contains` is wrong for a short brand name: "rwe"
+   * sits inside "ueberweisung", so an energy supplier's rule filed every German
+   * transfer as a utility bill. Multi-word values match as a phrase.
+   */
+  | { readonly kind: 'word'; readonly field: MatchField; readonly value: string }
   | {
       readonly kind: 'regex';
       readonly field: MatchField;

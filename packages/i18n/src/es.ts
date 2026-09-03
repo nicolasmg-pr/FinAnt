@@ -180,6 +180,12 @@ export const es: Translations = {
     autoExcluded_other: '{{count}} movimientos excluidos de las estadísticas por reglas tuyas',
   },
   settings: {
+    rulesTitle: 'Reglas de clasificación',
+    rulesBody:
+      'Vuelve a aplicar las reglas a todo lo ya importado. Los movimientos que clasificaste a mano, y los traspasos emparejados entre tus cuentas, se quedan como están.',
+    reapplyRules: 'Volver a aplicar las reglas',
+    reapplyRulesDone_one: '{{count}} movimiento reclasificado.',
+    reapplyRulesDone_other: '{{count}} movimientos reclasificados.',
     title: 'Ajustes',
     language: 'Idioma',
     currency: 'Moneda principal',
