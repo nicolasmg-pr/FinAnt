@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { categorise, learnRuleFrom } from '../src/categorise';
 import { DEFAULT_RULES } from '../src/default-rules';
 import { merchantKey, normalise } from '../src/normalise';
+import type { CategoryRule } from '../src/types';
 import { tx } from './factory';
 
 describe('normalise', () => {
@@ -19,27 +20,43 @@ describe('normalise', () => {
 describe('categorise', () => {
   it('files Spanish, German and English narratives into the same category', () => {
     for (const description of ['COMPRA TARJ MERCADONA', 'REWE SAGT DANKE', 'LIDL GMBH']) {
-      expect(categorise(tx({ date: '2026-01-05', amount: -42, description }), DEFAULT_RULES).categoryId)
-        .toBe('food-groceries');
+      expect(
+        categorise(tx({ date: '2026-01-05', amount: -42, description }), DEFAULT_RULES).categoryId,
+      ).toBe('food-groceries');
     }
   });
 
   it('only treats a salary narrative as income when money came in', () => {
     const incoming = tx({ date: '2026-01-25', amount: 2600, description: 'NOMINA ENERO' });
-    const outgoing = tx({ date: '2026-01-26', amount: -2600, description: 'DEVOLUCION NOMINA ENERO' });
+    const outgoing = tx({
+      date: '2026-01-26',
+      amount: -2600,
+      description: 'DEVOLUCION NOMINA ENERO',
+    });
     expect(categorise(incoming, DEFAULT_RULES).categoryId).toBe('income-salary');
     expect(categorise(outgoing, DEFAULT_RULES).categoryId).not.toBe('income-salary');
   });
 
   it('keeps cash withdrawals and taxes out of discretionary buckets', () => {
-    expect(categorise(tx({ date: '2026-01-05', amount: -100, description: 'REINTEGRO CAJERO' }), DEFAULT_RULES).categoryId)
-      .toBe('cash');
-    expect(categorise(tx({ date: '2026-01-05', amount: -300, description: 'FINANZAMT MUENCHEN STEUER' }), DEFAULT_RULES).categoryId)
-      .toBe('taxes');
+    expect(
+      categorise(
+        tx({ date: '2026-01-05', amount: -100, description: 'REINTEGRO CAJERO' }),
+        DEFAULT_RULES,
+      ).categoryId,
+    ).toBe('cash');
+    expect(
+      categorise(
+        tx({ date: '2026-01-05', amount: -300, description: 'FINANZAMT MUENCHEN STEUER' }),
+        DEFAULT_RULES,
+      ).categoryId,
+    ).toBe('taxes');
   });
 
   it('falls back to uncategorised rather than guessing', () => {
-    const result = categorise(tx({ date: '2026-01-05', amount: -20, description: 'XJ4 998211' }), DEFAULT_RULES);
+    const result = categorise(
+      tx({ date: '2026-01-05', amount: -20, description: 'XJ4 998211' }),
+      DEFAULT_RULES,
+    );
     expect(result.categoryId).toBe('uncategorised');
     expect(result.ruleId).toBeNull();
   });
@@ -52,7 +69,12 @@ describe('categorise', () => {
   });
 
   it('learns a rule from a manual correction that outranks shipped rules', () => {
-    const t = tx({ date: '2026-01-05', amount: -35, description: 'AMAZON MKTPL', counterparty: 'AMAZON MKTPL' });
+    const t = tx({
+      date: '2026-01-05',
+      amount: -35,
+      description: 'AMAZON MKTPL',
+      counterparty: 'AMAZON MKTPL',
+    });
     const learned = learnRuleFrom(t, 'shopping', () => 'learned-1');
     expect(learned).not.toBeNull();
     expect(learned!.priority).toBeGreaterThan(400);
@@ -60,7 +82,13 @@ describe('categorise', () => {
   });
 
   it('declines to learn from a narrative with no merchant identity', () => {
-    expect(learnRuleFrom(tx({ date: '2026-01-05', amount: -5, description: '12 34' }), 'shopping', () => 'x')).toBeNull();
+    expect(
+      learnRuleFrom(
+        tx({ date: '2026-01-05', amount: -5, description: '12 34' }),
+        'shopping',
+        () => 'x',
+      ),
+    ).toBeNull();
   });
 });
 
@@ -85,5 +113,63 @@ describe('insurance', () => {
   it('leaves every other insurance in the general bucket, which keeps its id', () => {
     expect(at('HAUSRATVERSICHERUNG BEITRAG')).toBe('insurance');
     expect(at('RECIBO SEGURO DEL HOGAR')).toBe('insurance');
+  });
+});
+
+describe('whole-word matching', () => {
+  const wordRule = (value: string): CategoryRule => ({
+    id: 'r-probe',
+    categoryId: 'housing-utilities',
+    priority: 100,
+    enabled: true,
+    learned: false,
+    match: { kind: 'word', field: 'any', value },
+  });
+
+  const narrative = (description: string) => tx({ date: '2026-03-02', amount: -10, description });
+
+  it('matches a token standing on its own', () => {
+    expect(categorise(narrative('RWE Vertrieb AG'), [wordRule('rwe')]).ruleId).toBe('r-probe');
+  });
+
+  it('matches a token at the very end of a narrative', () => {
+    expect(categorise(narrative('Abschlag RWE'), [wordRule('rwe')]).ruleId).toBe('r-probe');
+  });
+
+  it('does not match a token buried inside a longer word', () => {
+    // "Überweisung" normalises to "uberweisung", which contains "rwe". This is
+    // the false positive that filed every German transfer as a utility bill.
+    expect(categorise(narrative('Echtzeitüberweisung'), [wordRule('rwe')]).ruleId).toBe(null);
+    expect(
+      categorise(narrative('Dauerauftrag / Terminueberweisung'), [wordRule('rwe')]).ruleId,
+    ).toBe(null);
+  });
+
+  it('matches a multi-word token as a phrase', () => {
+    expect(categorise(narrative('E ON Energie Deutschland'), [wordRule('e on')]).ruleId).toBe(
+      'r-probe',
+    );
+    expect(categorise(narrative('Leone Ristorante'), [wordRule('e on')]).ruleId).toBe(null);
+  });
+
+  it('ignores case and diacritics like every other matcher', () => {
+    expect(categorise(narrative('AOK Bayern'), [wordRule('aok')]).ruleId).toBe('r-probe');
+  });
+});
+
+describe('shipped rules against ordinary German and Spanish narratives', () => {
+  /** Narratives that carry no merchant at all must stay uncategorised. */
+  const NEUTRAL = [
+    'Echtzeitüberweisung',
+    'Dauerauftrag / Terminueberweisung',
+    'Gutschrift Echtzeitüberweisung',
+    'Überweisung',
+    'Lastschrift',
+    'Transferencia recibida',
+  ];
+
+  it.each(NEUTRAL)('leaves %s uncategorised', (description) => {
+    const result = categorise(tx({ date: '2026-03-02', amount: -100, description }), DEFAULT_RULES);
+    expect(result.ruleId).toBe(null);
   });
 });

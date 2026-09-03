@@ -8,8 +8,35 @@ import type { CategoryRule, RuleMatch } from './types';
  * Rules are matched against the normalised narrative (see normalise.ts), so
  * write values lowercase and without diacritics.
  */
+/**
+ * Any of these merchant tokens, as whole words.
+ *
+ * Substring matching is wrong here and was actively harmful: "rwe" sits inside
+ * "ueberweisung", so an energy supplier's token filed 66 movements — every
+ * German transfer in a year of statements — as utility bills. "eon", "gas",
+ * "bar" and "dia" carry the same trap. Merchant names arrive space-separated in
+ * bank narratives, so whole-word matching costs nothing, and a value of several
+ * words still matches as a phrase.
+ */
 function contains(values: readonly string[]): RuleMatch {
+  return { kind: 'any', of: values.map((value) => ({ kind: 'word', field: 'any', value })) };
+}
+
+/**
+ * Any of these as a substring, for the one case where whole-word matching is
+ * wrong: German glues a noun onto the front of another word, so
+ * `Hausratversicherung`, `Stromabschlag` and `Gehaltsabrechnung` are single
+ * words a match on `versicherung`, `strom` or `gehalt` must still find.
+ *
+ * Only long, unambiguous nouns belong here.
+ */
+function compound(values: readonly string[]): RuleMatch {
   return { kind: 'any', of: values.map((value) => ({ kind: 'contains', field: 'any', value })) };
+}
+
+/** Whole-word brands, plus the German nouns that legitimately glue. */
+function containsOrCompound(brands: readonly string[], nouns: readonly string[]): RuleMatch {
+  return { kind: 'any', of: [contains(brands), compound(nouns)] };
 }
 
 function rule(id: string, categoryId: string, priority: number, match: RuleMatch): CategoryRule {
@@ -23,7 +50,7 @@ export const DEFAULT_RULES: readonly CategoryRule[] = [
     kind: 'all',
     of: [
       { kind: 'direction', value: 'income' },
-      contains(['nomina', 'salario', 'payroll', 'salary', 'gehalt', 'lohn', 'bezuege']),
+      containsOrCompound(['nomina', 'salario', 'payroll', 'salary', 'lohn', 'bezuege'], ['gehalt']),
     ],
   }),
   rule('r-pension', 'income-benefits', 400, {
@@ -35,13 +62,14 @@ export const DEFAULT_RULES: readonly CategoryRule[] = [
   }),
 
   // Housing
-  rule('r-rent', 'housing-rent', 300, contains(['alquiler', 'arrendamiento', 'miete', 'kaltmiete', 'rent payment'])),
+  rule('r-rent', 'housing-rent', 300,
+    containsOrCompound(['alquiler', 'arrendamiento', 'rent payment'], ['miete', 'kaltmiete'])),
   rule('r-mortgage', 'housing-mortgage', 300, contains(['hipoteca', 'prestamo hipotecario', 'hypothek', 'baufinanzierung', 'mortgage'])),
-  rule('r-utilities', 'housing-utilities', 250, contains([
+  rule('r-utilities', 'housing-utilities', 250, containsOrCompound([
     'iberdrola', 'endesa', 'naturgy', 'repsol luz', 'holaluz', 'totalenergies',
-    'stadtwerke', 'vattenfall', 'eon', 'e on', 'rwe', 'yello strom', 'enbw',
-    'canal de isabel', 'aguas', 'wasserwerke', 'electricidad', 'strom', 'gas',
-  ])),
+    'vattenfall', 'eon', 'e on', 'rwe', 'yello strom', 'enbw',
+    'canal de isabel', 'aguas', 'electricidad', 'gas',
+  ], ['stadtwerke', 'wasserwerke', 'strom'])),
   rule('r-telco', 'housing-internet', 250, contains([
     'movistar', 'vodafone', 'orange', 'telefonica', 'yoigo', 'masmovil', 'digi',
     'telekom', 'o2', 'congstar', '1und1', 'pyur', 'unitymedia',
@@ -81,11 +109,11 @@ export const DEFAULT_RULES: readonly CategoryRule[] = [
     'apple com bill', 'itunes', 'google storage', 'youtube premium', 'dropbox', 'icloud',
     'openai', 'anthropic', 'github', 'notion', 'adobe', 'microsoft 365', 'dazn', 'movistar plus',
   ])),
-  rule('r-insurance', 'insurance', 300, contains([
+  rule('r-insurance', 'insurance', 300, containsOrCompound([
     'seguro', 'seguros', 'mapfre', 'mutua', 'axa', 'allianz', 'generali', 'zurich',
     'linea directa', 'adeslas', 'sanitas', 'dkv', 'huk coburg', 'ergo', 'debeka',
-    'versicherung', 'krankenkasse', 'aok', 'tk ', 'barmer', 'techniker krankenkasse',
-  ])),
+    'aok', 'tk', 'barmer', 'techniker krankenkasse',
+  ], ['versicherung', 'krankenkasse'])),
 
   // Insurance splits three ways, and these two sit *above* r-insurance so a
   // health or car policy is not swallowed by the "versicherung" / "seguro" the
@@ -93,14 +121,12 @@ export const DEFAULT_RULES: readonly CategoryRule[] = [
   // uses, never on insurer brand names: Spanish and German insurers all sell
   // every kind of policy, so a brand match would file a home policy as a car
   // one. Movements already filed under `insurance` stay there.
-  rule('r-insurance-health', 'insurance-health', 320, contains([
-    'krankenversicherung', 'krankenkasse', 'kranken zusatzversicherung',
-    'seguro de salud', 'seguro medico', 'health insurance',
-  ])),
-  rule('r-insurance-car', 'insurance-car', 320, contains([
-    'kfz versicherung', 'autoversicherung', 'kraftfahrzeugversicherung',
-    'seguro de coche', 'seguro de auto', 'seguro del coche', 'car insurance',
-  ])),
+  rule('r-insurance-health', 'insurance-health', 320, containsOrCompound([
+    'kranken zusatzversicherung', 'seguro de salud', 'seguro medico', 'health insurance',
+  ], ['krankenversicherung', 'krankenkasse'])),
+  rule('r-insurance-car', 'insurance-car', 320, containsOrCompound([
+    'kfz versicherung', 'seguro de coche', 'seguro de auto', 'seguro del coche', 'car insurance',
+  ], ['autoversicherung', 'kraftfahrzeugversicherung'])),
   rule('r-health', 'health-medical', 250, contains([
     'farmacia', 'apotheke', 'clinica', 'klinik', 'hospital', 'dentista', 'zahnarzt',
     'arztpraxis', 'optica', 'fielmann', 'medico', 'praxis',
@@ -126,11 +152,10 @@ export const DEFAULT_RULES: readonly CategoryRule[] = [
   ])),
 
   // Money movement — high priority, these must never fall into a spending bucket.
-  rule('r-taxes', 'taxes', 350, contains([
-    'agencia tributaria', 'aeat', 'hacienda', 'impuesto', 'irpf', 'iva ',
-    'finanzamt', 'steuer', 'grundsteuer', 'kfz steuer', 'rundfunkbeitrag',
+  rule('r-taxes', 'taxes', 350, containsOrCompound([
+    'agencia tributaria', 'aeat', 'hacienda', 'impuesto', 'irpf', 'iva',
     'ayuntamiento', 'tasa municipal',
-  ])),
+  ], ['finanzamt', 'steuer', 'rundfunkbeitrag'])),
   rule('r-fees', 'fees-interest', 350, contains([
     'comision', 'comisiones', 'gastos de mantenimiento', 'intereses',
     'kontofuhrung', 'kontofuehrungsentgelt', 'entgelt', 'zinsen', 'sollzinsen',

@@ -177,6 +177,12 @@ export const en = {
     autoExcluded_other: '{{count}} movements excluded from statistics by rules of yours',
   },
   settings: {
+    rulesTitle: 'Classification rules',
+    rulesBody:
+      'Re-runs the rules over everything already imported. Movements you classified by hand, and transfers matched between your own accounts, are left as they are.',
+    reapplyRules: 'Re-apply the rules',
+    reapplyRulesDone_one: '{{count}} movement re-classified.',
+    reapplyRulesDone_other: '{{count}} movements re-classified.',
     title: 'Settings',
     language: 'Language',
     currency: 'Main currency',

@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import {
   INTERNAL_TRANSFER_ID,
+  type Recategorisation,
   type Transaction,
   type TransactionSide,
   type TransferPair,
@@ -262,4 +263,38 @@ export async function dataRange(): Promise<{ from: string; to: string } | null> 
     'SELECT MIN(booking_date) AS "from", MAX(booking_date) AS "to" FROM transactions WHERE deleted_at IS NULL;',
   );
   return row?.from && row.to ? { from: row.from, to: row.to } : null;
+}
+
+/**
+ * Writes the changes `recategorise()` proposed, in one transaction.
+ *
+ * The `category_source` a row ends up with says how it got its category, so a
+ * row a rule now matches becomes `auto` and one no rule matches any more
+ * becomes `none`. The WHERE repeats the guards the pure function already
+ * applied, so a row the owner classified by hand between reading and writing
+ * is left alone rather than overwritten.
+ */
+export async function applyRecategorisations(
+  changes: readonly Recategorisation[],
+): Promise<number> {
+  if (changes.length === 0) return 0;
+  const db = await getDatabase();
+  let changed = 0;
+  await db.withTransactionAsync(async () => {
+    for (const change of changes) {
+      const result = await db.runAsync(
+        `UPDATE transactions
+            SET category_id = ?, category_source = ?
+          WHERE id = ?
+            AND deleted_at IS NULL
+            AND category_source != 'manual'
+            AND transfer_peer_id IS NULL;`,
+        change.categoryId,
+        change.ruleId ? 'auto' : 'none',
+        change.id,
+      );
+      changed += result.changes;
+    }
+  });
+  return changed;
 }

@@ -205,6 +205,31 @@ turned up, and offers "Re-anchor to my current balance", which re-opens the
 balance form. Nothing is corrected automatically: only the owner knows whether
 the new rows are real or the figure they typed was wrong.
 
+## How a rule matches
+
+`RuleMatch` has three text kinds, and the difference between two of them cost a
+year of statements their classification.
+
+- **`word`** — whole-word containment against the normalised narrative, which
+  is what a merchant token wants. This is what `contains()` in
+  `default-rules.ts` builds, despite its name.
+- **`contains`** — substring. Correct only for German compound nouns:
+  `Hausratversicherung`, `Stromabschlag` and `Gehaltsabrechnung` are single
+  words that a match on `versicherung`, `strom` or `gehalt` must still find.
+  Built by `compound()`, and only long, unambiguous nouns belong in it.
+- **`startsWith`** — anchored prefix, unused by shipped rules.
+
+The rule that made the distinction matter: `rwe` was a substring token for the
+energy supplier, and `Überweisung` normalises to `uberweisung`, which contains
+it. Every German transfer in the owner's statement — 66 movements, EUR 34,046 —
+was filed as electricity. Short tokens as substrings are the trap; `eon`, `gas`,
+`bar` and `dia` were all one narrative away from the same thing.
+
+`recategorise()` carries a correction like that to movements already imported;
+Settings offers it as "Re-apply the rules". It skips anything the owner
+classified by hand and anything the transfer matcher paired, because neither
+got its category from a rule.
+
 ## Adding a movement by hand
 
 `app/movement/new.tsx`, reached from the **+** in the movements tab header. It
