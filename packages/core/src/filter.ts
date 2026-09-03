@@ -1,7 +1,7 @@
-import { BUILT_IN_CATEGORIES, UNCATEGORISED_ID } from './categories';
+import { UNCATEGORISED_ID } from './categories';
 import { addMonths, yearMonthOf, yearOf } from './dates';
 import { normalise } from './normalise';
-import type { ISODate, Transaction, TransactionSide } from './types';
+import type { Category, ISODate, Transaction, TransactionSide } from './types';
 
 /**
  * What the movements list is currently showing.
@@ -145,16 +145,22 @@ export function presetOf(filter: TransactionFilter, today: ISODate): DateRangePr
 
 /**
  * The category ids worth offering as filter chips: the ones the ledger actually
- * uses, in the built-in order, with "uncategorised" pulled to the front.
+ * uses, in the order of the category list it is handed, with "uncategorised"
+ * pulled to the front.
  *
- * `UNCATEGORISED_ID` is itself a built-in category, so it has to be dropped
- * from the ordered pass before being prepended — listing it from both sources
- * renders two chips with the same key.
+ * The list is a parameter rather than the shipped constant because categories
+ * are rows the owner can add to, hide and reorder; this stays pure over what
+ * the screen loaded. `UNCATEGORISED_ID` is itself a category in that list, so
+ * it has to be dropped from the ordered pass before being prepended — listing
+ * it from both sources renders two chips with the same key.
  */
-export function usedCategoryIds(transactions: readonly Transaction[]): string[] {
+export function usedCategoryIds(
+  transactions: readonly Transaction[],
+  categories: readonly Category[],
+): string[] {
   const present = new Set(transactions.map((tx) => tx.categoryId ?? UNCATEGORISED_ID));
-  const ordered = BUILT_IN_CATEGORIES.filter(
-    (category) => category.id !== UNCATEGORISED_ID && present.has(category.id),
-  ).map((category) => category.id);
+  const ordered = categories
+    .filter((category) => category.id !== UNCATEGORISED_ID && present.has(category.id))
+    .map((category) => category.id);
   return present.has(UNCATEGORISED_ID) ? [UNCATEGORISED_ID, ...ordered] : ordered;
 }

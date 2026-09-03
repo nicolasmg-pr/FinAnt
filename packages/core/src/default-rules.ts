@@ -86,6 +86,21 @@ export const DEFAULT_RULES: readonly CategoryRule[] = [
     'linea directa', 'adeslas', 'sanitas', 'dkv', 'huk coburg', 'ergo', 'debeka',
     'versicherung', 'krankenkasse', 'aok', 'tk ', 'barmer', 'techniker krankenkasse',
   ])),
+
+  // Insurance splits three ways, and these two sit *above* r-insurance so a
+  // health or car policy is not swallowed by the "versicherung" / "seguro" the
+  // narrative shares with every other policy. Keyed on the words a statement
+  // uses, never on insurer brand names: Spanish and German insurers all sell
+  // every kind of policy, so a brand match would file a home policy as a car
+  // one. Movements already filed under `insurance` stay there.
+  rule('r-insurance-health', 'insurance-health', 320, contains([
+    'krankenversicherung', 'krankenkasse', 'kranken zusatzversicherung',
+    'seguro de salud', 'seguro medico', 'health insurance',
+  ])),
+  rule('r-insurance-car', 'insurance-car', 320, contains([
+    'kfz versicherung', 'autoversicherung', 'kraftfahrzeugversicherung',
+    'seguro de coche', 'seguro de auto', 'seguro del coche', 'car insurance',
+  ])),
   rule('r-health', 'health-medical', 250, contains([
     'farmacia', 'apotheke', 'clinica', 'klinik', 'hospital', 'dentista', 'zahnarzt',
     'arztpraxis', 'optica', 'fielmann', 'medico', 'praxis',

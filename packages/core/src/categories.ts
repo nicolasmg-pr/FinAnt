@@ -51,7 +51,11 @@ export const BUILT_IN_CATEGORIES: readonly Category[] = [
 
   // Recurring commitments
   cat('health-medical', 'Health', 'expense', '#D81B60', 'heart'),
-  cat('insurance', 'Insurance', 'expense', '#8E24AA', 'umbrella'),
+  // Insurance splits three ways. `insurance` keeps its id — rules and years of
+  // history point at it — and only its label moved to "Other insurance".
+  cat('insurance', 'Other insurance', 'expense', '#8E24AA', 'umbrella'),
+  cat('insurance-health', 'Health insurance', 'expense', '#AB47BC', 'thermometer'),
+  cat('insurance-car', 'Car insurance', 'expense', '#BA68C8', 'truck'),
   cat('subscriptions', 'Subscriptions', 'expense', '#F4511E', 'repeat'),
   cat('education', 'Education', 'expense', '#6D4C41', 'book'),
   cat('childcare', 'Childcare', 'expense', '#EC407A', 'smile'),

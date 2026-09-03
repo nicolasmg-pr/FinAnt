@@ -4,7 +4,6 @@ import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
-  CATEGORY_BY_ID,
   DATE_RANGE_PRESETS,
   EMPTY_FILTER,
   UNCATEGORISED_ID,
@@ -17,6 +16,7 @@ import {
   money,
   presetOf,
   usedCategoryIds,
+  type Category,
   type DateRangePreset,
   type Money,
   type Transaction,
@@ -27,6 +27,7 @@ import { Amount } from '../../src/components/Amount';
 import { Chip } from '../../src/components/Chip';
 import type { AccountRow } from '../../src/db/accounts-repo';
 import { useAppData } from '../../src/hooks/use-app-data';
+import { useCategories } from '../../src/hooks/use-categories';
 import { useCategoryLabel } from '../../src/hooks/use-category-label';
 import { formatBookingDate, intlLocale } from '../../src/i18n';
 import { radius, spacing, useTheme } from '../../src/theme';
@@ -57,6 +58,7 @@ export default function TransactionsScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { transactions, accounts, loading, reload } = useAppData();
+  const { list: categories, byId: categoryById } = useCategories();
   const [filter, setFilter] = useState<TransactionFilter>(EMPTY_FILTER);
   const [panelOpen, setPanelOpen] = useState(false);
 
@@ -93,7 +95,10 @@ export default function TransactionsScreen() {
 
   // Only the categories the ledger actually uses: offering twenty chips for a
   // file that touched four of them is a worse list, not a more complete one.
-  const categoryIds = useMemo(() => usedCategoryIds(transactions), [transactions]);
+  const categoryIds = useMemo(
+    () => usedCategoryIds(transactions, categories),
+    [transactions, categories],
+  );
 
   // One account needs no label; the name only helps once there is something to tell apart.
   const accountNames = useMemo(
@@ -134,7 +139,11 @@ export default function TransactionsScreen() {
           </Text>
         }
         renderItem={({ item }) => (
-          <Row transaction={item} accountName={accountNames?.get(item.accountId) ?? null} />
+          <Row
+            transaction={item}
+            accountName={accountNames?.get(item.accountId) ?? null}
+            category={item.categoryId ? (categoryById.get(item.categoryId) ?? null) : null}
+          />
         )}
       />
     </View>
@@ -431,15 +440,18 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
 function Row({
   transaction,
   accountName,
+  category,
 }: {
   transaction: Transaction;
   accountName: string | null;
+  /** Passed in rather than looked up per row: the list renders hundreds of
+   * these and they all read the same category set. */
+  category: Category | null;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
   const router = useRouter();
   const label = useCategoryLabel();
-  const category = transaction.categoryId ? CATEGORY_BY_ID.get(transaction.categoryId) : undefined;
   // A row outside the statistics (excluded by hand, or an internal transfer)
   // stays visible but reads as dimmed, so the list still matches the bank.
   const counted = countsTowardStats(transaction);

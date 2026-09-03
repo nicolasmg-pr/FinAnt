@@ -1,6 +1,8 @@
 import {
   money,
   type Budget,
+  type Category,
+  type CategoryKind,
   type CategoryRule,
   type ExclusionRule,
   type Transaction,
@@ -52,6 +54,39 @@ export function toTransaction(row: TransactionRow): Transaction {
     excludedFromStats: row.excluded_from_stats === 1,
     transferPeerId: row.transfer_peer_id,
     createdAt: row.created_at,
+  };
+}
+
+export interface CategoryRow {
+  id: string;
+  /** Null for a category the owner created: it has a name, not a translation. */
+  label_key: string | null;
+  name: string;
+  kind: string;
+  parent_id: string | null;
+  color: string;
+  icon: string;
+  built_in: number;
+  archived: number;
+  /** Render order. See migration 8. */
+  position: number;
+  /** Set once the owner edits a shipped category, so the launch sync leaves it alone. */
+  customised: number;
+}
+
+export function toCategory(row: CategoryRow): Category {
+  return {
+    id: row.id,
+    // Written conditionally rather than as `labelKey: undefined`: the domain
+    // type declares the property optional, not optionally undefined.
+    ...(row.label_key === null ? {} : { labelKey: row.label_key }),
+    name: row.name,
+    kind: row.kind as CategoryKind,
+    parentId: row.parent_id,
+    color: row.color,
+    icon: row.icon,
+    builtIn: row.built_in === 1,
+    archived: row.archived === 1,
   };
 }
 

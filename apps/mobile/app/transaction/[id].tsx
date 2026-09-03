@@ -12,9 +12,7 @@ import {
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
-  BUILT_IN_CATEGORIES,
   PAYROLL_CATEGORY_ID,
-  UNCATEGORISED_ID,
   countsTowardStats,
   formatMoney,
   learnExclusionFrom,
@@ -44,17 +42,24 @@ import {
   setExcludedFromStats,
   setExcludedFromStatsBulk,
 } from '../../src/db/transactions-repo';
+import { useCategories } from '../../src/hooks/use-categories';
 import { useCategoryLabel } from '../../src/hooks/use-category-label';
 import { formatBookingDate, intlLocale } from '../../src/i18n';
 import { radius, spacing, useTheme } from '../../src/theme';
 
 /**
  * Every category the owner may pick, grouped so the row's own side of the
- * ledger comes first, then transfers, then the other side. "Uncategorised" is
- * not offered: choosing it by hand would only record indecision.
+ * ledger comes first, then transfers, then the other side. `selectable` has
+ * already dropped the hidden categories and "uncategorised", which is not
+ * offered because choosing it by hand would only record indecision.
+ *
+ * A category the owner hid still labels the movements already filed under it;
+ * it just stops being something new money can be filed into.
  */
-function groupsFor(side: Transaction['side']): readonly (readonly Category[])[] {
-  const selectable = BUILT_IN_CATEGORIES.filter((c) => !c.archived && c.id !== UNCATEGORISED_ID);
+function groupsFor(
+  side: Transaction['side'],
+  selectable: readonly Category[],
+): readonly (readonly Category[])[] {
   return [
     selectable.filter((c) => c.kind === side),
     selectable.filter((c) => c.kind === 'transfer'),
@@ -68,6 +73,7 @@ export default function TransactionDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const label = useCategoryLabel();
+  const { selectable } = useCategories();
 
   const [tx, setTx] = useState<Transaction | null>(null);
   const [accountName, setAccountName] = useState<string | null>(null);
@@ -117,7 +123,7 @@ export default function TransactionDetailScreen() {
     };
   }, [id, router]);
 
-  const groups = useMemo(() => (tx ? groupsFor(tx.side) : []), [tx]);
+  const groups = useMemo(() => (tx ? groupsFor(tx.side, selectable) : []), [tx, selectable]);
   const categoryChanged = tx !== null && selected !== null && selected !== tx.categoryId;
   // Offer the "learn a rule" switch only when this narrative can yield one.
   const canLearn =

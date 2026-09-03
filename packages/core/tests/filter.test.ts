@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { UNCATEGORISED_ID } from '../src/categories';
+import { BUILT_IN_CATEGORIES, UNCATEGORISED_ID } from '../src/categories';
 import {
   EMPTY_FILTER,
   activeFilterCount,
@@ -10,6 +10,7 @@ import {
   usedCategoryIds,
   type TransactionFilter,
 } from '../src/filter';
+import type { Category } from '../src/types';
 import { tx } from './factory';
 
 const filter = (partial: Partial<TransactionFilter>): TransactionFilter => ({
@@ -194,13 +195,13 @@ describe('dateRangePreset', () => {
 });
 
 describe('usedCategoryIds', () => {
-  it('never repeats an id, even though "uncategorised" is itself a built-in category', () => {
-    const ids = usedCategoryIds(all);
+  it('never repeats an id, even though "uncategorised" is itself a category in the list', () => {
+    const ids = usedCategoryIds(all, BUILT_IN_CATEGORIES);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
   it('lists uncategorised once, first, so the chip for it leads the row', () => {
-    const ids = usedCategoryIds(all);
+    const ids = usedCategoryIds(all, BUILT_IN_CATEGORIES);
     expect(ids[0]).toBe(UNCATEGORISED_ID);
     expect(ids.filter((id) => id === UNCATEGORISED_ID)).toEqual([UNCATEGORISED_ID]);
   });
@@ -212,15 +213,47 @@ describe('usedCategoryIds', () => {
       description: 'X',
       categoryId: UNCATEGORISED_ID,
     });
-    const ids = usedCategoryIds([...all, explicit]);
+    const ids = usedCategoryIds([...all, explicit], BUILT_IN_CATEGORIES);
     expect(ids.filter((id) => id === UNCATEGORISED_ID)).toEqual([UNCATEGORISED_ID]);
   });
 
   it('offers only the categories the ledger actually uses', () => {
-    expect(usedCategoryIds([salary])).toEqual(['income-salary']);
+    expect(usedCategoryIds([salary], BUILT_IN_CATEGORIES)).toEqual(['income-salary']);
   });
 
   it('has nothing to offer for an empty ledger', () => {
-    expect(usedCategoryIds([])).toEqual([]);
+    expect(usedCategoryIds([], BUILT_IN_CATEGORIES)).toEqual([]);
+  });
+
+  it('orders by the list it is handed, so a category the owner added takes its place', () => {
+    const own: Category = {
+      id: 'user-vet',
+      name: 'Vet',
+      kind: 'expense',
+      parentId: null,
+      color: '#2E7D32',
+      icon: 'heart',
+      builtIn: false,
+      archived: false,
+    };
+    const groomed = tx({ date: '2026-03-07', amount: -55, description: 'VET', categoryId: own.id });
+    const restaurants = BUILT_IN_CATEGORIES.filter((c) => c.id === 'food-restaurants');
+    expect(usedCategoryIds([cafe, groomed], [...restaurants, own])).toEqual([
+      'food-restaurants',
+      'user-vet',
+    ]);
+    expect(usedCategoryIds([cafe, groomed], [own, ...restaurants])).toEqual([
+      'user-vet',
+      'food-restaurants',
+    ]);
+  });
+
+  it('drops a category id no longer in the list rather than inventing a chip for it', () => {
+    expect(
+      usedCategoryIds(
+        [salary],
+        BUILT_IN_CATEGORIES.filter((c) => c.kind !== 'income'),
+      ),
+    ).toEqual([]);
   });
 });
