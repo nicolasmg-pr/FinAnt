@@ -150,3 +150,50 @@ export const DEFAULT_RULES: readonly CategoryRule[] = [
     'own transfer', 'internal transfer',
   ])),
 ];
+
+/** Ids of every rule this release ships, for telling ours from a learned one. */
+const SHIPPED_RULE_IDS: ReadonlySet<string> = new Set(DEFAULT_RULES.map((r) => r.id));
+
+export function isShippedRuleId(id: string): boolean {
+  return SHIPPED_RULE_IDS.has(id);
+}
+
+/**
+ * Which shipped rules a database is still missing.
+ *
+ * Rules were installed once, on a fresh database, which meant a rule added in a
+ * later release never reached a device that had already been seeded — the two
+ * insurance rules would have shipped with no way of ever running. Installing
+ * the missing ones on every launch fixes that, but a plain `INSERT OR IGNORE`
+ * over the whole set would also bring back a rule the owner deleted, every
+ * launch, forever. So a deleted shipped rule leaves a tombstone and is passed
+ * in here as retired.
+ *
+ * Existing rules are never rewritten: the owner may have disabled or
+ * re-pointed one, and that is their decision, not a drift to correct.
+ */
+export function shippedRulesToInstall(
+  shipped: readonly CategoryRule[],
+  existingIds: readonly string[],
+  retiredIds: readonly string[],
+): CategoryRule[] {
+  const known = new Set([...existingIds, ...retiredIds]);
+  return shipped.filter((rule) => !known.has(rule.id));
+}
+
+/**
+ * Reads the retired-rule tombstones out of their stored form.
+ *
+ * A value that is not a JSON array of strings reads as no tombstones: a corrupt
+ * setting must not stop the database from opening, and the worst case of
+ * treating it as empty is that a deleted shipped rule comes back once.
+ */
+export function parseRetiredShippedRules(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
