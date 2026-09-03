@@ -159,6 +159,8 @@ export const de: Translations = {
     imported_one: '{{count}} Umsatz importiert',
     imported_other: '{{count}} Umsätze importiert',
     account: 'Konto',
+    bank: 'Bank',
+    newBank: 'Neue Bank',
     newAccount: 'Neues Konto',
     accountName: 'Kontoname',
     accountRequired: 'Gib dem neuen Konto einen Namen.',
