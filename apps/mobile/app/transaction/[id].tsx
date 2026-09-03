@@ -69,8 +69,11 @@ export default function TransactionDetailScreen() {
 
   useEffect(() => {
     if (!id) return;
+    // A screen that is left before its rows arrive must not receive them.
+    let cancelled = false;
     (async () => {
       const row = await getTransaction(id);
+      if (cancelled) return;
       if (!row) {
         // Deleted elsewhere or a stale link: nothing to show, so leave.
         router.back();
@@ -80,10 +83,16 @@ export default function TransactionDetailScreen() {
       setSelected(row.categoryId);
       const accounts = await listAccounts();
       const nameOf = (accountId: string) => accounts.find((a) => a.id === accountId)?.name ?? null;
-      setAccountName(nameOf(row.accountId));
       const other = row.transferPeerId ? await getTransaction(row.transferPeerId) : null;
+      if (cancelled) return;
+      setAccountName(nameOf(row.accountId));
       setPeer(other ? { tx: other, accountName: nameOf(other.accountId) } : null);
-    })().catch((cause: unknown) => setError((cause as Error).message));
+    })().catch((cause: unknown) => {
+      if (!cancelled) setError((cause as Error).message);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [id, router]);
 
   const groups = useMemo(() => (tx ? groupsFor(tx.side) : []), [tx]);
