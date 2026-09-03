@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { addMonths, daysBetween, monthRange, monthsBetween, yearMonthOf } from '../src/dates';
+import {
+  addDays,
+  addMonths,
+  daysBetween,
+  firstOfMonth,
+  inDateRange,
+  monthRange,
+  monthsBetween,
+  yearMonthOf,
+} from '../src/dates';
 
 describe('dates', () => {
   it('crosses year boundaries in both directions', () => {
@@ -22,5 +31,26 @@ describe('dates', () => {
 
   it('counts days across a leap day', () => {
     expect(daysBetween('2028-02-28', '2028-03-01')).toBe(2);
+  });
+
+  it('adds days across month, year and leap-day ends without touching local time', () => {
+    expect(addDays('2026-08-31', 1)).toBe('2026-09-01');
+    expect(addDays('2026-01-01', -1)).toBe('2025-12-31');
+    expect(addDays('2028-02-28', 1)).toBe('2028-02-29');
+    expect(addDays('2026-09-28', -1)).toBe('2026-09-27');
+  });
+
+  it("finds the first day of a booking date's month", () => {
+    expect(firstOfMonth('2026-09-03')).toBe('2026-09-01');
+    expect(firstOfMonth('2026-12-31')).toBe('2026-12-01');
+  });
+
+  it('checks an inclusive date range with an optional open upper bound', () => {
+    expect(inDateRange('2026-07-28', '2026-07-28', '2026-08-27')).toBe(true);
+    expect(inDateRange('2026-08-27', '2026-07-28', '2026-08-27')).toBe(true);
+    expect(inDateRange('2026-08-28', '2026-07-28', '2026-08-27')).toBe(false);
+    expect(inDateRange('2026-07-27', '2026-07-28', '2026-08-27')).toBe(false);
+    expect(inDateRange('2031-01-01', '2026-07-28', null)).toBe(true);
+    expect(inDateRange('2026-07-27', '2026-07-28', null)).toBe(false);
   });
 });

@@ -13,6 +13,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   BUILT_IN_CATEGORIES,
+  PAYROLL_CATEGORY_ID,
   UNCATEGORISED_ID,
   countsTowardStats,
   learnRuleFrom,
@@ -201,6 +202,11 @@ export default function TransactionDetailScreen() {
             </View>
           ) : null,
         )}
+        {selected === PAYROLL_CATEGORY_ID ? (
+          <Text style={[styles.hint, { color: theme.textMuted }]}>
+            {t('transactions.salaryHint')}
+          </Text>
+        ) : null}
         {categoryChanged && canLearn ? (
           <SwitchRow
             label={t('transactions.applyToSimilar')}
@@ -272,6 +278,7 @@ function SwitchRow({
 
 const styles = StyleSheet.create({
   screen: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  hint: { fontSize: 13 },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   amount: { fontSize: 32, fontWeight: '700' },
   headline: { fontSize: 17, fontWeight: '600' },

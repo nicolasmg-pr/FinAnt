@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { money } from '../src/money';
-import { budgetMonth, NEAR_LIMIT_RATIO } from '../src/budget';
+import { budgetMonth, budgetPeriod, NEAR_LIMIT_RATIO } from '../src/budget';
+import type { Period } from '../src/period';
 import type { Budget } from '../src/types';
 import { tx } from './factory';
 
@@ -252,5 +253,68 @@ describe('budgetMonth', () => {
 
     expect(month.categories).toHaveLength(1);
     expect(month.totalLimit).toEqual(money(20_000, EUR));
+  });
+});
+
+describe('budgetPeriod', () => {
+  const period: Period = { from: '2026-07-28', to: '2026-08-27', anchored: true };
+
+  it('counts spend from the first to the last day of the period, both inclusive', () => {
+    const txs = [
+      tx({ date: '2026-07-27', amount: -10, description: 'BEFORE', categoryId: 'food-groceries' }),
+      tx({
+        date: '2026-07-28',
+        amount: -20,
+        description: 'FIRST DAY',
+        categoryId: 'food-groceries',
+      }),
+      tx({
+        date: '2026-08-27',
+        amount: -30,
+        description: 'LAST DAY',
+        categoryId: 'food-groceries',
+      }),
+      tx({ date: '2026-08-28', amount: -40, description: 'AFTER', categoryId: 'food-groceries' }),
+    ];
+    const result = budgetPeriod(txs, [budget('food-groceries', 400)], period, EUR);
+
+    expect(result.categories[0]?.spent).toEqual(money(5_000, EUR));
+    expect(result.categories[0]?.transactionCount).toBe(2);
+    expect(result.totalSpent).toEqual(money(5_000, EUR));
+    expect(result.period).toEqual(period);
+  });
+
+  it('runs to the end of the ledger when the period is open', () => {
+    const open: Period = { from: '2026-08-28', to: null, anchored: true };
+    const txs = [
+      tx({ date: '2026-08-28', amount: -20, description: 'DAY ONE', categoryId: 'food-groceries' }),
+      tx({
+        date: '2026-12-24',
+        amount: -60,
+        description: 'FAR AHEAD',
+        categoryId: 'food-groceries',
+      }),
+    ];
+    const result = budgetPeriod(txs, [budget('food-groceries', 400)], open, EUR);
+
+    expect(result.categories[0]?.spent).toEqual(money(8_000, EUR));
+  });
+
+  it('keeps transfers and excluded rows out of every budget and out of unbudgeted spend', () => {
+    const txs = [
+      tx({ date: '2026-08-01', amount: -100, description: 'LIDL', categoryId: 'food-groceries' }),
+      tx({
+        date: '2026-08-02',
+        amount: -500,
+        description: 'TO SAVINGS',
+        categoryId: 'transfer-internal',
+      }),
+      tx({ date: '2026-08-03', amount: -80, description: 'SAVEBACK', excludedFromStats: true }),
+      tx({ date: '2026-08-04', amount: -15, description: 'CINEMA', categoryId: 'leisure' }),
+    ];
+    const result = budgetPeriod(txs, [budget('food-groceries', 400)], period, EUR);
+
+    expect(result.categories[0]?.spent).toEqual(money(10_000, EUR));
+    expect(result.unbudgetedSpent).toEqual(money(1_500, EUR));
   });
 });

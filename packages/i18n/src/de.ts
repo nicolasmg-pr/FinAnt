@@ -23,6 +23,8 @@ export const de: Translations = {
   dashboard: {
     title: 'Übersicht',
     thisMonth: 'Dieser Monat',
+    sincePayroll: 'Seit {{date}}',
+    payPeriodHint: 'Gezählt seit deinem letzten Gehalt. Der Saldo ist, was davon übrig ist.',
     income: 'Einnahmen',
     expenses: 'Ausgaben',
     net: 'Saldo',
@@ -48,6 +50,7 @@ export const de: Translations = {
     uncategorisedBanner_other: '{{count}} Umsätze brauchen eine Kategorie',
     changeCategory: 'Kategorie ändern',
     applyToSimilar: 'Künftig auch auf ähnliche Umsätze anwenden',
+    salaryHint: 'Gehaltsumsätze beginnen in der Übersicht einen neuen Monat.',
     excludeFromStats: 'Aus der Statistik ausschließen',
     markInternal: 'Als Umbuchung zwischen eigenen Konten markieren',
     addManual: 'Umsatz hinzufügen',

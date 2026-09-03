@@ -22,6 +22,8 @@ export const en = {
   dashboard: {
     title: 'Overview',
     thisMonth: 'This month',
+    sincePayroll: 'Since {{date}}',
+    payPeriodHint: 'Counted from your last salary. Net is what is left of it.',
     income: 'Income',
     expenses: 'Expenses',
     net: 'Net',
@@ -47,6 +49,7 @@ export const en = {
     uncategorisedBanner_other: '{{count}} movements need a category',
     changeCategory: 'Change category',
     applyToSimilar: 'Also apply to similar movements from now on',
+    salaryHint: 'Salary movements start a new month on the dashboard.',
     excludeFromStats: 'Exclude from statistics',
     markInternal: 'Mark as transfer between my accounts',
     addManual: 'Add a movement',
@@ -99,7 +102,8 @@ export const en = {
     exportBackup: 'Export an encrypted backup',
     importBackup: 'Restore from a backup',
     eraseAll: 'Erase all data',
-    eraseAllConfirm: 'This permanently deletes every movement and category on this device. It cannot be undone.',
+    eraseAllConfirm:
+      'This permanently deletes every movement and category on this device. It cannot be undone.',
     categories: 'Categories and rules',
     about: 'About',
   },

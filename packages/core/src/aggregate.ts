@@ -1,7 +1,8 @@
-import { yearMonthOf } from './dates';
+import { inDateRange } from './dates';
 import { money, type CurrencyCode, type Money } from './money';
 import { UNCATEGORISED_ID } from './categories';
-import type { Transaction, TransactionSide, YearMonth } from './types';
+import type { Period } from './period';
+import type { ISODate, Transaction, TransactionSide, YearMonth } from './types';
 
 export interface CategoryTotal {
   readonly categoryId: string;
@@ -16,8 +17,8 @@ export interface CategoryTotal {
   readonly share: number;
 }
 
-export interface MonthlySummary {
-  readonly month: YearMonth;
+/** Figures shared by every summary, whatever window they were computed over. */
+export interface SummaryFigures {
   readonly income: Money;
   /** Positive magnitude, net of refunds. Subtract from income to get net. */
   readonly expenses: Money;
@@ -25,6 +26,14 @@ export interface MonthlySummary {
   readonly incomeByCategory: readonly CategoryTotal[];
   readonly expensesByCategory: readonly CategoryTotal[];
   readonly transactionCount: number;
+}
+
+export interface MonthlySummary extends SummaryFigures {
+  readonly month: YearMonth;
+}
+
+export interface PeriodSummary extends SummaryFigures {
+  readonly period: Period;
 }
 
 /**
@@ -72,26 +81,58 @@ function totals(
   return { total: money(totalMinor, currency), byCategory };
 }
 
-export function summariseMonth(
+/**
+ * Totals every movement booked from `from` to `to`, both inclusive; an open
+ * `to` runs to the end of the ledger. Every public summary is this with a
+ * different window, so a month and a pay period can never disagree on what
+ * counts.
+ */
+function summariseRange(
   transactions: readonly Transaction[],
-  month: YearMonth,
+  from: ISODate,
+  to: ISODate | null,
   currency: CurrencyCode,
-): MonthlySummary {
-  const inMonth = transactions.filter(
-    (tx) => yearMonthOf(tx.bookingDate) === month && countsTowardStats(tx),
+): SummaryFigures {
+  const inRange = transactions.filter(
+    (tx) => inDateRange(tx.bookingDate, from, to) && countsTowardStats(tx),
   );
-  const income = totals(inMonth.filter((tx) => tx.side === 'income'), 'income', currency);
-  const expenses = totals(inMonth.filter((tx) => tx.side === 'expense'), 'expense', currency);
+  const income = totals(
+    inRange.filter((tx) => tx.side === 'income'),
+    'income',
+    currency,
+  );
+  const expenses = totals(
+    inRange.filter((tx) => tx.side === 'expense'),
+    'expense',
+    currency,
+  );
 
   return {
-    month,
     income: income.total,
     expenses: expenses.total,
     net: money(income.total.minor - expenses.total.minor, currency),
     incomeByCategory: income.byCategory,
     expensesByCategory: expenses.byCategory,
-    transactionCount: inMonth.length,
+    transactionCount: inRange.length,
   };
+}
+
+export function summariseMonth(
+  transactions: readonly Transaction[],
+  month: YearMonth,
+  currency: CurrencyCode,
+): MonthlySummary {
+  // `-31` is a safe upper bound for every month: no booking date falls between
+  // a month's real last day and the 31st, and string comparison needs no calendar.
+  return { month, ...summariseRange(transactions, `${month}-01`, `${month}-31`, currency) };
+}
+
+export function summarisePeriod(
+  transactions: readonly Transaction[],
+  period: Period,
+  currency: CurrencyCode,
+): PeriodSummary {
+  return { period, ...summariseRange(transactions, period.from, period.to, currency) };
 }
 
 export function summariseMonths(

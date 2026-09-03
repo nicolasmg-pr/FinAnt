@@ -50,3 +50,25 @@ export function isValidISODate(value: string): boolean {
   const d = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
 }
+
+/**
+ * `date` shifted by `delta` calendar days. Built and read back in UTC so a DST
+ * change on the device can never move the result by an hour and thus a day.
+ */
+export function addDays(date: ISODate, delta: number): ISODate {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+export function firstOfMonth(date: ISODate): ISODate {
+  return `${yearMonthOf(date)}-01`;
+}
+
+/**
+ * Inclusive at both ends; a `null` upper bound is open. Plain string comparison
+ * is exact on zero-padded `YYYY-MM-DD`, which is why the format is fixed.
+ */
+export function inDateRange(date: ISODate, from: ISODate, to: ISODate | null): boolean {
+  return date >= from && (to === null || date <= to);
+}
