@@ -31,13 +31,10 @@ export interface Account {
   readonly institutionName: string | null;
   /** Where this account's transactions come from. */
   readonly provider: TransactionSource;
-  /** GoCardless requisition/account ids, only for provider === 'gocardless'. */
-  readonly externalAccountId: string | null;
-  readonly lastSyncedAt: string | null;
   readonly archived: boolean;
 }
 
-export type TransactionSource = 'gocardless' | 'file-import' | 'manual';
+export type TransactionSource = 'file-import' | 'manual';
 
 export type CategorySource = 'auto' | 'manual' | 'none';
 
@@ -67,7 +64,8 @@ export interface Transaction {
   readonly categoryId: string | null;
   readonly categorySource: CategorySource;
   readonly source: TransactionSource;
-  /** Provider-side id (GoCardless `transactionId`). Primary dedupe key when present. */
+  /** The bank's own transaction id when the statement carries one (camt.053
+   * `EndToEndId`). Primary dedupe key when present. */
   readonly externalId: string | null;
   /** Content hash used to dedupe file imports, which have no stable id. */
   readonly importHash: string;

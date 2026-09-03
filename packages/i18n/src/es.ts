@@ -33,7 +33,7 @@ export const es: Translations = {
     actual: 'Contabilizado',
     recurring: 'Gastos recurrentes',
     versusLastYear: 'frente al mismo mes del año pasado',
-    noData: 'Todavía no hay movimientos. Conecta un banco o importa un archivo para empezar.',
+    noData: 'Todavía no hay movimientos. Importa un extracto de tu banco para empezar.',
     confidence: {
       label: 'Fiabilidad de la previsión',
       high: 'Alta — calculada con {{months}} meses de historial',
@@ -66,25 +66,6 @@ export const es: Translations = {
     issues_other: 'No se pudieron leer {{count}} filas',
     confirm: 'Importar',
     supportedFormats: 'Hoja de Excel o Google Sheets (.xlsx), CSV del banco o XML camt.053',
-  },
-  banks: {
-    title: 'Conexiones bancarias',
-    connect: 'Conectar un banco',
-    chooseCountry: 'Elige tu país',
-    chooseBank: 'Elige tu banco',
-    consentTitle: 'Consentimiento',
-    consentBody:
-      'Tu banco te pedirá que autorices el acceso de solo lectura a tu cuenta. FinAnt solo puede leer movimientos: nunca puede mover dinero.',
-    consentExpiry: 'El consentimiento caduca el {{date}}. Tu banco exige renovarlo después.',
-    sync: 'Sincronizar ahora',
-    lastSynced: 'Última sincronización {{when}}',
-    neverSynced: 'Sin sincronizar',
-    disconnect: 'Desconectar',
-    credentialsTitle: 'Credenciales de GoCardless',
-    credentialsBody:
-      'Pega el Secret ID y la Secret Key de tu propia cuenta de GoCardless Bank Account Data. Se guardan en el llavero seguro de este dispositivo y nunca se envían a ningún sitio salvo a GoCardless.',
-    secretId: 'Secret ID',
-    secretKey: 'Secret Key',
   },
   settings: {
     title: 'Ajustes',
@@ -125,11 +106,6 @@ export const es: Translations = {
   },
   errors: {
     generic: 'Algo ha salido mal.',
-    network: 'Ahora mismo no hay conexión con tu banco.',
-    credentialsMissing: 'Añade primero tus credenciales de GoCardless en Ajustes.',
-    credentialsInvalid: 'Esas credenciales de GoCardless han sido rechazadas.',
-    consentExpired: 'Tu consentimiento bancario ha caducado. Vuelve a conectar la cuenta para seguir sincronizando.',
-    rateLimited: 'Tu banco permite un número limitado de sincronizaciones al día. Inténtalo más tarde.',
     importFailed: 'No se ha podido leer ese archivo.',
   },
   category: {

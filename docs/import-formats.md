@@ -1,6 +1,27 @@
 # Import formats
 
-Two readers, both entirely on-device: nothing is uploaded.
+Three readers (CSV, xlsx, camt.053), all entirely on-device: nothing is
+uploaded, and the app has no network access. Every movement enters FinAnt as a
+file the owner exports from their bank and picks by hand.
+
+## Target bank exports
+
+One `ImportProfile` per bank, in `packages/importers/src/profiles/`. A profile is
+written from a real export placed in `fixtures/private/` (gitignored), and its
+layout — headers, preamble rows, delimiter, encoding, date and number formats,
+sign convention — is documented in this file once known. Layouts are never
+guessed from memory: a wrong header list detects the wrong profile silently.
+
+| Bank | Country | Export the bank offers | Profile |
+|---|---|---|---|
+| Trade Republic | DE | to be confirmed from a real export | not yet written |
+| ING Deutschland | DE | to be confirmed from a real export | not yet written |
+| DKB | DE | to be confirmed from a real export | not yet written |
+| Raisin (WeltSparen) | DE | to be confirmed from a real export | not yet written |
+| Openbank España | ES | to be confirmed from a real export | not yet written |
+
+Until a bank's profile exists, its CSV goes through `GENERIC_CSV` and its
+camt.053, if the bank offers one, through the camt.053 reader.
 
 ## CSV, via column-mapping profiles
 
@@ -83,8 +104,8 @@ file.
 
 ## camt.053 (ISO 20022)
 
-`src/camt053.ts`. Every SEPA bank can produce camt.053, which covers institutions
-GoCardless does not reach.
+`src/camt053.ts`. Every SEPA bank can produce camt.053, so it covers any
+institution without a dedicated CSV profile.
 
 - Amounts in camt.053 are **unsigned**; direction comes from `CdtDbtInd`
   (`DBIT` / `CRDT`). Signing from the amount alone imports every expense as income.

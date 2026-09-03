@@ -33,7 +33,7 @@ export const de: Translations = {
     actual: 'Gebucht',
     recurring: 'Wiederkehrende Zahlungen',
     versusLastYear: 'gegenüber dem Vorjahresmonat',
-    noData: 'Noch keine Umsätze. Verbinde eine Bank oder importiere eine Datei, um zu starten.',
+    noData: 'Noch keine Umsätze. Importiere einen Kontoauszug deiner Bank, um zu starten.',
     confidence: {
       label: 'Zuverlässigkeit der Prognose',
       high: 'Hoch — basiert auf {{months}} Monaten Verlauf',
@@ -66,25 +66,6 @@ export const de: Translations = {
     issues_other: '{{count}} Zeilen konnten nicht gelesen werden',
     confirm: 'Importieren',
     supportedFormats: 'Excel- oder Google-Sheets-Tabelle (.xlsx), Bank-CSV oder camt.053-XML',
-  },
-  banks: {
-    title: 'Bankverbindungen',
-    connect: 'Bank verbinden',
-    chooseCountry: 'Land auswählen',
-    chooseBank: 'Bank auswählen',
-    consentTitle: 'Einwilligung',
-    consentBody:
-      'Deine Bank bittet dich, den reinen Lesezugriff auf dein Konto zu bestätigen. FinAnt kann nur Umsätze lesen und niemals Geld bewegen.',
-    consentExpiry: 'Die Einwilligung läuft am {{date}} ab. Danach verlangt deine Bank eine Erneuerung.',
-    sync: 'Jetzt synchronisieren',
-    lastSynced: 'Zuletzt synchronisiert {{when}}',
-    neverSynced: 'Noch nie synchronisiert',
-    disconnect: 'Trennen',
-    credentialsTitle: 'GoCardless-Zugangsdaten',
-    credentialsBody:
-      'Füge die Secret ID und den Secret Key deines eigenen GoCardless-Bank-Account-Data-Kontos ein. Sie werden im sicheren Schlüsselspeicher dieses Geräts abgelegt und außer an GoCardless nirgendwo hin gesendet.',
-    secretId: 'Secret ID',
-    secretKey: 'Secret Key',
   },
   settings: {
     title: 'Einstellungen',
@@ -125,11 +106,6 @@ export const de: Translations = {
   },
   errors: {
     generic: 'Etwas ist schiefgelaufen.',
-    network: 'Zurzeit besteht keine Verbindung zu deiner Bank.',
-    credentialsMissing: 'Hinterlege zuerst deine GoCardless-Zugangsdaten in den Einstellungen.',
-    credentialsInvalid: 'Diese GoCardless-Zugangsdaten wurden abgelehnt.',
-    consentExpired: 'Deine Bankeinwilligung ist abgelaufen. Verbinde das Konto neu, um weiter zu synchronisieren.',
-    rateLimited: 'Deine Bank erlaubt nur eine begrenzte Zahl an Abrufen pro Tag. Versuche es später erneut.',
     importFailed: 'Diese Datei konnte nicht gelesen werden.',
   },
   category: {

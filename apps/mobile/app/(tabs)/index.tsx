@@ -25,7 +25,7 @@ export default function DashboardScreen() {
   const { t } = useTranslation();
   const { transactions, loading, reload } = useAppData();
 
-  // Re-read on focus: an import or a bank sync happened on another screen.
+  // Re-read on focus: an import happened on another screen.
   useFocusEffect(useCallback(() => { void reload(); }, [reload]));
 
   const today = new Date().toISOString().slice(0, 10);

@@ -1,13 +1,16 @@
 # FinAnt
 
-Local-first personal finance tracker for Android and iOS. Reads bank movements
-via GoCardless Bank Account Data, classifies them automatically, and shows
-monthly income/expenses plus a year forecast. Euro area, English/Spanish/German.
+Local-first personal finance tracker for Android and iOS. Parses the statement
+files the owner exports from their banks (Trade Republic, ING Deutschland, DKB,
+Raisin, Openbank España), classifies movements automatically, and shows monthly
+income/expenses plus a year forecast. No bank connection, no aggregator: every
+import is a file the owner picks by hand. Euro area, English/Spanish/German.
 
 ## Stack
 
 - TypeScript 6 (strict), React 19.2, React Native 0.86, Expo SDK 57, expo-router
-- Storage: expo-sqlite with SQLCipher. No server, no account, no cloud copy.
+- Storage: expo-sqlite with SQLCipher. No server, no account, no cloud copy, no
+  network calls.
 - Package manager: npm (workspaces)
 
 ## Commands
@@ -24,6 +27,9 @@ monthly income/expenses plus a year forecast. Euro area, English/Spanish/German.
 
 - Layout: npm workspaces monorepo — `apps/mobile` (Expo, framework `app/` routing
   convention), `packages/*` with source in `src/` and tests in `tests/`.
+- One bank export = one `ImportProfile` in `packages/importers/src/profiles/`,
+  documented in `docs/import-formats.md` from a real export the owner supplies
+  in `fixtures/private/` (gitignored). Never guess a bank's column layout.
 - Relative imports inside packages are **extensionless**. Metro does not map
   `./money.js` onto `money.ts`.
 - Domain logic (money, categorisation, aggregates, forecast) lives in
@@ -59,9 +65,10 @@ monthly income/expenses plus a year forecast. Euro area, English/Spanish/German.
 
 ## Boundaries
 
-- Never log a movement, narrative, IBAN, or any part of a credential.
-- Never commit secrets, and never commit a real bank or spreadsheet export.
-  `fixtures/private/` is gitignored; test fixtures are hand-written.
-- No analytics, crash reporting or telemetry. The only external host is GoCardless.
-- Do not embed GoCardless credentials in the app. Read `docs/security-model.md`
-  before changing anything under `src/providers/` or `src/security/`.
+- Never log a movement, narrative, IBAN, or any part of a statement.
+- Never commit a real bank or spreadsheet export. `fixtures/private/` is
+  gitignored; test fixtures are hand-written from the documented layout.
+- No analytics, crash reporting or telemetry, and no network calls at all. The
+  app has no external host to talk to.
+- Read `docs/security-model.md` before changing anything under `src/security/`
+  or `src/db/database.ts`.
