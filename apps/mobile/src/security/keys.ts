@@ -31,39 +31,3 @@ export async function getOrCreateDatabaseKey(): Promise<string> {
 export async function destroyDatabaseKey(): Promise<void> {
   await SecureStore.deleteItemAsync(DB_KEY_ENTRY);
 }
-
-const GOCARDLESS_ENTRY = 'finant.gocardless.credentials';
-
-export interface GoCardlessCredentials {
-  readonly secretId: string;
-  readonly secretKey: string;
-}
-
-/**
- * GoCardless credentials belong to the device owner's own GoCardless account.
- * They are held in the secure enclave-backed store, never in AsyncStorage,
- * never in the bundle, and never written to the SQLite database.
- */
-export async function saveGoCardlessCredentials(credentials: GoCardlessCredentials): Promise<void> {
-  await SecureStore.setItemAsync(GOCARDLESS_ENTRY, JSON.stringify(credentials), {
-    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-    requireAuthentication: false,
-  });
-}
-
-export async function readGoCardlessCredentials(): Promise<GoCardlessCredentials | null> {
-  const raw = await SecureStore.getItemAsync(GOCARDLESS_ENTRY, {
-    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-  });
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as GoCardlessCredentials;
-    return parsed.secretId && parsed.secretKey ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-export async function clearGoCardlessCredentials(): Promise<void> {
-  await SecureStore.deleteItemAsync(GOCARDLESS_ENTRY);
-}

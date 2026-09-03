@@ -1,7 +1,6 @@
 # Secrets — never commit real values, only .env.example
 .env
 .env.*
-!.env.example
 
 # Dependencies
 node_modules/

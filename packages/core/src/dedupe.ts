@@ -2,9 +2,9 @@ import { normalise } from './normalise';
 import type { Transaction } from './types';
 
 /**
- * Stable content hash for a movement, used to keep a re-imported CSV or an
- * overlapping GoCardless sync from doubling every figure. File imports have no
- * provider id, so identity has to come from the content itself.
+ * Stable content hash for a movement, used to keep a re-imported statement or
+ * two overlapping exports from doubling every figure. Most bank exports carry
+ * no stable row id, so identity has to come from the content itself.
  *
  * FNV-1a: no crypto dependency, no async, and collisions here only risk hiding
  * one duplicate-looking row, not a security boundary.

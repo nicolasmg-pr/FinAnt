@@ -32,7 +32,7 @@ export const en = {
     actual: 'Booked',
     recurring: 'Recurring commitments',
     versusLastYear: 'vs. same month last year',
-    noData: 'No movements yet. Connect a bank or import a file to get started.',
+    noData: 'No movements yet. Import a statement from your bank to get started.',
     confidence: {
       label: 'Forecast confidence',
       high: 'High — built on {{months}} months of history',
@@ -65,25 +65,6 @@ export const en = {
     issues_other: '{{count}} rows could not be read',
     confirm: 'Import',
     supportedFormats: 'Excel or Google Sheets tracker (.xlsx), bank CSV, or camt.053 XML',
-  },
-  banks: {
-    title: 'Bank connections',
-    connect: 'Connect a bank',
-    chooseCountry: 'Choose your country',
-    chooseBank: 'Choose your bank',
-    consentTitle: 'Consent',
-    consentBody:
-      'Your bank will ask you to approve read-only access to your account. FinAnt can only read movements — it can never move money.',
-    consentExpiry: 'Consent expires on {{date}}. Your bank requires renewal after that.',
-    sync: 'Sync now',
-    lastSynced: 'Last synced {{when}}',
-    neverSynced: 'Never synced',
-    disconnect: 'Disconnect',
-    credentialsTitle: 'GoCardless credentials',
-    credentialsBody:
-      'Paste the Secret ID and Secret Key from your own GoCardless Bank Account Data account. They are stored in this device’s secure keychain and are never sent anywhere except GoCardless.',
-    secretId: 'Secret ID',
-    secretKey: 'Secret Key',
   },
   settings: {
     title: 'Settings',
@@ -123,11 +104,6 @@ export const en = {
   },
   errors: {
     generic: 'Something went wrong.',
-    network: 'No connection to your bank right now.',
-    credentialsMissing: 'Add your GoCardless credentials in Settings first.',
-    credentialsInvalid: 'Those GoCardless credentials were rejected.',
-    consentExpired: 'Your bank consent has expired. Reconnect the account to keep syncing.',
-    rateLimited: 'Your bank allows a limited number of syncs per day. Try again later.',
     importFailed: 'That file could not be read.',
   },
   category: {

@@ -6,9 +6,9 @@ import { parseAmount } from './values';
 /**
  * ISO 20022 camt.053 bank statement reader.
  *
- * Every SEPA bank can produce camt.053, so this covers institutions GoCardless
- * does not reach and gives a vendor-neutral archive format. Only the fields
- * FinAnt needs are read; the rest of the schema is ignored on purpose.
+ * Every SEPA bank can produce camt.053, so it covers any institution without a
+ * dedicated CSV profile and gives a vendor-neutral archive format. Only the
+ * fields FinAnt needs are read; the rest of the schema is ignored on purpose.
  */
 const parser = new XMLParser({
   ignoreAttributes: false,

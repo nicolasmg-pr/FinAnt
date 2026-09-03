@@ -12,7 +12,7 @@ export interface IngestResult {
 
 /**
  * The single path every movement takes into the database, whatever its origin:
- * bank sync, file import or manual entry.
+ * file import or manual entry.
  *
  * A category that came with the file (the owner's own spreadsheet column) is
  * trusted over the rule engine — it is their classification, already correct,

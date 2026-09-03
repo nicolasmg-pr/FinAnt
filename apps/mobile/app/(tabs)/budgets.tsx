@@ -64,7 +64,7 @@ export default function BudgetsScreen() {
     setBudgets(await listBudgets());
   }, []);
 
-  // Re-read on focus: an import or a bank sync on another screen moves the spend.
+  // Re-read on focus: an import on another screen moves the spend.
   useFocusEffect(
     useCallback(() => {
       void reload();

@@ -1,11 +1,12 @@
 # FinAnt
 
-Personal finance tracker for Android and iOS. Connects to European banks through
-GoCardless Bank Account Data, classifies movements automatically, and shows
-income, expenses and a year forecast at a glance.
+Personal finance tracker for Android and iOS. Reads the statements you export
+from your own banks, classifies movements automatically, and shows income,
+expenses and a year forecast at a glance.
 
 **Your financial data never leaves your phone.** It lives in an encrypted SQLite
-database on the device. There is no FinAnt account, no server, and no cloud copy.
+database on the device. There is no FinAnt account, no server, no cloud copy,
+and the app makes no network calls at all.
 
 Languages: English, Spanish, German.
 
@@ -23,37 +24,43 @@ development build is required.
 npx expo run:ios       # or: npx expo run:android
 ```
 
-## Connecting a bank
+## Importing statements
 
-1. Create a free account at https://bankaccountdata.gocardless.com/ and generate
-   a **Secret ID** and **Secret Key** in *Developers → User secrets*.
-2. Register `finant://bank-callback` as a redirect URI.
-3. In the app: *Settings → GoCardless credentials*, paste both values. They are
-   stored in the iOS Keychain / Android Keystore and are sent only to GoCardless.
+There is no bank connection. Export a statement from your bank's website or app,
+then open it from *Settings → Import a file*. Everything is parsed on the device.
 
-These are *your* credentials for *your* GoCardless account. Read
-[docs/security-model.md](docs/security-model.md) before distributing the app to
-anyone else — the credential handling has to change first.
+Target banks, one import profile each:
 
-## Importing files
+| Bank | Country |
+|---|---|
+| Trade Republic | DE |
+| ING | DE |
+| DKB | DE |
+| Raisin (WeltSparen) | DE |
+| Openbank | ES |
 
-Works with no bank connection at all:
+Also supported:
 
 - **Your `PresupuestoYYYY.xlsx` tracker** — imported directly, sheet per month,
   income and expense blocks, 1,399 movements from the 2025 workbook reconciling
   exactly against its own monthly totals. Check a change with
   `npm run verify:workbook -- <file.xlsx>`.
-- **Any bank CSV** — Spanish, German and English headers are recognised.
+- **Any other bank CSV** — Spanish, German and English headers are recognised by
+  a generic profile. Print a profile skeleton for an unknown layout with
+  `npm run inspect:csv -- <file.csv>`.
 - **camt.053 XML** — the ISO 20022 statement format every SEPA bank can export.
+
+Re-importing the same statement, or two statements that overlap, never doubles a
+figure: dedupe is enforced by unique indexes in the database.
 
 ## Layout
 
 ```
-apps/mobile          Expo app (expo-router screens, SQLite, GoCardless client)
+apps/mobile          Expo app (expo-router screens, SQLite)
 packages/core        Money, categorisation, aggregates, recurring detection, forecast
-packages/importers   CSV / camt.053 readers and column-mapping profiles
+packages/importers   CSV / xlsx / camt.053 readers and per-bank column-mapping profiles
 packages/i18n        en / es / de resources, typed against English
-docs/                API notes, data model, import formats, security model
+docs/                Data model, import formats, security model
 ```
 
 ## Tests

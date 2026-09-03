@@ -6,8 +6,11 @@
 |---|---|---|
 | Movements, categories, rules, budgets | `finant.db` in app storage | SQLCipher, key from the device keychain |
 | SQLCipher passphrase | iOS Keychain / Android Keystore | iOS `WHEN_UNLOCKED_THIS_DEVICE_ONLY`; Android non-exportable Keystore key, `allowBackup: false` |
-| GoCardless `secret_id` / `secret_key` | Same secure store, separate entry | Never written to SQLite, never in the bundle, never logged |
-| GoCardless access token | Process memory only | Discarded on app termination |
+
+Nothing else is stored. There are no API credentials of any kind: the app talks
+to no bank, no aggregator and no FinAnt server. Movements enter the database
+only from a statement file the owner exports from their bank and picks from
+local storage, or from a manual entry.
 
 There is no FinAnt account, no server, and no cloud copy. Erasing the app erases
 the data, and so does Settings > Erase all data: it deletes the database file and
@@ -20,22 +23,14 @@ and throws when it comes back empty. Expo Go cannot provide SQLCipher; the app
 needs a native build with the `useSQLCipher` option on the `expo-sqlite` config
 plugin.
 
-## Why the credentials cannot simply be shipped
+## The statement file itself
 
-The GoCardless `secret_id` / `secret_key` pair authenticates a **GoCardless
-account**, not an end user. A pair embedded in a published APK or IPA can be
-extracted from the binary, and whoever holds it can enumerate every requisition
-made under that account — that is, every user's bank connection, not only the
-extractor's.
-
-That is why the current build is a personal one: the device owner enters *their
-own* credentials, so the only account at risk is theirs.
-
-**Before distributing this app to other people**, the credentials must move
-behind a stateless broker: one function holding the keys server-side, forwarding
-only the caller's own requisition and account ids, storing nothing. The
-`BankProvider` interface in `apps/mobile/src/providers/bank-provider.ts` exists
-so that swap touches one file and leaves storage and UI untouched.
+The picked file is copied into the app's cache directory by the document picker,
+read into memory, parsed, and written to the encrypted database. The plaintext
+copy in the cache is the operating system's, not ours, and is not encrypted by
+FinAnt. The owner's own Downloads folder already holds the same file in
+plaintext, so this adds no exposure the export did not create — but it is why
+the app never writes a statement anywhere else and never logs a row from one.
 
 ## Threat model
 
@@ -48,19 +43,20 @@ Defended against:
   wrapping the passphrase lives in the AndroidKeyStore and cannot be exported, so
   a copied SharedPreferences entry is unusable on another device, and
   `android.allowBackup: false` keeps app storage out of Google backup entirely.
-- Network interception — all traffic is HTTPS to GoCardless; there is no FinAnt
-  endpoint to intercept.
+- Network interception — there is no network traffic to intercept. The app
+  declares no network dependency and holds no credentials.
 
 Not defended against:
 - A jailbroken or rooted device with the screen unlocked. The keychain hands the
   key to a process running as the app.
-- A user who pastes their credentials into the wrong app. Nothing in FinAnt can
-  prevent that.
+- Statement files the owner leaves lying in Downloads or a synced folder. FinAnt
+  reads them; it cannot delete or protect them.
 
 ## Rules for contributors
 
-- Never log a movement, a narrative, an IBAN, or any part of a credential.
-- Never add a network call to a host other than GoCardless without saying so in
-  the pull request. There is no analytics, no crash reporting, and no telemetry.
+- Never log a movement, a narrative, an IBAN, or any part of a statement.
+- Never add a network call. There is no analytics, no crash reporting, and no
+  telemetry, and there is no legitimate host for the app to talk to.
 - Real bank exports never enter the repository. `fixtures/private/` is gitignored;
-  test fixtures are hand-written.
+  test fixtures are hand-written from the documented layout, never copied from a
+  real file.

@@ -27,8 +27,10 @@ only gives a signed amount uses `sideFromAmount()`.
 
 ## Tables
 
-- `accounts` — one row per connected bank account, plus one local "My records"
-  account that owns manual entries and file imports.
+- `accounts` — one row per bank account the owner imports statements for, plus
+  one local "My records" account that owns manual entries and untyped imports.
+  Migration 3 dropped the aggregator consent columns; `provider` now only ever
+  holds a `TransactionSource`.
 - `transactions` — the ledger. See dedupe below.
 - `categories` — shipped taxonomy plus any the owner adds. Ids are stable and
   never renamed; rules and history point at them.
@@ -49,8 +51,8 @@ CREATE UNIQUE INDEX idx_tx_external ON transactions(account_id, external_id)
 CREATE UNIQUE INDEX idx_tx_hash ON transactions(account_id, import_hash);
 ```
 
-- `external_id` is the provider's `transactionId` — the reliable key when a bank
-  supplies one.
+- `external_id` is the bank's own transaction id when the statement carries one
+  (camt.053 `EndToEndId`) — the reliable key when present.
 - `import_hash` is an FNV-1a hash of `account | booking date | amount | normalised
   description | discriminator`, for file imports, which have no stable id.
 - The **discriminator** separates rows a source repeats verbatim. A hand-kept
@@ -61,7 +63,8 @@ CREATE UNIQUE INDEX idx_tx_hash ON transactions(account_id, import_hash);
   re-import as new.
 
 Inserts use `INSERT OR IGNORE` and count `changes` to report what was new. A
-re-imported CSV or an overlapping bank sync therefore cannot double a figure.
+re-imported statement, or two exports whose date ranges overlap, therefore cannot
+double a figure.
 
 ## What is excluded from statistics
 

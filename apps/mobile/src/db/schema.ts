@@ -108,6 +108,18 @@ export const MIGRATIONS: readonly { version: number; sql: string }[] = [
       CREATE INDEX idx_tx_side ON transactions(side);
     `,
   },
+  {
+    version: 3,
+    sql: `
+      -- The bank-aggregator integration is gone: movements now come only from
+      -- statements the owner exports from their bank and imports by hand. These
+      -- columns held aggregator consent state and have no other meaning.
+      ALTER TABLE accounts DROP COLUMN requisition_id;
+      ALTER TABLE accounts DROP COLUMN consent_expires_at;
+      ALTER TABLE accounts DROP COLUMN external_account_id;
+      ALTER TABLE accounts DROP COLUMN last_synced_at;
+    `,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
