@@ -16,11 +16,10 @@ import {
   CATEGORY_BY_ID,
   UNCATEGORISED_ID,
   abs,
-  budgetMonth,
+  budgetPeriod,
   formatMoney,
   parseDecimal,
   toDecimalString,
-  yearMonthOf,
   type Budget,
   type BudgetProgress,
   type Money,
@@ -31,6 +30,7 @@ import { Card } from '../../src/components/Card';
 import { CategoryChip } from '../../src/components/CategoryChip';
 import { deleteBudget, listBudgets, saveBudget } from '../../src/db/budgets-repo';
 import { useAppData } from '../../src/hooks/use-app-data';
+import { usePayPeriod } from '../../src/hooks/use-pay-period';
 import { intlLocale } from '../../src/i18n';
 import { radius, spacing, useTheme } from '../../src/theme';
 
@@ -72,10 +72,11 @@ export default function BudgetsScreen() {
     }, [reload, loadBudgets]),
   );
 
-  const month = yearMonthOf(new Date().toISOString().slice(0, 10));
+  const today = new Date().toISOString().slice(0, 10);
+  const { period, title: periodTitle } = usePayPeriod(transactions, today);
   const progress = useMemo(
-    () => budgetMonth(transactions, budgets, month, CURRENCY),
-    [transactions, budgets, month],
+    () => budgetPeriod(transactions, budgets, period, CURRENCY),
+    [transactions, budgets, period],
   );
 
   const budgeted = new Set(budgets.map((b) => b.categoryId));
@@ -146,7 +147,7 @@ export default function BudgetsScreen() {
           </Card>
         ) : (
           <>
-            <Card title={t('budgets.allBudgets')}>
+            <Card title={t('budgets.allBudgets')} subtitle={periodTitle}>
               <Text style={{ color: theme.textMuted }}>
                 {t('budgets.spentOfLimit', {
                   spent: formatMoney(progress.totalSpent, intlLocale()),
