@@ -1,7 +1,8 @@
 import { countsTowardStats } from './aggregate';
-import { yearMonthOf } from './dates';
+import { inDateRange } from './dates';
 import { money, subtract, type CurrencyCode, type Money } from './money';
-import type { Budget, Transaction, YearMonth } from './types';
+import type { Period } from './period';
+import type { Budget, ISODate, Transaction, YearMonth } from './types';
 
 /**
  * Share of a limit at which a budget starts reading as a warning rather than as
@@ -28,15 +29,23 @@ export interface BudgetProgress {
   readonly transactionCount: number;
 }
 
-export interface BudgetMonth {
-  readonly month: YearMonth;
+/** Figures shared by every budget report, whatever window they were computed over. */
+export interface BudgetFigures {
   readonly totalLimit: Money;
   readonly totalSpent: Money;
   readonly totalRemaining: Money;
   /** Tightest budget first: the one closest to trouble is the one to act on. */
   readonly categories: readonly BudgetProgress[];
-  /** Expense that fell outside every budget, so the totals cannot read as the whole month. */
+  /** Expense that fell outside every budget, so the totals cannot read as the whole period. */
   readonly unbudgetedSpent: Money;
+}
+
+export interface BudgetMonth extends BudgetFigures {
+  readonly month: YearMonth;
+}
+
+export interface BudgetPeriod extends BudgetFigures {
+  readonly period: Period;
 }
 
 function ratioOf(spentMinor: number, limitMinor: number): number {
@@ -52,19 +61,21 @@ function stateOf(ratio: number): BudgetState {
 }
 
 /**
- * Progress of every budget against one month.
+ * Progress of every budget against the movements booked from `from` to `to`,
+ * both inclusive; an open `to` runs to the end of the ledger.
  *
  * Only the expense side counts, and it is summed signed and then flipped to a
- * positive magnitude, so a refund lowers the month exactly as it does on a card
- * statement. Internal transfers and rows the owner flagged stay out, which is
- * what keeps a savings transfer from eating a grocery budget.
+ * positive magnitude, so a refund lowers the period exactly as it does on a
+ * card statement. Internal transfers and rows the owner flagged stay out, which
+ * is what keeps a savings transfer from eating a grocery budget.
  */
-export function budgetMonth(
+function budgetRange(
   transactions: readonly Transaction[],
   budgets: readonly Budget[],
-  month: YearMonth,
+  from: ISODate,
+  to: ISODate | null,
   currency: CurrencyCode,
-): BudgetMonth {
+): BudgetFigures {
   const limits = new Map<string, Money>();
   for (const b of budgets) {
     // First one wins: a second row for the same category would otherwise double
@@ -77,7 +88,7 @@ export function budgetMonth(
 
   for (const tx of transactions) {
     if (tx.side !== 'expense') continue;
-    if (yearMonthOf(tx.bookingDate) !== month) continue;
+    if (!inDateRange(tx.bookingDate, from, to)) continue;
     if (!countsTowardStats(tx)) continue;
 
     const oriented = -tx.amount.minor;
@@ -115,11 +126,34 @@ export function budgetMonth(
   const totalSpentMinor = categories.reduce((acc, c) => acc + c.spent.minor, 0);
 
   return {
-    month,
     totalLimit: money(totalLimitMinor, currency),
     totalSpent: money(totalSpentMinor, currency),
     totalRemaining: money(totalLimitMinor - totalSpentMinor, currency),
     categories,
     unbudgetedSpent: money(unbudgetedMinor, currency),
   };
+}
+
+export function budgetMonth(
+  transactions: readonly Transaction[],
+  budgets: readonly Budget[],
+  month: YearMonth,
+  currency: CurrencyCode,
+): BudgetMonth {
+  // `-31` is a safe upper bound for every month; see summariseMonth.
+  return { month, ...budgetRange(transactions, budgets, `${month}-01`, `${month}-31`, currency) };
+}
+
+/**
+ * Budgets are monthly limits. Applied to a pay period they are read as-is: a
+ * period is roughly a month long, and pro-rating a limit to 29 or 33 days
+ * would only make the bar move for reasons the owner cannot see.
+ */
+export function budgetPeriod(
+  transactions: readonly Transaction[],
+  budgets: readonly Budget[],
+  period: Period,
+  currency: CurrencyCode,
+): BudgetPeriod {
+  return { period, ...budgetRange(transactions, budgets, period.from, period.to, currency) };
 }
