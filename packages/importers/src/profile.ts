@@ -147,10 +147,12 @@ export function applyProfile(
 
   const transactions: DraftTransaction[] = [];
   const issues: ImportIssue[] = [];
-  const headerOffset = (profile.headerRow ?? 0) + 2; // 1-based, plus the header line
+  // Blank lines and newlines inside quoted fields both push a row past its
+  // index, so the reader records the line each row actually came from.
+  const fallbackOffset = table.headerRow + 2; // 1-based, plus the header line
 
   rows.forEach((row, i) => {
-    const rowNumber = headerOffset + i;
+    const rowNumber = table.rowLines[i] ?? fallbackOffset + i;
     const fail = (message: string) => issues.push({ row: rowNumber, message, raw: row });
 
     const bookingDate = parseDate(cell(row, idx.bookingDate), dateFormat);
@@ -161,7 +163,8 @@ export function applyProfile(
       return;
     }
 
-    const currency = idx.currency >= 0 ? (cell(row, idx.currency) || defaultCurrency) : defaultCurrency;
+    const currency =
+      idx.currency >= 0 ? cell(row, idx.currency) || defaultCurrency : defaultCurrency;
 
     let amount: Money | null = null;
     // A debit/credit pair states the side explicitly; a single signed column
@@ -176,7 +179,8 @@ export function applyProfile(
       if (amount) side = sideFromAmount(amount);
     } else {
       const debit = idx.debit >= 0 ? parseAmount(cell(row, idx.debit), currency, separator) : null;
-      const credit = idx.credit >= 0 ? parseAmount(cell(row, idx.credit), currency, separator) : null;
+      const credit =
+        idx.credit >= 0 ? parseAmount(cell(row, idx.credit), currency, separator) : null;
       if (debit && debit.minor !== 0) {
         // Preserve the sign: a negative value in a debit column is a refund,
         // which belongs on the expense side and reduces it.
@@ -192,7 +196,8 @@ export function applyProfile(
       return;
     }
 
-    const description = cell(row, idx.description) ||
+    const description =
+      cell(row, idx.description) ||
       optionalCell(row, header, profile.columns.counterparty) ||
       '(no description)';
     const rawCategory = optionalCell(row, header, profile.columns.category);
@@ -223,6 +228,36 @@ export function applyProfile(
   });
 
   return { profileId: profile.id, transactions, issues };
+}
+
+/**
+ * Picks the row a table's header most likely sits on, for a profile that does
+ * not declare `headerRow` and cannot be recognised by its column names.
+ *
+ * Candidate widths are scored by how much of the file they account for — row
+ * count times column count — so a long two-column preamble loses to the wide
+ * table underneath it even when it has more lines than the table has rows in a
+ * short export.
+ */
+export function findHeaderRow(rows: readonly (readonly string[])[], depth: number): number {
+  const total = new Map<number, number>();
+  for (const row of rows) total.set(row.length, (total.get(row.length) ?? 0) + 1);
+
+  let bestWidth = 0;
+  let bestScore = -1;
+  for (const [width, count] of total) {
+    const score = width * count;
+    if (score > bestScore || (score === bestScore && width > bestWidth)) {
+      bestScore = score;
+      bestWidth = width;
+    }
+  }
+
+  const limit = Math.min(rows.length, depth);
+  for (let i = 0; i < limit; i += 1) {
+    if (rows[i]?.length === bestWidth) return i;
+  }
+  return 0;
 }
 
 /** Picks the first profile whose `detectHeaders` are all present. */

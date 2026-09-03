@@ -1,4 +1,5 @@
 export * from './csv';
+export * from './text';
 export * from './values';
 export * from './profile';
 export * from './profiles/index';
