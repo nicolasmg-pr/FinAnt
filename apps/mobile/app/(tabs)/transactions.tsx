@@ -1,11 +1,17 @@
 import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { CATEGORY_BY_ID, UNCATEGORISED_ID, type Transaction } from '@finant/core';
+import {
+  CATEGORY_BY_ID,
+  UNCATEGORISED_ID,
+  countsTowardStats,
+  type Transaction,
+} from '@finant/core';
 import { Amount } from '../../src/components/Amount';
 import { useAppData } from '../../src/hooks/use-app-data';
-import { intlLocale } from '../../src/i18n';
+import { useCategoryLabel } from '../../src/hooks/use-category-label';
+import { formatBookingDate } from '../../src/i18n';
 import { radius, spacing, useTheme } from '../../src/theme';
 
 type Filter = 'all' | 'uncategorised';
@@ -62,25 +68,35 @@ export default function TransactionsScreen() {
 function Row({ transaction }: { transaction: Transaction }) {
   const theme = useTheme();
   const { t } = useTranslation();
+  const router = useRouter();
+  const label = useCategoryLabel();
   const category = transaction.categoryId ? CATEGORY_BY_ID.get(transaction.categoryId) : undefined;
-  const categoryLabel = category?.labelKey ? t(category.labelKey) : (category?.name ?? '—');
-  const date = new Intl.DateTimeFormat(intlLocale(), { day: '2-digit', month: 'short' }).format(
-    new Date(`${transaction.bookingDate}T00:00:00Z`),
-  );
+  // A row outside the statistics (excluded by hand, or an internal transfer)
+  // stays visible but reads as dimmed, so the list still matches the bank.
+  const counted = countsTowardStats(transaction);
+  const date = formatBookingDate(transaction.bookingDate, { day: '2-digit', month: 'short' });
+  const meta = [date, label(transaction.categoryId)];
+  if (transaction.excludedFromStats) meta.push(t('transactions.excludedTag'));
 
   return (
-    <View style={[styles.row, { borderBottomColor: theme.border }]}>
+    <Pressable
+      onPress={() =>
+        router.push({ pathname: '/transaction/[id]', params: { id: transaction.id } })
+      }
+      accessibilityRole="button"
+      style={[styles.row, { borderBottomColor: theme.border, opacity: counted ? 1 : 0.55 }]}
+    >
       <View style={[styles.dot, { backgroundColor: category?.color ?? theme.textMuted }]} />
       <View style={styles.rowText}>
         <Text style={[styles.description, { color: theme.text }]} numberOfLines={1}>
           {transaction.counterparty ?? transaction.description}
         </Text>
         <Text style={[styles.meta, { color: theme.textMuted }]} numberOfLines={1}>
-          {date} · {categoryLabel}
+          {meta.join(' · ')}
         </Text>
       </View>
       <Amount value={transaction.amount} style={styles.amount} />
-    </View>
+    </Pressable>
   );
 }
 
