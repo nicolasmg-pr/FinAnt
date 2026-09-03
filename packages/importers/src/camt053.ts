@@ -39,7 +39,28 @@ function date(node: unknown): string | null {
   return /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
 }
 
-export function parseCamt053(xml: string, context: { accountId: string }): ImportResult {
+/** The account a camt.053 statement says it belongs to. Both fields are optional in the schema. */
+export interface StatementAccount {
+  /** Compact form: no whitespace, upper case. `null` when the statement omits it. */
+  readonly iban: string | null;
+  /** The servicing institution's name (`Acct/Svcr/FinInstnId/Nm`), when given. */
+  readonly name: string | null;
+}
+
+export interface Camt053Result extends ImportResult {
+  readonly statementAccount: StatementAccount;
+}
+
+const NO_ACCOUNT: StatementAccount = { iban: null, name: null };
+
+function statementAccountOf(statement: Record<string, any> | undefined): StatementAccount {
+  const account = statement?.['Acct'];
+  const iban = text(account?.['Id']?.['IBAN']).replace(/\s+/g, '').toUpperCase();
+  const name = text(account?.['Svcr']?.['FinInstnId']?.['Nm']);
+  return { iban: iban || null, name: name || null };
+}
+
+export function parseCamt053(xml: string, context: { accountId: string }): Camt053Result {
   const transactions: DraftTransaction[] = [];
   const issues: ImportIssue[] = [];
 
@@ -49,6 +70,7 @@ export function parseCamt053(xml: string, context: { accountId: string }): Impor
   } catch (error) {
     return {
       profileId: 'camt053',
+      statementAccount: NO_ACCOUNT,
       transactions: [],
       issues: [{ row: 0, message: `Not valid XML: ${(error as Error).message}`, raw: [] }],
     };
@@ -58,10 +80,15 @@ export function parseCamt053(xml: string, context: { accountId: string }): Impor
   if (statements.length === 0) {
     return {
       profileId: 'camt053',
+      statementAccount: NO_ACCOUNT,
       transactions: [],
       issues: [{ row: 0, message: 'No camt.053 statement found in this file', raw: [] }],
     };
   }
+
+  // A file may carry several Stmt blocks (one per period); they describe the
+  // same account, so the first one names it. Multi-account files are not handled.
+  const statementAccount = statementAccountOf(statements[0]);
 
   let index = 0;
   for (const statement of statements) {
@@ -90,11 +117,9 @@ export function parseCamt053(xml: string, context: { accountId: string }): Impor
       const counterparty =
         text(parties?.['Cdtr']?.['Nm']) || text(parties?.['Dbtr']?.['Nm']) || null;
       const remittance = asArray(tx?.['RmtInf']?.['Ustrd']).map(text).join(' ').trim();
-      const description = remittance || text(entry?.['AddtlNtryInf']) || counterparty || '(no description)';
-      const externalId =
-        text(tx?.['Refs']?.['EndToEndId']) ||
-        text(entry?.['AcctSvcrRef']) ||
-        null;
+      const description =
+        remittance || text(entry?.['AddtlNtryInf']) || counterparty || '(no description)';
+      const externalId = text(tx?.['Refs']?.['EndToEndId']) || text(entry?.['AcctSvcrRef']) || null;
 
       transactions.push({
         accountId: context.accountId,
@@ -121,5 +146,5 @@ export function parseCamt053(xml: string, context: { accountId: string }): Impor
     }
   }
 
-  return { profileId: 'camt053', transactions, issues };
+  return { profileId: 'camt053', statementAccount, transactions, issues };
 }

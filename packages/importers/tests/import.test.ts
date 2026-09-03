@@ -51,7 +51,7 @@ describe('generic CSV profile', () => {
     expect(salary?.amount.minor).toBe(260000);
   });
 
-  it('carries the sheet\'s own category across instead of re-guessing it', () => {
+  it("carries the sheet's own category across instead of re-guessing it", () => {
     const result = applyProfile(readCsv(fixture('sheet-signed.csv')), SHEET_PROFILE, ctx);
     expect(result.transactions[0]?.suggestedCategoryId).toBe('food-groceries');
     expect(result.transactions[2]?.suggestedCategoryId).toBe('subscriptions');
@@ -74,7 +74,9 @@ describe('generic CSV profile', () => {
   it('gives every row a stable import hash so a re-import does not double it', () => {
     const once = applyProfile(readCsv(fixture('sheet-signed.csv')), SHEET_PROFILE, ctx);
     const twice = applyProfile(readCsv(fixture('sheet-signed.csv')), SHEET_PROFILE, ctx);
-    expect(once.transactions.map((t) => t.importHash)).toEqual(twice.transactions.map((t) => t.importHash));
+    expect(once.transactions.map((t) => t.importHash)).toEqual(
+      twice.transactions.map((t) => t.importHash),
+    );
     expect(new Set(once.transactions.map((t) => t.importHash)).size).toBe(3);
   });
 
@@ -123,5 +125,36 @@ describe('parseCamt053', () => {
     const bad = parseCamt053('<html><body>nope</body></html>', ctx);
     expect(bad.transactions).toHaveLength(0);
     expect(bad.issues).toHaveLength(1);
+  });
+
+  it('reads which account the statement belongs to', () => {
+    expect(result.statementAccount).toEqual({
+      iban: 'ES9121000418450200051332',
+      name: 'Banco de Pruebas',
+    });
+  });
+
+  it('returns an empty account when the statement does not name one', () => {
+    const bare = parseCamt053(
+      '<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">' +
+        '<BkToCstmrStmt><Stmt><Id>S-1</Id></Stmt></BkToCstmrStmt></Document>',
+      ctx,
+    );
+    expect(bare.statementAccount).toEqual({ iban: null, name: null });
+    expect(bare.issues).toHaveLength(0);
+
+    const bad = parseCamt053('<html><body>nope</body></html>', ctx);
+    expect(bad.statementAccount).toEqual({ iban: null, name: null });
+  });
+
+  it('compacts an IBAN written with spaces', () => {
+    const spaced = parseCamt053(
+      '<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02"><BkToCstmrStmt><Stmt>' +
+        '<Acct><Id><IBAN>es91 2100 0418 4502 0005 1332</IBAN></Id></Acct>' +
+        '</Stmt></BkToCstmrStmt></Document>',
+      ctx,
+    );
+    expect(spaced.statementAccount.iban).toBe('ES9121000418450200051332');
+    expect(spaced.statementAccount.name).toBeNull();
   });
 });

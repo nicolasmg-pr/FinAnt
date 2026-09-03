@@ -3,7 +3,11 @@
   <BkToCstmrStmt>
     <Stmt>
       <Id>STMT-2026-01</Id>
-      <Acct><Id><IBAN>ES9121000418450200051332</IBAN></Id><Ccy>EUR</Ccy></Acct>
+      <Acct>
+        <Id><IBAN>ES9121000418450200051332</IBAN></Id>
+        <Ccy>EUR</Ccy>
+        <Svcr><FinInstnId><Nm>Banco de Pruebas</Nm></FinInstnId></Svcr>
+      </Acct>
       <Ntry>
         <Amt Ccy="EUR">52.40</Amt>
         <CdtDbtInd>DBIT</CdtDbtInd>
