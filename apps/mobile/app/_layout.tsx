@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getDatabase } from '../src/db/database';
 import { initI18n } from '../src/i18n';
+import { detectTransfers } from '../src/services/transfers';
 import { spacing, useTheme } from '../src/theme';
 
 /**
@@ -21,10 +22,19 @@ export default function RootLayout() {
       try {
         await getDatabase();
         await initI18n();
-        setReady(true);
       } catch (cause) {
         setError(cause as Error);
+        return;
       }
+      // A statement imported before this version may hold unpaired transfers.
+      // Matching must never keep the app from starting, so its failure is
+      // reported, not raised. Nothing about a row is logged.
+      try {
+        await detectTransfers();
+      } catch (cause) {
+        console.warn('Transfer matching failed at startup:', (cause as Error).message);
+      }
+      setReady(true);
     })();
   }, []);
 
@@ -50,7 +60,10 @@ export default function RootLayout() {
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="import" options={{ presentation: 'modal', headerShown: true, title: 'Import' }} />
+        <Stack.Screen
+          name="import"
+          options={{ presentation: 'modal', headerShown: true, title: 'Import' }}
+        />
         <Stack.Screen
           name="transaction/[id]"
           options={{ presentation: 'modal', headerShown: true }}
@@ -61,7 +74,13 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.sm },
+  centre: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.sm,
+  },
   errorTitle: { fontSize: 18, fontWeight: '600' },
   errorBody: { fontSize: 14, textAlign: 'center' },
 });

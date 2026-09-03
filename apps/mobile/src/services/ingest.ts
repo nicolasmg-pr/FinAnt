@@ -2,12 +2,15 @@ import { categorise } from '@finant/core';
 import type { DraftTransaction } from '@finant/importers';
 import { listRules } from '../db/rules-repo';
 import { insertTransactions, type NewTransaction } from '../db/transactions-repo';
+import { detectTransfers } from './transfers';
 
 export interface IngestResult {
   readonly inserted: number;
   readonly duplicates: number;
   readonly autoCategorised: number;
   readonly uncategorised: number;
+  /** Transfers between the owner's accounts paired by this import. */
+  readonly transfersMatched: number;
 }
 
 /**
@@ -59,5 +62,7 @@ export async function ingest(drafts: readonly DraftTransaction[]): Promise<Inges
   });
 
   const { inserted, duplicates } = await insertTransactions(batch);
-  return { inserted, duplicates, autoCategorised, uncategorised };
+  // Only a new row can complete a pair; a file full of duplicates changes nothing.
+  const transfersMatched = inserted > 0 ? await detectTransfers() : 0;
+  return { inserted, duplicates, autoCategorised, uncategorised, transfersMatched };
 }

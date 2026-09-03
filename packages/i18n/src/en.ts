@@ -68,6 +68,8 @@ export const en = {
       none: 'not classified yet',
     },
     excludedTag: 'Excluded',
+    transferMatched:
+      'Transfer between your accounts · matched with {{amount}} · {{account}} · {{date}}',
     deleteConfirm:
       'Delete this movement? It will not come back if you import the same statement again.',
   },
@@ -92,6 +94,8 @@ export const en = {
     newAccount: 'New account',
     accountName: 'Account name',
     accountRequired: 'Give the new account a name.',
+    transfersMatched_one: '{{count}} transfer between your accounts matched',
+    transfersMatched_other: '{{count}} transfers between your accounts matched',
   },
   settings: {
     title: 'Settings',

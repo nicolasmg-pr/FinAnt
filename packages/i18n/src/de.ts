@@ -69,6 +69,8 @@ export const de: Translations = {
       none: 'noch nicht zugeordnet',
     },
     excludedTag: 'Ausgeschlossen',
+    transferMatched:
+      'Umbuchung zwischen deinen Konten · zugeordnet zu {{amount}} · {{account}} · {{date}}',
     deleteConfirm:
       'Diesen Umsatz löschen? Er kommt nicht zurück, wenn du denselben Kontoauszug erneut importierst.',
   },
@@ -93,6 +95,8 @@ export const de: Translations = {
     newAccount: 'Neues Konto',
     accountName: 'Kontoname',
     accountRequired: 'Gib dem neuen Konto einen Namen.',
+    transfersMatched_one: '{{count}} Umbuchung zwischen deinen Konten zugeordnet',
+    transfersMatched_other: '{{count}} Umbuchungen zwischen deinen Konten zugeordnet',
   },
   settings: {
     title: 'Einstellungen',

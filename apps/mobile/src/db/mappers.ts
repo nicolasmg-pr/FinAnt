@@ -24,6 +24,8 @@ export interface TransactionRow {
   import_hash: string;
   notes: string | null;
   excluded_from_stats: number;
+  /** Other half of a matched internal transfer; null otherwise. */
+  transfer_peer_id: string | null;
   /** Set by a soft delete. Rows with a value never leave the repository. */
   deleted_at: string | null;
   created_at: string;
@@ -47,6 +49,7 @@ export function toTransaction(row: TransactionRow): Transaction {
     importHash: row.import_hash,
     notes: row.notes,
     excludedFromStats: row.excluded_from_stats === 1,
+    transferPeerId: row.transfer_peer_id,
     createdAt: row.created_at,
   };
 }
