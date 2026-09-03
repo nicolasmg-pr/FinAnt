@@ -35,6 +35,8 @@ only gives a signed amount uses `sideFromAmount()`.
   next statement from that bank preselects it. Migration 3 dropped the
   aggregator consent columns; `provider` now only ever holds a
   `TransactionSource`.
+- `institutions` — the banks the owner holds accounts with. See banks and
+  balances below.
 - `transactions` — the ledger. See dedupe, soft delete and transfers below.
 - `categories` — shipped taxonomy plus any the owner adds. Ids are stable and
   never renamed; rules and history point at them.
@@ -44,6 +46,63 @@ only gives a signed amount uses `sideFromAmount()`.
 - `budgets` — monthly limit per category.
 - `import_profiles` — user-defined column mappings for file import.
 - `settings` — key/value: locale, main currency, app lock, last import account.
+
+## Banks and balances
+
+A **bank groups accounts**; the balance itself lives on the account, because
+that is where the movements are. The bank view sums its accounts.
+
+`institutions` (migration 6) is `id`, `name`, `created_at`. `accounts.institution_id`
+has existed as a plain TEXT column since migration 1 and now holds an
+`institutions.id`. It stays a plain column: SQLite cannot add a `REFERENCES`
+clause to an existing column without rebuilding the table, and rebuilding the
+accounts table — which the whole ledger points at — is not worth it for a
+constraint `institutions-repo.ts` already enforces. Deleting a bank unassigns
+its accounts; an account is never deleted with it, because it owns movements.
+Migration 6 backfills one institution per distinct `institution_name` and points
+those accounts at it; accounts with no name stay unassigned.
+
+Migration 6 also adds three nullable columns to `accounts`:
+
+- `balance_minor` — what the owner asserted the account holds, in minor units.
+- `balance_date` — the day `YYYY-MM-DD` that claim was made about.
+- `opening_balance_minor` — the opening balance derived from that claim.
+
+All three are null for an account whose balance was never asserted; it shows no
+figure rather than a wrong zero.
+
+### The anchor
+
+FinAnt talks to no bank, so nothing tells it what an account holds. The owner
+asserts "this account holds `B` on `D`". `packages/core/src/balance.ts` turns
+that into a fixed historical fact:
+
+```
+O = B - Σ(amount of every movement in the account with bookingDate <= D)
+balance as of X = O + Σ(movements with bookingDate <= X)
+```
+
+The opening balance `O` is stored, not `B`: an opening balance does not change
+when the next statement is imported, while a current balance does. By
+construction the second line gives back exactly `B` for `X = D`.
+
+**Excluded rows and internal transfers are counted.** `countsTowardStats()`
+governs statistics, not balances: moving 200 € to a savings account leaves the
+current account 200 € lighter whatever the charts decide to show.
+
+### Drift
+
+A later import can insert movements dated on or before `D` — history the anchor
+already claimed to account for. `reconcileAnchor()` re-derives
+`O' = B - Σ(movements <= D)` from the current ledger and reports
+`driftMinor = O' - O`. Non-zero means the anchor no longer matches its history;
+the sign is the negation of what arrived, so 25 € of backfilled spending shows
+as a drift of +25 €.
+
+The banks screen shows that as a warning on the account, naming the total that
+turned up, and offers "Re-anchor to my current balance", which re-opens the
+balance form. Nothing is corrected automatically: only the owner knows whether
+the new rows are real or the figure they typed was wrong.
 
 ## Dedupe
 

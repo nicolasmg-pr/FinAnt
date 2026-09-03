@@ -142,6 +142,45 @@ export const MIGRATIONS: readonly { version: number; sql: string }[] = [
       CREATE INDEX idx_tx_transfer_peer ON transactions(transfer_peer_id);
     `,
   },
+  {
+    version: 6,
+    sql: `
+      -- A bank groups accounts. The balance itself lives per account, because
+      -- that is where the movements are; the bank view sums its accounts.
+      CREATE TABLE institutions (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      -- accounts.institution_id already exists as a plain TEXT column from
+      -- migration 1 and now holds institutions.id. It stays a plain column: a
+      -- REFERENCES clause cannot be added to an existing SQLite column without
+      -- rebuilding the whole table, which is not worth risking the ledger's
+      -- foreign keys for a constraint the repository already enforces.
+
+      -- What the owner asserts the account holds (balance_minor) on the day
+      -- they asserted it for (balance_date), plus the opening balance derived
+      -- from that claim. All nullable: an account whose balance was never
+      -- asserted simply has none, and shows no figure rather than a wrong zero.
+      ALTER TABLE accounts ADD COLUMN balance_minor INTEGER;
+      ALTER TABLE accounts ADD COLUMN balance_date TEXT;
+      ALTER TABLE accounts ADD COLUMN opening_balance_minor INTEGER;
+
+      -- Accounts imported so far carry their bank's name as free text. Promote
+      -- each distinct name to an institution and point the accounts at it;
+      -- accounts with no name stay unassigned rather than inventing a bank.
+      INSERT INTO institutions (id, name, created_at)
+        SELECT 'inst-' || LOWER(HEX(RANDOMBLOB(8))), institution_name, MIN(created_at)
+          FROM accounts
+         WHERE institution_name IS NOT NULL AND TRIM(institution_name) != ''
+         GROUP BY institution_name;
+
+      UPDATE accounts
+         SET institution_id = (SELECT id FROM institutions WHERE name = accounts.institution_name)
+       WHERE institution_name IS NOT NULL AND TRIM(institution_name) != '';
+    `,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;

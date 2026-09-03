@@ -10,6 +10,12 @@ export interface AccountRow {
   institution_name: string | null;
   provider: string;
   archived: number;
+  /** What the owner asserted the account holds, in minor units. Null until they say. */
+  balance_minor: number | null;
+  /** The day that assertion was made about, `YYYY-MM-DD`. */
+  balance_date: string | null;
+  /** Opening balance derived from the assertion; see packages/core/src/balance.ts. */
+  opening_balance_minor: number | null;
 }
 
 export async function listAccounts(): Promise<AccountRow[]> {
@@ -70,4 +76,52 @@ export async function getOrCreateLocalAccount(currency = 'EUR'): Promise<string>
   );
   if (existing) return existing.id;
   return createAccount({ name: 'My records', currency, provider: 'file-import' });
+}
+
+/**
+ * Records the balance the owner says the account holds on `balanceDate`, plus
+ * the opening balance derived from it. Both are stored: the assertion is what
+ * the owner can be shown and re-checked against, the opening balance is what
+ * every later figure is computed from.
+ */
+export async function setAccountBalance(
+  accountId: string,
+  balance: { assertedMinor: number; balanceDate: string; openingMinor: number },
+): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `UPDATE accounts
+        SET balance_minor = ?, balance_date = ?, opening_balance_minor = ?
+      WHERE id = ?;`,
+    balance.assertedMinor,
+    balance.balanceDate,
+    balance.openingMinor,
+    accountId,
+  );
+}
+
+/**
+ * Moves an account into a bank, or out of every bank with `null`. The
+ * free-text `institution_name` a camt.053 import may have left is kept in step
+ * with the chosen bank so the two can never name different banks.
+ */
+export async function setAccountInstitution(
+  accountId: string,
+  institutionId: string | null,
+): Promise<void> {
+  const db = await getDatabase();
+  const name = institutionId
+    ? ((
+        await db.getFirstAsync<{ name: string }>(
+          'SELECT name FROM institutions WHERE id = ?;',
+          institutionId,
+        )
+      )?.name ?? null)
+    : null;
+  await db.runAsync(
+    'UPDATE accounts SET institution_id = ?, institution_name = ? WHERE id = ?;',
+    institutionId,
+    name,
+    accountId,
+  );
 }
