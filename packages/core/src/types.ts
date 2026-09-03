@@ -72,6 +72,9 @@ export interface Transaction {
   readonly notes: string | null;
   /** Internal moves between own accounts, and refunds, skew every chart. Keep them out of stats. */
   readonly excludedFromStats: boolean;
+  /** Id of the other half of a matched transfer between the owner's own
+   * accounts, set by the matcher. `null` for every other movement. */
+  readonly transferPeerId: string | null;
   readonly createdAt: string;
 }
 
@@ -80,7 +83,12 @@ export type MatchField = 'description' | 'counterparty' | 'reference' | 'any';
 export type RuleMatch =
   | { readonly kind: 'contains'; readonly field: MatchField; readonly value: string }
   | { readonly kind: 'startsWith'; readonly field: MatchField; readonly value: string }
-  | { readonly kind: 'regex'; readonly field: MatchField; readonly pattern: string; readonly flags?: string }
+  | {
+      readonly kind: 'regex';
+      readonly field: MatchField;
+      readonly pattern: string;
+      readonly flags?: string;
+    }
   | { readonly kind: 'amountBetween'; readonly minMinor: number; readonly maxMinor: number }
   | { readonly kind: 'direction'; readonly value: 'income' | 'expense' }
   | { readonly kind: 'all'; readonly of: readonly RuleMatch[] }
