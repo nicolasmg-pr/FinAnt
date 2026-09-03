@@ -66,6 +66,9 @@ export default function RootLayout() {
           headerStyle: { backgroundColor: theme.background },
           headerTitleStyle: { color: theme.text },
           headerTintColor: theme.accent,
+          // A pushed screen shorter than the viewport otherwise shows the
+          // navigator's own scene colour under its content.
+          contentStyle: { backgroundColor: theme.background },
           // Without this the iOS back button reads "(tabs)": the label comes
           // from the previous route's title, and that route is a router group.
           headerBackTitle: t('common.back'),
