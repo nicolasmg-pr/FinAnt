@@ -207,6 +207,10 @@ export default function ImportScreen() {
           iban: file.statementAccount?.iban ?? null,
           institutionName: file.statementAccount?.name ?? null,
         });
+        // The account now exists: a retry after a failed ingest must reuse it,
+        // not try to create it again. The id is unchanged, so the hashes hold.
+        setChoice({ id: choice.id, isNew: false });
+        setAccounts(await listAccounts());
       }
       if (!file.fixedToLocal) await writeSetting(SETTING_LAST_IMPORT_ACCOUNT, choice.id);
       // Stay on screen: the owner should see how many rows were new and how

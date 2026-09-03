@@ -21,7 +21,7 @@ export async function listAccounts(): Promise<AccountRow[]> {
 export async function findAccountByIban(iban: string): Promise<AccountRow | null> {
   const db = await getDatabase();
   const row = await db.getFirstAsync<AccountRow>(
-    'SELECT * FROM accounts WHERE iban = ? AND archived = 0 LIMIT 1;',
+    'SELECT * FROM accounts WHERE iban = ? AND archived = 0 ORDER BY created_at ASC LIMIT 1;',
     iban,
   );
   return row ?? null;

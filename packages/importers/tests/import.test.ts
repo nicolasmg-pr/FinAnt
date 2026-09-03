@@ -157,4 +157,28 @@ describe('parseCamt053', () => {
     expect(spaced.statementAccount.iban).toBe('ES9121000418450200051332');
     expect(spaced.statementAccount.name).toBeNull();
   });
+
+  it('warns when one file carries statements for more than one account', () => {
+    const stmt = (iban: string) => `<Stmt><Acct><Id><IBAN>${iban}</IBAN></Id></Acct></Stmt>`;
+    const two = parseCamt053(
+      '<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02"><BkToCstmrStmt>' +
+        stmt('ES9121000418450200051332') +
+        stmt('DE89370400440532013000') +
+        '</BkToCstmrStmt></Document>',
+      ctx,
+    );
+    expect(two.statementAccount.iban).toBe('ES9121000418450200051332');
+    expect(two.issues).toHaveLength(1);
+    expect(two.issues[0]?.message).toContain('2 accounts');
+    expect(two.issues[0]?.message).not.toContain('ES91');
+
+    const same = parseCamt053(
+      '<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02"><BkToCstmrStmt>' +
+        stmt('ES9121000418450200051332') +
+        stmt('es91 2100 0418 4502 0005 1332') +
+        '</BkToCstmrStmt></Document>',
+      ctx,
+    );
+    expect(same.issues).toHaveLength(0);
+  });
 });

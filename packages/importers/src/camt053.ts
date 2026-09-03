@@ -86,9 +86,24 @@ export function parseCamt053(xml: string, context: { accountId: string }): Camt0
     };
   }
 
-  // A file may carry several Stmt blocks (one per period); they describe the
-  // same account, so the first one names it. Multi-account files are not handled.
+  // A file may carry several Stmt blocks (one per period); they normally
+  // describe the same account, so the first one names it. A file whose
+  // statements name more than one account is reported as an issue: every row
+  // is still imported into the chosen account.
   const statementAccount = statementAccountOf(statements[0]);
+
+  const distinctIbans = new Set(
+    statements
+      .map((statement) => statementAccountOf(statement).iban)
+      .filter((iban): iban is string => iban !== null),
+  );
+  if (distinctIbans.size > 1) {
+    issues.push({
+      row: 0,
+      message: `Statement names ${distinctIbans.size} accounts; all rows are imported into the chosen account`,
+      raw: [],
+    });
+  }
 
   let index = 0;
   for (const statement of statements) {

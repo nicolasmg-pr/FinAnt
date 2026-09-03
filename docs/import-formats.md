@@ -129,6 +129,8 @@ one account and stored in another.
   preselected. When the owner creates a new account for the file, the IBAN and
   institution name are stored on it, so the next statement from that bank finds
   its account by itself. The IBAN is never shown on screen; accounts are named.
+  A file whose statements name more than one account is imported whole into
+  the chosen account, and the preview's issues list says so.
 - **CSV** carries no account identity. The account the last import went to
   (`lastImportAccount` in `settings`) is preselected, then "My records".
 - **The Presupuesto workbook** always lands in "My records" and shows no picker.
