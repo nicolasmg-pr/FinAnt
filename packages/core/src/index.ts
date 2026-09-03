@@ -16,3 +16,4 @@ export * from './period';
 export * from './transfers';
 export * from './filter';
 export * from './balance';
+export * from './exclusion';

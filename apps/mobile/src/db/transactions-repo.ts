@@ -9,6 +9,10 @@ import {
 import { getDatabase } from './database';
 import { toTransaction, type TransactionRow } from './mappers';
 
+/** Ids per `IN (...)`. Well under SQLCipher's compiled variable limit, with
+ * room for the parameters that travel alongside them. */
+const BULK_CHUNK = 400;
+
 export function newId(): string {
   return Crypto.randomUUID();
 }
@@ -29,18 +33,26 @@ export interface NewTransaction {
   externalId: string | null;
   importHash: string;
   notes: string | null;
+  /** Set by the exclusion rules at ingest, so a covered movement never counts
+   * towards a single monthly total, not even for the minute before the owner
+   * next opens the app. */
+  excludedFromStats: boolean;
 }
 
 /**
  * Inserts a batch, skipping anything the unique indexes already hold.
  * Returns how many rows were new — the number the import screen reports.
+ * `excluded` counts only the rows that were actually inserted with the flag
+ * set, so a re-imported statement does not report the same exclusions twice.
  */
 export async function insertTransactions(batch: readonly NewTransaction[]): Promise<{
   inserted: number;
   duplicates: number;
+  excluded: number;
 }> {
   const db = await getDatabase();
   let inserted = 0;
+  let excluded = 0;
   const now = new Date().toISOString();
 
   await db.withTransactionAsync(async () => {
@@ -50,7 +62,7 @@ export async function insertTransactions(batch: readonly NewTransaction[]): Prom
            id, account_id, booking_date, value_date, amount_minor, currency, side,
            description, counterparty, reference, category_id, category_source,
            source, external_id, import_hash, notes, excluded_from_stats, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?);`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         newId(),
         tx.accountId,
         tx.bookingDate,
@@ -67,13 +79,17 @@ export async function insertTransactions(batch: readonly NewTransaction[]): Prom
         tx.externalId,
         tx.importHash,
         tx.notes,
+        tx.excludedFromStats ? 1 : 0,
         now,
       );
-      if (result.changes > 0) inserted += 1;
+      if (result.changes > 0) {
+        inserted += 1;
+        if (tx.excludedFromStats) excluded += 1;
+      }
     }
   });
 
-  return { inserted, duplicates: batch.length - inserted };
+  return { inserted, duplicates: batch.length - inserted, excluded };
 }
 
 /** Every movement in a closed date range, newest first. */
@@ -160,6 +176,38 @@ export async function setExcludedFromStats(
     excluded ? 1 : 0,
     transactionId,
   );
+}
+
+/**
+ * The same flag over many rows at once, for "apply to all similar".
+ *
+ * One database transaction, so the ledger is never half-excluded, and the ids
+ * go in chunks: a single `IN (...)` with a few thousand placeholders would run
+ * into SQLite's variable limit, and a personal ledger can easily reach that
+ * many rows for one supermarket.
+ */
+export async function setExcludedFromStatsBulk(
+  ids: readonly string[],
+  excluded: boolean,
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  const db = await getDatabase();
+  let changed = 0;
+  await db.withTransactionAsync(async () => {
+    for (let i = 0; i < ids.length; i += BULK_CHUNK) {
+      const chunk = ids.slice(i, i + BULK_CHUNK);
+      const placeholders = chunk.map(() => '?').join(', ');
+      const result = await db.runAsync(
+        `UPDATE transactions
+            SET excluded_from_stats = ?
+          WHERE deleted_at IS NULL AND id IN (${placeholders});`,
+        excluded ? 1 : 0,
+        ...chunk,
+      );
+      changed += result.changes;
+    }
+  });
+  return changed;
 }
 
 /**

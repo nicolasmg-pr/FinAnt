@@ -82,6 +82,15 @@ export const en = {
     applyToSimilar: 'Also apply to similar movements from now on',
     salaryHint: 'Salary movements start a new month on the dashboard.',
     excludeFromStats: 'Exclude from statistics',
+    excludeSimilar: 'Also exclude similar movements, now and in future imports',
+    excludeSimilarCount_one: '{{count}} movement on record matches',
+    excludeSimilarCount_other: '{{count}} movements on record match',
+    excludeSimilarDone_one: '{{count}} movement excluded. New ones like it will be excluded too.',
+    excludeSimilarDone_other:
+      '{{count}} movements excluded. New ones like them will be excluded too.',
+    stopExcludingSimilar: 'Also stop excluding similar movements',
+    stopExcludingSimilarDone_one: '{{count}} movement counts again. The rule is gone.',
+    stopExcludingSimilarDone_other: '{{count}} movements count again. The rule is gone.',
     markInternal: 'Mark as transfer between my accounts',
     addManual: 'Add a movement',
     detailTitle: 'Movement',
@@ -153,6 +162,8 @@ export const en = {
     accountRequired: 'Give the new account a name.',
     transfersMatched_one: '{{count}} transfer between your accounts matched',
     transfersMatched_other: '{{count}} transfers between your accounts matched',
+    autoExcluded_one: '{{count}} movement excluded from statistics by a rule of yours',
+    autoExcluded_other: '{{count}} movements excluded from statistics by rules of yours',
   },
   settings: {
     title: 'Settings',
@@ -170,6 +181,13 @@ export const en = {
     eraseAllConfirm:
       'This permanently deletes every movement and category on this device. It cannot be undone.',
     categories: 'Categories and rules',
+    autoExclusions: 'Automatic exclusions',
+    autoExclusionsBody:
+      'Movements matching these are kept out of every total and forecast. They stay in the ledger and no balance changes.',
+    autoExclusionsEmpty: 'Nothing is excluded automatically.',
+    autoExclusionsMatch: 'Matches: {{key}}',
+    autoExclusionsDeleteConfirm:
+      'Delete this rule? Future imports will count these movements again. The ones already excluded stay excluded.',
     about: 'About',
   },
   budgets: {

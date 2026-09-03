@@ -2,6 +2,7 @@ import {
   money,
   type Budget,
   type CategoryRule,
+  type ExclusionRule,
   type Transaction,
   type TransactionSide,
 } from '@finant/core';
@@ -71,6 +72,26 @@ export function toRule(row: RuleRow): CategoryRule {
     enabled: row.enabled === 1,
     learned: row.learned === 1,
     match: JSON.parse(row.match_json) as CategoryRule['match'],
+  };
+}
+
+/**
+ * An exclusion rule carries no category, which is why it lives in its own
+ * table rather than as a `rules` row with a nullable `category_id`.
+ */
+export interface ExclusionRuleRow {
+  id: string;
+  match_json: string;
+  enabled: number;
+  learned: number;
+}
+
+export function toExclusionRule(row: ExclusionRuleRow): ExclusionRule {
+  return {
+    id: row.id,
+    enabled: row.enabled === 1,
+    learned: row.learned === 1,
+    match: JSON.parse(row.match_json) as ExclusionRule['match'],
   };
 }
 

@@ -17,21 +17,32 @@ import {
   UNCATEGORISED_ID,
   countsTowardStats,
   formatMoney,
+  learnExclusionFrom,
   learnRuleFrom,
+  shouldExclude,
+  similarTo,
   type Category,
+  type ExclusionRule,
   type Transaction,
 } from '@finant/core';
 import { Amount } from '../../src/components/Amount';
 import { Card } from '../../src/components/Card';
 import { CategoryChip } from '../../src/components/CategoryChip';
 import { listAccounts } from '../../src/db/accounts-repo';
+import {
+  deleteExclusionRule,
+  listExclusionRules,
+  saveExclusionRule,
+} from '../../src/db/exclusion-rules-repo';
 import { saveRule } from '../../src/db/rules-repo';
 import {
   deleteTransaction,
   getTransaction,
+  listAllTransactions,
   newId,
   setCategory,
   setExcludedFromStats,
+  setExcludedFromStatsBulk,
 } from '../../src/db/transactions-repo';
 import { useCategoryLabel } from '../../src/hooks/use-category-label';
 import { formatBookingDate, intlLocale } from '../../src/i18n';
@@ -66,6 +77,13 @@ export default function TransactionDetailScreen() {
   const [learn, setLearn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The whole ledger, only so the screen can say how many movements an
+   * exclusion rule would affect before the owner commits to it. A personal
+   * ledger is a few thousand rows; every other screen reads it the same way. */
+  const [ledger, setLedger] = useState<readonly Transaction[]>([]);
+  const [exclusionRules, setExclusionRules] = useState<readonly ExclusionRule[]>([]);
+  /** What the last bulk exclusion did, shown under the switch that did it. */
+  const [exclusionNote, setExclusionNote] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -84,9 +102,13 @@ export default function TransactionDetailScreen() {
       const accounts = await listAccounts();
       const nameOf = (accountId: string) => accounts.find((a) => a.id === accountId)?.name ?? null;
       const other = row.transferPeerId ? await getTransaction(row.transferPeerId) : null;
+      const rules = await listExclusionRules();
+      const all = await listAllTransactions();
       if (cancelled) return;
       setAccountName(nameOf(row.accountId));
       setPeer(other ? { tx: other, accountName: nameOf(other.accountId) } : null);
+      setExclusionRules(rules);
+      setLedger(all);
     })().catch((cause: unknown) => {
       if (!cancelled) setError((cause as Error).message);
     });
@@ -125,6 +147,76 @@ export default function TransactionDetailScreen() {
     } catch (cause) {
       setTx((current) => (current ? { ...current, excludedFromStats: !excluded } : current));
       setError((cause as Error).message);
+    }
+  };
+
+  /**
+   * The learned rule that already covers this movement, if any. It is what
+   * makes the bulk exclusion undoable: leaving it behind would re-exclude the
+   * row on the next import, however many times the owner turns the switch off.
+   */
+  const coveringRule = useMemo(
+    () =>
+      exclusionRules.find((rule) => rule.learned && tx !== null && shouldExclude(tx, [rule])) ??
+      null,
+    [exclusionRules, tx],
+  );
+  /** The rule this movement would produce; null when its narrative has no
+   * merchant identity worth generalising from. */
+  const candidateRule = useMemo(() => (tx ? learnExclusionFrom(tx, () => 'probe') : null), [tx]);
+  const similarCount = useMemo(() => {
+    const rule = coveringRule ?? candidateRule;
+    return rule ? similarTo(ledger, rule).length : 0;
+  }, [coveringRule, candidateRule, ledger]);
+  // Offered while the row is excluded and generalisable, and always while a
+  // learned rule still covers it — that is the only place to take it back.
+  const offerSimilar =
+    coveringRule !== null || (tx?.excludedFromStats === true && candidateRule !== null);
+
+  /**
+   * Applies, or takes back, "exclude every movement like this one".
+   *
+   * Applying saves the rule first and then flags the movements already on
+   * record: if the second half fails the promise about future imports still
+   * holds, and the switch shows on so the owner can undo it. Taking it back
+   * un-flags first and deletes the rule last, for the same reason in reverse.
+   */
+  const toggleSimilar = async (on: boolean) => {
+    if (!tx || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (on) {
+        const rule = learnExclusionFrom(tx, newId);
+        if (!rule) return;
+        await saveExclusionRule(rule);
+        const ids = similarTo(ledger, rule).map((row) => row.id);
+        // The ledger snapshot predates this screen's own toggle, so make sure
+        // the movement in front of the owner is in the list either way.
+        const changed = await setExcludedFromStatsBulk(
+          ids.includes(tx.id) ? ids : [...ids, tx.id],
+          true,
+        );
+        setExclusionRules((current) => [rule, ...current]);
+        setTx((current) => (current ? { ...current, excludedFromStats: true } : current));
+        setExclusionNote(t('transactions.excludeSimilarDone', { count: changed }));
+      } else {
+        const rule = coveringRule;
+        if (!rule) return;
+        const ids = similarTo(ledger, rule).map((row) => row.id);
+        const changed = await setExcludedFromStatsBulk(
+          ids.includes(tx.id) ? ids : [...ids, tx.id],
+          false,
+        );
+        await deleteExclusionRule(rule.id);
+        setExclusionRules((current) => current.filter((r) => r.id !== rule.id));
+        setTx((current) => (current ? { ...current, excludedFromStats: false } : current));
+        setExclusionNote(t('transactions.stopExcludingSimilarDone', { count: changed }));
+      }
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -267,6 +359,18 @@ export default function TransactionDetailScreen() {
           value={tx.excludedFromStats}
           onValueChange={(value) => void toggleExcluded(value)}
         />
+        {offerSimilar ? (
+          <SwitchRow
+            label={t('transactions.excludeSimilar')}
+            hint={t('transactions.excludeSimilarCount', { count: similarCount })}
+            value={coveringRule !== null}
+            disabled={busy}
+            onValueChange={(value) => void toggleSimilar(value)}
+          />
+        ) : null}
+        {exclusionNote ? (
+          <Text style={[styles.hint, { color: theme.textMuted }]}>{exclusionNote}</Text>
+        ) : null}
         <Pressable onPress={confirmDelete} disabled={busy} style={styles.deleteButton}>
           <Text style={{ color: theme.expense, fontWeight: '600' }}>{t('common.delete')}</Text>
         </Pressable>
@@ -291,18 +395,31 @@ function Field({ label, value }: { label: string; value: string }) {
 
 function SwitchRow({
   label,
+  hint,
   value,
+  disabled,
   onValueChange,
 }: {
   label: string;
+  /** Second line under the label; used for "how many movements this covers". */
+  hint?: string;
   value: boolean;
+  disabled?: boolean;
   onValueChange: (value: boolean) => void;
 }) {
   const theme = useTheme();
   return (
     <View style={styles.switchRow}>
-      <Text style={[styles.switchLabel, { color: theme.text }]}>{label}</Text>
-      <Switch value={value} onValueChange={onValueChange} trackColor={{ true: theme.accent }} />
+      <View style={styles.switchText}>
+        <Text style={[styles.switchLabel, { color: theme.text }]}>{label}</Text>
+        {hint ? <Text style={[styles.hint, { color: theme.textMuted }]}>{hint}</Text> : null}
+      </View>
+      <Switch
+        value={value}
+        disabled={disabled}
+        onValueChange={onValueChange}
+        trackColor={{ true: theme.accent }}
+      />
     </View>
   );
 }
@@ -332,6 +449,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.md,
   },
+  switchText: { flexShrink: 1, gap: 2 },
   switchLabel: { fontSize: 14, flexShrink: 1 },
   button: {
     marginTop: spacing.sm,

@@ -83,6 +83,16 @@ export const de: Translations = {
     applyToSimilar: 'Künftig auch auf ähnliche Umsätze anwenden',
     salaryHint: 'Gehaltsumsätze beginnen in der Übersicht einen neuen Monat.',
     excludeFromStats: 'Aus der Statistik ausschließen',
+    excludeSimilar: 'Ähnliche Buchungen ebenfalls ausschließen, jetzt und bei künftigen Importen',
+    excludeSimilarCount_one: '{{count}} erfasste Buchung passt dazu',
+    excludeSimilarCount_other: '{{count}} erfasste Buchungen passen dazu',
+    excludeSimilarDone_one:
+      '{{count}} Buchung ausgeschlossen. Neue dieser Art werden ebenfalls ausgeschlossen.',
+    excludeSimilarDone_other:
+      '{{count}} Buchungen ausgeschlossen. Neue dieser Art werden ebenfalls ausgeschlossen.',
+    stopExcludingSimilar: 'Ähnliche Buchungen ebenfalls nicht mehr ausschließen',
+    stopExcludingSimilarDone_one: '{{count}} Buchung zählt wieder. Die Regel ist gelöscht.',
+    stopExcludingSimilarDone_other: '{{count}} Buchungen zählen wieder. Die Regel ist gelöscht.',
     markInternal: 'Als Umbuchung zwischen eigenen Konten markieren',
     addManual: 'Umsatz hinzufügen',
     detailTitle: 'Umsatz',
@@ -154,6 +164,8 @@ export const de: Translations = {
     accountRequired: 'Gib dem neuen Konto einen Namen.',
     transfersMatched_one: '{{count}} Umbuchung zwischen deinen Konten zugeordnet',
     transfersMatched_other: '{{count}} Umbuchungen zwischen deinen Konten zugeordnet',
+    autoExcluded_one: '{{count}} Buchung durch eine deiner Regeln aus der Statistik ausgeschlossen',
+    autoExcluded_other: '{{count}} Buchungen durch deine Regeln aus der Statistik ausgeschlossen',
   },
   settings: {
     title: 'Einstellungen',
@@ -171,6 +183,13 @@ export const de: Translations = {
     eraseAllConfirm:
       'Damit werden alle Umsätze und Kategorien auf diesem Gerät dauerhaft gelöscht. Das lässt sich nicht rückgängig machen.',
     categories: 'Kategorien und Regeln',
+    autoExclusions: 'Automatische Ausschlüsse',
+    autoExclusionsBody:
+      'Buchungen, die auf diese Regeln passen, bleiben aus allen Summen und aus der Prognose heraus. Sie bleiben im Verlauf, kein Saldo ändert sich.',
+    autoExclusionsEmpty: 'Es wird nichts automatisch ausgeschlossen.',
+    autoExclusionsMatch: 'Passt auf: {{key}}',
+    autoExclusionsDeleteConfirm:
+      'Diese Regel löschen? Künftige Importe zählen diese Buchungen wieder mit. Die bereits ausgeschlossenen bleiben ausgeschlossen.',
     about: 'Über die App',
   },
   budgets: {

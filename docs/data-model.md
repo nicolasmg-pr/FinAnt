@@ -43,6 +43,8 @@ only gives a signed amount uses `sideFromAmount()`.
 - `rules` — categorisation rules, `match_json` holding a `RuleMatch` tree.
   Shipped rules sit at priority 100-400, rules learned from a manual correction
   at 1000, so a correction always wins.
+- `exclusion_rules` (migration 7) — standing instructions to keep a kind of
+  movement out of the statistics. See below.
 - `budgets` — monthly limit per category.
 - `import_profiles` — user-defined column mappings for file import.
 - `settings` — key/value: locale, main currency, app lock, last import account.
@@ -174,3 +176,64 @@ no manual pairing UI for transfers the matcher misses.
 
 Counting a transfer to one's own savings account as an expense makes every net
 figure and every forecast wrong.
+
+## Exclusion rules
+
+```sql
+CREATE TABLE exclusion_rules (
+  id TEXT PRIMARY KEY NOT NULL,
+  match_json TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  learned INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+```
+
+Excluding one movement flips `excluded_from_stats` on that row and nothing
+else. "Apply to all similar" additionally records an **exclusion rule**, so the
+movements already on record are flagged in one pass and the ones a future
+import brings in are flagged on arrival.
+
+**Exclusion affects statistics only.** It never changes an amount, a side, a
+category or an account balance: the movement stays in the ledger exactly as the
+bank booked it, and only `countsTowardStats()` looks away.
+
+### Why its own table, not a `rules` row
+
+A `CategoryRule` answers "what is this"; an `ExclusionRule` answers "does this
+count". Fitting the second into `rules` would mean making `category_id`
+nullable — and that column is `NOT NULL` with a foreign key onto `categories`,
+which is what stops a categorisation rule from pointing at a category that no
+longer exists. Weakening it for every shipped rule to store a different kind of
+row is a bad trade, and every read of `rules` would then have to remember to
+filter out the rows that are not categorisations at all. There is no `priority`
+either: exclusion is not a contest between rules, so any enabled rule that
+matches is enough.
+
+Both kinds share the same `RuleMatch` tree and the same matcher (`matches()` in
+`packages/core/src/categorise.ts`), so a narrative is normalised — diacritics
+stripped, case folded — identically for both.
+
+### Learning, matching, undoing
+
+`packages/core/src/exclusion.ts`:
+
+- `learnExclusionFrom(tx, idFactory)` builds a `contains` rule on the
+  `merchantKey` of the counterparty (or the description). It returns `null`
+  when that key is under four characters — the same gate as `learnRuleFrom`,
+  because an exclusion learned from two characters silently swallows unrelated
+  movements and is harder to notice than a wrong category.
+- `shouldExclude(tx, rules)` is what `ingest()` runs over every draft before
+  insert, so a covered movement never spends a month inside a total. The import
+  result reports the count as `autoExcluded`.
+- `similarTo(txs, rule)` lists what a rule covers, so the movement screen can
+  show the count _before_ the owner commits and again before they take it back.
+  It is pure over what it is handed; the repository has already dropped
+  soft-deleted rows.
+
+Turning the switch back off deletes the rule **and** un-excludes its matches,
+in that order, from the same screen. A rule left behind would silently
+re-exclude the movement on the next import, however many times the owner
+un-excluded the row by hand. Settings > Automatic exclusions lists every rule
+with the merchant key it was learned from and can delete it; deleting there
+stops future imports but deliberately leaves history alone.

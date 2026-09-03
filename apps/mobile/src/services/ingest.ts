@@ -1,5 +1,6 @@
-import { categorise } from '@finant/core';
+import { categorise, shouldExclude } from '@finant/core';
 import type { DraftTransaction } from '@finant/importers';
+import { listExclusionRules } from '../db/exclusion-rules-repo';
 import { listRules } from '../db/rules-repo';
 import { insertTransactions, type NewTransaction } from '../db/transactions-repo';
 import { detectTransfers } from './transfers';
@@ -11,6 +12,8 @@ export interface IngestResult {
   readonly uncategorised: number;
   /** Transfers between the owner's accounts paired by this import. */
   readonly transfersMatched: number;
+  /** Rows an exclusion rule kept out of the statistics on arrival. */
+  readonly autoExcluded: number;
 }
 
 /**
@@ -20,9 +23,15 @@ export interface IngestResult {
  * A category that came with the file (the owner's own spreadsheet column) is
  * trusted over the rule engine — it is their classification, already correct,
  * and re-deriving it would silently rewrite years of history.
+ *
+ * Exclusion runs after categorisation and independently of it: "does this
+ * count" is a different question from "what is this". A movement the owner
+ * already excluded by name must not spend a month inside the totals just
+ * because it arrived again in a newer statement.
  */
 export async function ingest(drafts: readonly DraftTransaction[]): Promise<IngestResult> {
   const rules = await listRules();
+  const exclusions = await listExclusionRules();
   let autoCategorised = 0;
   let uncategorised = 0;
 
@@ -42,6 +51,8 @@ export async function ingest(drafts: readonly DraftTransaction[]): Promise<Inges
       else uncategorised += 1;
     }
 
+    const excludedFromStats = shouldExclude(draft, exclusions);
+
     return {
       accountId: draft.accountId,
       bookingDate: draft.bookingDate,
@@ -58,11 +69,14 @@ export async function ingest(drafts: readonly DraftTransaction[]): Promise<Inges
       externalId: draft.externalId,
       importHash: draft.importHash,
       notes: draft.notes,
+      excludedFromStats,
     };
   });
 
-  const { inserted, duplicates } = await insertTransactions(batch);
+  // Counted from what was actually written, not from what was offered: a
+  // re-imported statement must not report the same exclusions a second time.
+  const { inserted, duplicates, excluded: autoExcluded } = await insertTransactions(batch);
   // Only a new row can complete a pair; a file full of duplicates changes nothing.
   const transfersMatched = inserted > 0 ? await detectTransfers() : 0;
-  return { inserted, duplicates, autoCategorised, uncategorised, transfersMatched };
+  return { inserted, duplicates, autoCategorised, uncategorised, transfersMatched, autoExcluded };
 }

@@ -83,6 +83,17 @@ export const es: Translations = {
     applyToSimilar: 'Aplicar también a movimientos similares a partir de ahora',
     salaryHint: 'Los movimientos de nómina abren un nuevo mes en el resumen.',
     excludeFromStats: 'Excluir de las estadísticas',
+    excludeSimilar: 'Excluir también los movimientos parecidos, ahora y en futuras importaciones',
+    excludeSimilarCount_one: '{{count}} movimiento registrado coincide',
+    excludeSimilarCount_other: '{{count}} movimientos registrados coinciden',
+    excludeSimilarDone_one:
+      '{{count}} movimiento excluido. Los nuevos como este también se excluirán.',
+    excludeSimilarDone_other:
+      '{{count}} movimientos excluidos. Los nuevos como estos también se excluirán.',
+    stopExcludingSimilar: 'Dejar de excluir también los movimientos parecidos',
+    stopExcludingSimilarDone_one: '{{count}} movimiento vuelve a contar. La regla se ha borrado.',
+    stopExcludingSimilarDone_other:
+      '{{count}} movimientos vuelven a contar. La regla se ha borrado.',
     markInternal: 'Marcar como traspaso entre mis cuentas',
     addManual: 'Añadir movimiento',
     detailTitle: 'Movimiento',
@@ -154,6 +165,8 @@ export const es: Translations = {
     accountRequired: 'Pon un nombre a la cuenta nueva.',
     transfersMatched_one: '{{count}} traspaso entre tus cuentas emparejado',
     transfersMatched_other: '{{count}} traspasos entre tus cuentas emparejados',
+    autoExcluded_one: '{{count}} movimiento excluido de las estadísticas por una regla tuya',
+    autoExcluded_other: '{{count}} movimientos excluidos de las estadísticas por reglas tuyas',
   },
   settings: {
     title: 'Ajustes',
@@ -171,6 +184,13 @@ export const es: Translations = {
     eraseAllConfirm:
       'Esto elimina de forma permanente todos los movimientos y categorías de este dispositivo. No se puede deshacer.',
     categories: 'Categorías y reglas',
+    autoExclusions: 'Exclusiones automáticas',
+    autoExclusionsBody:
+      'Los movimientos que coinciden con estas reglas quedan fuera de todos los totales y de la previsión. Siguen en el registro y ningún saldo cambia.',
+    autoExclusionsEmpty: 'No hay nada excluido automáticamente.',
+    autoExclusionsMatch: 'Coincide con: {{key}}',
+    autoExclusionsDeleteConfirm:
+      '¿Borrar esta regla? Las próximas importaciones volverán a contar estos movimientos. Los ya excluidos siguen excluidos.',
     about: 'Acerca de',
   },
   budgets: {
