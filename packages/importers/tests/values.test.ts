@@ -65,3 +65,39 @@ describe('parseDate', () => {
     expect(parseDate('sin fecha')).toBeNull();
   });
 });
+
+describe('parseDate with month names', () => {
+  it('reads a German abbreviated month, with or without its full stop', () => {
+    expect(parseDate('05 Sep. 2025')).toBe('2025-09-05');
+    expect(parseDate('1 Mai 2026')).toBe('2026-05-01');
+    expect(parseDate('17 Dez 2025')).toBe('2025-12-17');
+  });
+
+  it('reads the German months that are spelled differently from English', () => {
+    expect(parseDate('03 Mär 2026')).toBe('2026-03-03');
+    expect(parseDate('03 Maerz 2026')).toBe('2026-03-03');
+    expect(parseDate('09 Okt. 2025')).toBe('2025-10-09');
+  });
+
+  it('reads a Spanish abbreviated month', () => {
+    expect(parseDate('05 sept. 2025')).toBe('2025-09-05');
+    expect(parseDate('20 dic. 2025')).toBe('2025-12-20');
+    expect(parseDate('02 ene 2026')).toBe('2026-01-02');
+  });
+
+  it('reads an English month', () => {
+    expect(parseDate('7 Jun 2026')).toBe('2026-06-07');
+  });
+
+  it('tolerates the extra whitespace a two-line table cell leaves behind', () => {
+    expect(parseDate('05 Sep.   2025')).toBe('2025-09-05');
+  });
+
+  it('refuses a month it does not recognise rather than guessing one', () => {
+    expect(parseDate('05 Xyz 2025')).toBe(null);
+  });
+
+  it('does not let a month name override an explicit numeric format', () => {
+    expect(parseDate('05/09/2025', 'DD/MM/YYYY')).toBe('2025-09-05');
+  });
+});

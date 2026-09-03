@@ -8,6 +8,7 @@ import { accountChoiceNeedsName, resolveAccountChoice, type AccountChoice } from
 import {
   applyProfile,
   decodeStatement,
+  readStatementPdf,
   importWorkbook,
   parseCamt053,
   PRESUPUESTO_XLSX,
@@ -85,6 +86,20 @@ async function parseFile(
 
   // Decoded from the bytes already in hand, not via `file.text()`: German
   // exports are ISO-8859-1, and a UTF-8 read turns every umlaut into U+FFFD.
+  // A PDF is bytes, not text: its statement table is recovered from where the
+  // glyphs were drawn. Checked before decoding, since decoding it as text
+  // would produce nothing usable.
+  if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+    const { table, profile } = readStatementPdf(bytes);
+    return {
+      fileName: asset.name,
+      formatLabel: profile.label,
+      parse: (accountId) => applyProfile(table, profile, { accountId }),
+      statementAccount: null,
+      fixedToLocal: false,
+    };
+  }
+
   const text = decodeStatement(bytes);
 
   if (text.trimStart().startsWith('<')) {
@@ -183,6 +198,7 @@ export default function ImportScreen() {
         'text/xml',
         'application/xml',
         'text/plain',
+        'application/pdf',
         '*/*',
       ],
       copyToCacheDirectory: true,

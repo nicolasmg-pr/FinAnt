@@ -6,13 +6,7 @@ import { exponentOf, money, type CurrencyCode, type Money } from '@finant/core';
  * value alone, so a profile states the format and 'auto' is only a fallback.
  */
 export type DateFormat =
-  | 'auto'
-  | 'YYYY-MM-DD'
-  | 'DD/MM/YYYY'
-  | 'MM/DD/YYYY'
-  | 'DD.MM.YYYY'
-  | 'DD-MM-YYYY'
-  | 'YYYY/MM/DD';
+  'auto' | 'YYYY-MM-DD' | 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'DD.MM.YYYY' | 'DD-MM-YYYY' | 'YYYY/MM/DD';
 
 function iso(year: number, month: number, day: number): string {
   return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -24,9 +18,64 @@ function expandYear(y: number): number {
   return y >= 70 ? 1900 + y : 2000 + y;
 }
 
+/**
+ * Month names as the three supported statement languages abbreviate them,
+ * keyed on the first three letters of the diacritic-stripped word.
+ *
+ * Three letters is enough to separate every month in German, Spanish and
+ * English at once, with two exceptions handled explicitly: `jun`/`jul` are
+ * already distinct, and German `mär`/`maerz` both fold onto `mar`, which is
+ * also Spanish `marzo` and English `march` — the same month either way.
+ */
+const MONTH_PREFIXES: Readonly<Record<string, number>> = {
+  jan: 1,
+  ene: 1,
+  feb: 2,
+  mar: 3,
+  mae: 3,
+  abr: 4,
+  apr: 4,
+  may: 5,
+  mai: 5,
+  jun: 6,
+  jul: 7,
+  ago: 8,
+  aug: 8,
+  sep: 9,
+  set: 9,
+  oct: 10,
+  okt: 10,
+  nov: 11,
+  dec: 12,
+  dez: 12,
+  dic: 12,
+};
+
+/** `05 Sep. 2025`, `1 Mai 2026`, `05 sept. 2025`. */
+function parseMonthNameDate(value: string): string | null {
+  const match = /^(\d{1,2})\s+([\p{L}]+)\.?\s+(\d{2,4})$/u.exec(value);
+  if (!match) return null;
+  const word = match[2]!
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  const month = MONTH_PREFIXES[word.slice(0, 3)];
+  if (month === undefined) return null;
+  const day = Number(match[1]);
+  if (day < 1 || day > 31) return null;
+  return iso(expandYear(Number(match[3])), month, day);
+}
+
 export function parseDate(raw: string, format: DateFormat = 'auto'): string | null {
-  const value = raw.trim();
+  const value = raw.trim().replace(/\s+/g, ' ');
   if (value === '') return null;
+
+  // Only when no numeric format was pinned: a profile that states its layout
+  // must not have a month name quietly reinterpret its cells.
+  if (format === 'auto') {
+    const named = parseMonthNameDate(value);
+    if (named) return named;
+  }
 
   // Spreadsheet serial dates (Google Sheets / Excel epoch 1899-12-30).
   if (/^\d{5}(\.\d+)?$/.test(value)) {
