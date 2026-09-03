@@ -106,6 +106,7 @@ export const en = {
   },
   banks: {
     title: 'Banks',
+    viewMovements: 'View movements',
     empty: 'No banks yet. Add one with the balance it holds today.',
     add: 'Add a bank',
     edit: 'Edit bank',

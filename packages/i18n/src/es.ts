@@ -107,6 +107,7 @@ export const es: Translations = {
   },
   banks: {
     title: 'Bancos',
+    viewMovements: 'Ver movimientos',
     empty: 'Todavía no hay bancos. Añade uno con el saldo que tiene hoy.',
     add: 'Añadir banco',
     edit: 'Editar banco',

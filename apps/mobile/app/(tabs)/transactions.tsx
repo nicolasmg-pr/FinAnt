@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   BUILT_IN_CATEGORIES,
@@ -59,6 +59,22 @@ export default function TransactionsScreen() {
   const { transactions, accounts, loading, reload } = useAppData();
   const [filter, setFilter] = useState<TransactionFilter>(EMPTY_FILTER);
   const [panelOpen, setPanelOpen] = useState(false);
+
+  // The bank view opens this screen narrowed to one bank's accounts. `at`
+  // changes on every push so asking for the same accounts twice re-applies the
+  // filter instead of looking broken after the owner cleared it.
+  const params = useLocalSearchParams<{ accountIds?: string; at?: string }>();
+  const requestedAccounts = typeof params.accountIds === 'string' ? params.accountIds : '';
+  const requestedAt = typeof params.at === 'string' ? params.at : '';
+  useEffect(() => {
+    if (requestedAccounts === '') return;
+    setFilter((current) => ({
+      ...current,
+      accountIds: requestedAccounts.split(',').filter((id) => id !== ''),
+    }));
+    // Opened, so the narrowing is visible and reversible rather than a mystery.
+    setPanelOpen(true);
+  }, [requestedAccounts, requestedAt]);
 
   useFocusEffect(
     useCallback(() => {
