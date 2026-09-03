@@ -50,6 +50,23 @@ export const en = {
     excludeFromStats: 'Exclude from statistics',
     markInternal: 'Mark as transfer between my accounts',
     addManual: 'Add a movement',
+    detailTitle: 'Movement',
+    description: 'Description',
+    counterparty: 'Counterparty',
+    reference: 'Reference',
+    bookingDate: 'Booked',
+    valueDate: 'Value date',
+    account: 'Account',
+    category: 'Category',
+    notes: 'Notes',
+    categorySource: {
+      auto: 'set by a rule',
+      manual: 'set by you',
+      none: 'not classified yet',
+    },
+    excludedTag: 'Excluded',
+    deleteConfirm:
+      'Delete this movement? It will not come back if you import the same statement again.',
   },
   import: {
     title: 'Import a file',
@@ -65,6 +82,9 @@ export const en = {
     issues_other: '{{count}} rows could not be read',
     confirm: 'Import',
     supportedFormats: 'Excel or Google Sheets tracker (.xlsx), bank CSV, or camt.053 XML',
+    result: 'Import finished',
+    imported_one: '{{count}} movement imported',
+    imported_other: '{{count}} movements imported',
   },
   settings: {
     title: 'Settings',

@@ -51,6 +51,23 @@ export const de: Translations = {
     excludeFromStats: 'Aus der Statistik ausschließen',
     markInternal: 'Als Umbuchung zwischen eigenen Konten markieren',
     addManual: 'Umsatz hinzufügen',
+    detailTitle: 'Umsatz',
+    description: 'Beschreibung',
+    counterparty: 'Gegenpartei',
+    reference: 'Referenz',
+    bookingDate: 'Buchungstag',
+    valueDate: 'Wertstellung',
+    account: 'Konto',
+    category: 'Kategorie',
+    notes: 'Notizen',
+    categorySource: {
+      auto: 'per Regel zugewiesen',
+      manual: 'von dir zugewiesen',
+      none: 'noch nicht zugeordnet',
+    },
+    excludedTag: 'Ausgeschlossen',
+    deleteConfirm:
+      'Diesen Umsatz löschen? Er kommt nicht zurück, wenn du denselben Kontoauszug erneut importierst.',
   },
   import: {
     title: 'Datei importieren',
@@ -66,6 +83,9 @@ export const de: Translations = {
     issues_other: '{{count}} Zeilen konnten nicht gelesen werden',
     confirm: 'Importieren',
     supportedFormats: 'Excel- oder Google-Sheets-Tabelle (.xlsx), Bank-CSV oder camt.053-XML',
+    result: 'Import abgeschlossen',
+    imported_one: '{{count}} Umsatz importiert',
+    imported_other: '{{count}} Umsätze importiert',
   },
   settings: {
     title: 'Einstellungen',
