@@ -160,6 +160,8 @@ export const es: Translations = {
     imported_one: '{{count}} movimiento importado',
     imported_other: '{{count}} movimientos importados',
     account: 'Cuenta',
+    bank: 'Banco',
+    newBank: 'Banco nuevo',
     newAccount: 'Cuenta nueva',
     accountName: 'Nombre de la cuenta',
     accountRequired: 'Pon un nombre a la cuenta nueva.',

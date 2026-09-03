@@ -157,6 +157,8 @@ export const en = {
     imported_one: '{{count}} movement imported',
     imported_other: '{{count}} movements imported',
     account: 'Account',
+    bank: 'Bank',
+    newBank: 'New bank',
     newAccount: 'New account',
     accountName: 'Account name',
     accountRequired: 'Give the new account a name.',

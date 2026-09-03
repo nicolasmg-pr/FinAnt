@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { accountChoiceNeedsName, resolveAccountChoice, type AccountChoice } from '@finant/core';
 import {
   applyProfile,
   decodeStatement,
@@ -17,9 +18,9 @@ import {
   type ImportResult,
   type StatementAccount,
 } from '@finant/importers';
+import { AccountPicker } from '../src/components/AccountPicker';
 import { Amount } from '../src/components/Amount';
 import { Card } from '../src/components/Card';
-import { Chip } from '../src/components/Chip';
 import {
   createAccount,
   findAccountByIban,
@@ -27,8 +28,12 @@ import {
   listAccounts,
   type AccountRow,
 } from '../src/db/accounts-repo';
+import {
+  createInstitution,
+  listInstitutions,
+  type InstitutionRow,
+} from '../src/db/institutions-repo';
 import { readSetting, SETTING_LAST_IMPORT_ACCOUNT, writeSetting } from '../src/db/settings-repo';
-import { newId } from '../src/db/transactions-repo';
 import { ingest, type IngestResult } from '../src/services/ingest';
 import { radius, spacing, useTheme } from '../src/theme';
 
@@ -47,12 +52,6 @@ interface ParsedFile {
   statementAccount: StatementAccount | null;
   /** The tracker spreadsheet is the owner's own ledger: always "My records", no picker. */
   fixedToLocal: boolean;
-}
-
-/** The account the import will land in. `isNew` means it is created on confirm. */
-interface AccountChoice {
-  readonly id: string;
-  readonly isNew: boolean;
 }
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -111,23 +110,40 @@ async function parseFile(
   };
 }
 
-/** Statement IBAN first, then the account the last import went to, then "My records". */
+/**
+ * The account the file opens on, and with it the bank that account sits under:
+ * the account a camt.053 statement names by its IBAN, then the account the last
+ * import went to, then "My records", which is in no bank.
+ */
 async function preselect(
   file: ParsedFile,
   known: readonly AccountRow[],
+  institutions: readonly InstitutionRow[],
   localId: string,
-): Promise<AccountChoice> {
-  if (file.fixedToLocal) return { id: localId, isNew: false };
+): Promise<AccountChoice | null> {
+  const accounts = known.map((account) => ({
+    id: account.id,
+    institutionId: account.institution_id,
+  }));
+  const institutionIds = institutions.map((institution) => institution.id);
+  if (file.fixedToLocal) {
+    return resolveAccountChoice({
+      accounts,
+      institutionIds,
+      candidateIds: [localId],
+      suggestedName: '',
+    });
+  }
   const iban = file.statementAccount?.iban;
-  if (iban) {
-    const match = await findAccountByIban(iban);
-    if (match) return { id: match.id, isNew: false };
-  }
+  const byIban = iban ? await findAccountByIban(iban) : null;
   const lastUsed = await readSetting(SETTING_LAST_IMPORT_ACCOUNT);
-  if (lastUsed && known.some((account) => account.id === lastUsed)) {
-    return { id: lastUsed, isNew: false };
-  }
-  return { id: localId, isNew: false };
+  return resolveAccountChoice({
+    accounts,
+    institutionIds,
+    candidateIds: [byIban?.id, lastUsed, localId],
+    // A statement that names its bank gives both name fields a sensible default.
+    suggestedName: file.statementAccount?.name ?? '',
+  });
 }
 
 /**
@@ -141,15 +157,18 @@ export default function ImportScreen() {
   const router = useRouter();
   const [file, setFile] = useState<ParsedFile | null>(null);
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  const [institutions, setInstitutions] = useState<InstitutionRow[]>([]);
   const [choice, setChoice] = useState<AccountChoice | null>(null);
-  const [newAccountName, setNewAccountName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<IngestResult | null>(null);
 
   // Parsed for the chosen account, so the hashes in the preview are the ones stored.
-  const staged = useMemo(() => (file && choice ? file.parse(choice.id) : null), [file, choice]);
-  const needsName = choice?.isNew === true && newAccountName.trim() === '';
+  const staged = useMemo(
+    () => (file && choice ? file.parse(choice.accountId) : null),
+    [file, choice],
+  );
+  const needsName = choice !== null && accountChoiceNeedsName(choice);
 
   const pick = async (forcedProfile?: ImportProfile) => {
     setError(null);
@@ -176,12 +195,17 @@ export default function ImportScreen() {
       // "My records" must exist before any other account can be offered or
       // created; see getOrCreateLocalAccount.
       const localId = await getOrCreateLocalAccount();
-      const known = await listAccounts();
+      const [known, banks] = await Promise.all([listAccounts(), listInstitutions()]);
       const parsed = await parseFile(asset, localId, forcedProfile);
+      const preselected = await preselect(parsed, known, banks, localId);
+      if (!preselected) {
+        // Unreachable: getOrCreateLocalAccount has just made sure "My records" is there.
+        setError(t('errors.importFailed'));
+        return;
+      }
       setAccounts(known);
-      // A statement that names its bank gives the new-account field a sensible default.
-      setNewAccountName(parsed.statementAccount?.name ?? '');
-      setChoice(await preselect(parsed, known, localId));
+      setInstitutions(banks);
+      setChoice(preselected);
       setFile(parsed);
     } catch (cause) {
       setError((cause as Error).message);
@@ -190,29 +214,40 @@ export default function ImportScreen() {
     }
   };
 
-  const chooseNew = () =>
-    setChoice((current) => (current?.isNew ? current : { id: newId(), isNew: true }));
-
   const confirm = async () => {
     if (!file || !staged || !choice || needsName) return;
     setBusy(true);
     try {
-      if (choice.isNew) {
+      let current = choice;
+      let banks = institutions;
+      if (current.newInstitution) {
+        // Returns the bank already carrying that name if there is one, so a
+        // retry after a failed ingest cannot leave a second bank behind.
+        const institutionId = await createInstitution({ name: current.institutionName.trim() });
+        current = { ...current, institutionId, newInstitution: false };
+        banks = await listInstitutions();
+        setChoice(current);
+        setInstitutions(banks);
+      }
+      const bankName = banks.find((bank) => bank.id === current.institutionId)?.name ?? null;
+      if (current.newAccount) {
         await createAccount({
-          id: choice.id,
-          name: newAccountName.trim(),
+          id: current.accountId,
+          name: current.accountName.trim(),
           currency: staged.transactions[0]?.amount.currency ?? 'EUR',
           provider: 'file-import',
           // Stored so the next statement from this bank preselects the account.
           iban: file.statementAccount?.iban ?? null,
-          institutionName: file.statementAccount?.name ?? null,
+          institutionId: current.institutionId,
+          institutionName: bankName ?? file.statementAccount?.name ?? null,
         });
         // The account now exists: a retry after a failed ingest must reuse it,
         // not try to create it again. The id is unchanged, so the hashes hold.
-        setChoice({ id: choice.id, isNew: false });
+        current = { ...current, newAccount: false };
+        setChoice(current);
         setAccounts(await listAccounts());
       }
-      if (!file.fixedToLocal) await writeSetting(SETTING_LAST_IMPORT_ACCOUNT, choice.id);
+      if (!file.fixedToLocal) await writeSetting(SETTING_LAST_IMPORT_ACCOUNT, current.accountId);
       // Stay on screen: the owner should see how many rows were new and how
       // many the unique indexes already held before the modal closes.
       setResult(await ingest(staged.transactions));
@@ -272,48 +307,14 @@ export default function ImportScreen() {
         </Card>
       ) : null}
 
-      {file && !file.fixedToLocal ? (
+      {file && choice && !file.fixedToLocal ? (
         <Card title={t('import.account')}>
-          <View style={styles.chips}>
-            {accounts.map((account) => (
-              <Chip
-                key={account.id}
-                label={account.name}
-                selected={choice?.id === account.id}
-                onPress={() => setChoice({ id: account.id, isNew: false })}
-              />
-            ))}
-            <Chip
-              label={t('import.newAccount')}
-              selected={choice?.isNew === true}
-              onPress={chooseNew}
-            />
-          </View>
-          {choice?.isNew ? (
-            <>
-              <TextInput
-                value={newAccountName}
-                onChangeText={setNewAccountName}
-                placeholder={t('import.accountName')}
-                placeholderTextColor={theme.textMuted}
-                autoCapitalize="words"
-                autoCorrect={false}
-                style={[
-                  styles.input,
-                  {
-                    color: theme.text,
-                    borderColor: theme.border,
-                    backgroundColor: theme.surfaceAlt,
-                  },
-                ]}
-              />
-              {needsName ? (
-                <Text style={{ color: theme.textMuted, fontSize: 12 }}>
-                  {t('import.accountRequired')}
-                </Text>
-              ) : null}
-            </>
-          ) : null}
+          <AccountPicker
+            institutions={institutions}
+            accounts={accounts}
+            value={choice}
+            onChange={setChoice}
+          />
         </Card>
       ) : null}
 
@@ -379,13 +380,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   buttonText: { color: '#FFFFFF', fontWeight: '600' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    fontSize: 15,
-  },
   row: {
     flexDirection: 'row',
     gap: spacing.sm,
