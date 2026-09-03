@@ -28,9 +28,13 @@ only gives a signed amount uses `sideFromAmount()`.
 ## Tables
 
 - `accounts` — one row per bank account the owner imports statements for, plus
-  one local "My records" account that owns manual entries and untyped imports.
-  Migration 3 dropped the aggregator consent columns; `provider` now only ever
-  holds a `TransactionSource`.
+  one local "My records" account that owns manual entries and the tracker
+  workbook. Every one of them has `provider = 'file-import'`; "My records" is
+  the oldest, created before the import screen can offer "New account". `iban`
+  is set when the account was created from a camt.053 statement and is how the
+  next statement from that bank preselects it. Migration 3 dropped the
+  aggregator consent columns; `provider` now only ever holds a
+  `TransactionSource`.
 - `transactions` — the ledger. See dedupe below.
 - `categories` — shipped taxonomy plus any the owner adds. Ids are stable and
   never renamed; rules and history point at them.
@@ -39,7 +43,7 @@ only gives a signed amount uses `sideFromAmount()`.
   at 1000, so a correction always wins.
 - `budgets` — monthly limit per category.
 - `import_profiles` — user-defined column mappings for file import.
-- `settings` — key/value: locale, main currency, app lock.
+- `settings` — key/value: locale, main currency, app lock, last import account.
 
 ## Dedupe
 
@@ -54,7 +58,7 @@ CREATE UNIQUE INDEX idx_tx_hash ON transactions(account_id, import_hash);
 - `external_id` is the bank's own transaction id when the statement carries one
   (camt.053 `EndToEndId`) — the reliable key when present.
 - `import_hash` is an FNV-1a hash of `account | booking date | amount | normalised
-  description | discriminator`, for file imports, which have no stable id.
+description | discriminator`, for file imports, which have no stable id.
 - The **discriminator** separates rows a source repeats verbatim. A hand-kept
   sheet can legitimately list `comida fuera 20.00` three times in one month;
   without it all three collapse to one hash and two real movements are swallowed.
@@ -78,6 +82,7 @@ domain `Transaction` type never carries the column.
 ## What is excluded from statistics
 
 `countsTowardStats()` in `packages/core/src/aggregate.ts` drops:
+
 - rows with `excluded_from_stats = 1` (the owner's own call), and
 - anything categorised `transfer-internal`.
 

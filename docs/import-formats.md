@@ -12,13 +12,13 @@ layout — headers, preamble rows, delimiter, encoding, date and number formats,
 sign convention — is documented in this file once known. Layouts are never
 guessed from memory: a wrong header list detects the wrong profile silently.
 
-| Bank | Country | Export the bank offers | Profile |
-|---|---|---|---|
-| Trade Republic | DE | to be confirmed from a real export | not yet written |
-| ING Deutschland | DE | to be confirmed from a real export | not yet written |
-| DKB | DE | to be confirmed from a real export | not yet written |
-| Raisin (WeltSparen) | DE | to be confirmed from a real export | not yet written |
-| Openbank España | ES | to be confirmed from a real export | not yet written |
+| Bank                | Country | Export the bank offers             | Profile         |
+| ------------------- | ------- | ---------------------------------- | --------------- |
+| Trade Republic      | DE      | to be confirmed from a real export | not yet written |
+| ING Deutschland     | DE      | to be confirmed from a real export | not yet written |
+| DKB                 | DE      | to be confirmed from a real export | not yet written |
+| Raisin (WeltSparen) | DE      | to be confirmed from a real export | not yet written |
+| Openbank España     | ES      | to be confirmed from a real export | not yet written |
 
 Until a bank's profile exists, its CSV goes through `GENERIC_CSV` and its
 camt.053, if the bank offers one, through the camt.053 reader.
@@ -53,14 +53,14 @@ spreadsheet last wrote is used, which is what the owner sees on screen.
 
 Layout, as read from the real workbook:
 
-| Element | Where |
-|---|---|
-| Month sheets | `Enero` … `Diciembre`, one per month |
-| Header | Row 1: `Conceptos \| Ingresos \| Total \| Conceptos \| Gastos \| Total \| \| Resultado` |
-| Income block | Concepts in `A`, amounts in `B`, from row 2 |
-| Expense block | Concepts in `D`, amounts in `E`, from row 2 |
-| Totals | `C2` / `F2` / `H2` hold SUM formulas — outside the scanned columns, never imported |
-| Ignored sheets | `Totales`, `Backend`, `Venta Objetivos` — not listed in `monthSheets` |
+| Element        | Where                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------- |
+| Month sheets   | `Enero` … `Diciembre`, one per month                                                    |
+| Header         | Row 1: `Conceptos \| Ingresos \| Total \| Conceptos \| Gastos \| Total \| \| Resultado` |
+| Income block   | Concepts in `A`, amounts in `B`, from row 2                                             |
+| Expense block  | Concepts in `D`, amounts in `E`, from row 2                                             |
+| Totals         | `C2` / `F2` / `H2` hold SUM formulas — outside the scanned columns, never imported      |
+| Ignored sheets | `Totales`, `Backend`, `Venta Objetivos` — not listed in `monthSheets`                   |
 
 Three properties of this source drove design decisions elsewhere:
 
@@ -113,3 +113,23 @@ institution without a dedicated CSV profile.
   counterparty name.
 - `EndToEndId` is kept as the dedupe key, except the literal `NOTPROVIDED`, which
   many banks emit for every entry.
+
+## Which account a file lands in
+
+Every import is attributed to one account, chosen on the import screen before
+the rows are written. The dedupe indexes are per account (see
+`docs/data-model.md`), and `import_hash` includes the account id, so the screen
+parses the file again whenever the owner picks another account: the preview
+shows the rows exactly as the database will hold them, never rows hashed for
+one account and stored in another.
+
+- **camt.053** names its own account. `Stmt/Acct/Id/IBAN` and the servicing
+  institution `Stmt/Acct/Svcr/FinInstnId/Nm` come back as `statementAccount`
+  (IBAN compacted: no spaces, upper case). An existing account with that IBAN is
+  preselected. When the owner creates a new account for the file, the IBAN and
+  institution name are stored on it, so the next statement from that bank finds
+  its account by itself. The IBAN is never shown on screen; accounts are named.
+- **CSV** carries no account identity. The account the last import went to
+  (`lastImportAccount` in `settings`) is preselected, then "My records".
+- **The Presupuesto workbook** always lands in "My records" and shows no picker.
+  It is the owner's own ledger, not a bank's statement.
