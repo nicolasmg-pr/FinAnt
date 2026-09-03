@@ -24,6 +24,8 @@ export interface TransactionRow {
   import_hash: string;
   notes: string | null;
   excluded_from_stats: number;
+  /** Set by a soft delete. Rows with a value never leave the repository. */
+  deleted_at: string | null;
   created_at: string;
 }
 

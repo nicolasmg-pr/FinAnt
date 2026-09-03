@@ -51,6 +51,23 @@ export const es: Translations = {
     excludeFromStats: 'Excluir de las estadísticas',
     markInternal: 'Marcar como traspaso entre mis cuentas',
     addManual: 'Añadir movimiento',
+    detailTitle: 'Movimiento',
+    description: 'Descripción',
+    counterparty: 'Contraparte',
+    reference: 'Referencia',
+    bookingDate: 'Fecha contable',
+    valueDate: 'Fecha valor',
+    account: 'Cuenta',
+    category: 'Categoría',
+    notes: 'Notas',
+    categorySource: {
+      auto: 'asignada por una regla',
+      manual: 'asignada por ti',
+      none: 'sin clasificar',
+    },
+    excludedTag: 'Excluido',
+    deleteConfirm:
+      '¿Eliminar este movimiento? No volverá a aparecer si importas el mismo extracto otra vez.',
   },
   import: {
     title: 'Importar un archivo',
@@ -66,6 +83,9 @@ export const es: Translations = {
     issues_other: 'No se pudieron leer {{count}} filas',
     confirm: 'Importar',
     supportedFormats: 'Hoja de Excel o Google Sheets (.xlsx), CSV del banco o XML camt.053',
+    result: 'Importación terminada',
+    imported_one: '{{count}} movimiento importado',
+    imported_other: '{{count}} movimientos importados',
   },
   settings: {
     title: 'Ajustes',

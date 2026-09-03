@@ -48,4 +48,14 @@ export function intlLocale(): string {
   return INTL_LOCALE[currentLocale()];
 }
 
+/**
+ * Formats a plain `YYYY-MM-DD` for display. Parsed and formatted in UTC on both
+ * ends, so the calendar day never shifts with the device's time zone.
+ */
+export function formatBookingDate(date: string, options: Intl.DateTimeFormatOptions): string {
+  return new Intl.DateTimeFormat(intlLocale(), { ...options, timeZone: 'UTC' }).format(
+    new Date(`${date}T00:00:00Z`),
+  );
+}
+
 export { i18n };
