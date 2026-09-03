@@ -7,7 +7,7 @@ import {
   forecastYear,
   money,
   monthsOfYear,
-  summariseMonth,
+  summarisePeriod,
   yearMonthOf,
 } from '@finant/core';
 import { Amount } from '../../src/components/Amount';
@@ -15,6 +15,7 @@ import { Card } from '../../src/components/Card';
 import { CategoryBreakdown } from '../../src/components/CategoryBreakdown';
 import { ForecastChart } from '../../src/components/ForecastChart';
 import { useAppData } from '../../src/hooks/use-app-data';
+import { usePayPeriod } from '../../src/hooks/use-pay-period';
 import { intlLocale } from '../../src/i18n';
 import { spacing, useTheme } from '../../src/theme';
 
@@ -26,15 +27,20 @@ export default function DashboardScreen() {
   const { transactions, loading, reload } = useAppData();
 
   // Re-read on focus: an import happened on another screen.
-  useFocusEffect(useCallback(() => { void reload(); }, [reload]));
+  useFocusEffect(
+    useCallback(() => {
+      void reload();
+    }, [reload]),
+  );
 
   const today = new Date().toISOString().slice(0, 10);
   const month = yearMonthOf(today);
   const year = Number(month.slice(0, 4));
 
+  const { period, title: periodTitle } = usePayPeriod(transactions, today);
   const summary = useMemo(
-    () => summariseMonth(transactions, month, CURRENCY),
-    [transactions, month],
+    () => summarisePeriod(transactions, period, CURRENCY),
+    [transactions, period],
   );
   const forecast = useMemo(
     () => forecastYear(transactions, year, CURRENCY, { today }),
@@ -64,9 +70,11 @@ export default function DashboardScreen() {
     <ScrollView
       style={{ backgroundColor: theme.background }}
       contentContainerStyle={styles.screen}
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} tintColor={theme.accent} />}
+      refreshControl={
+        <RefreshControl refreshing={loading} onRefresh={reload} tintColor={theme.accent} />
+      }
     >
-      <Card title={t('dashboard.thisMonth')}>
+      <Card title={periodTitle}>
         <View style={styles.figures}>
           <Figure label={t('dashboard.income')}>
             <Amount value={summary.income} tone="income" style={styles.figureValue} />
@@ -83,6 +91,11 @@ export default function DashboardScreen() {
             {t('dashboard.savingsRate')}: {savingsRate}%
           </Text>
         ) : null}
+        {period.anchored ? (
+          <Text style={[styles.hint, { color: theme.textMuted }]}>
+            {t('dashboard.payPeriodHint')}
+          </Text>
+        ) : null}
       </Card>
 
       <Card title={t('dashboard.topCategories')}>
@@ -91,7 +104,9 @@ export default function DashboardScreen() {
 
       <Card
         title={t('dashboard.yearForecast')}
-        subtitle={t(`dashboard.confidence.${forecast.confidence}`, { months: forecast.historyMonths })}
+        subtitle={t(`dashboard.confidence.${forecast.confidence}`, {
+          months: forecast.historyMonths,
+        })}
       >
         <ForecastChart months={forecast.months} labels={monthLabels} />
         <View style={styles.figures}>
@@ -135,7 +150,13 @@ function Figure({ label, children }: { label: string; children: React.ReactNode 
 
 const styles = StyleSheet.create({
   screen: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  figures: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.xs },
+  hint: { fontSize: 13 },
+  figures: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
   figure: { flex: 1, gap: 2 },
   figureLabel: { fontSize: 12 },
   figureValue: { fontSize: 17, fontWeight: '700' },
