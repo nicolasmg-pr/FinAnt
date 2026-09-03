@@ -7,6 +7,7 @@ import {
   filterTransactions,
   matchesFilter,
   presetOf,
+  usedCategoryIds,
   type TransactionFilter,
 } from '../src/filter';
 import { tx } from './factory';
@@ -21,14 +22,14 @@ const cafe = tx({
   amount: -3.2,
   description: 'CAFÉ MARÍA',
   counterparty: 'Cafe Maria SL',
-  categoryId: 'eating-out',
+  categoryId: 'food-restaurants',
 });
 const salary = tx({
   date: '2026-03-01',
   amount: 2400,
   description: 'Gehalt Februar',
   counterparty: 'ARBEITGEBER AG',
-  categoryId: 'payroll',
+  categoryId: 'income-salary',
   accountId: 'acc-2',
 });
 const unknown = tx({ date: '2026-02-10', amount: -80, description: 'ROSSMANN 4711' });
@@ -83,7 +84,7 @@ describe('account filter', () => {
 
 describe('category filter', () => {
   it('keeps only the chosen categories', () => {
-    expect(filterTransactions(all, filter({ categoryIds: ['payroll'] }))).toEqual([salary]);
+    expect(filterTransactions(all, filter({ categoryIds: ['income-salary'] }))).toEqual([salary]);
   });
 
   it('matches a movement with no category at all under "uncategorised"', () => {
@@ -189,5 +190,37 @@ describe('dateRangePreset', () => {
     );
     expect(presetOf(EMPTY_FILTER, '2026-03-09')).toBe('all');
     expect(presetOf(filter({ from: '2026-02-07', to: null }), '2026-03-09')).toBe(null);
+  });
+});
+
+describe('usedCategoryIds', () => {
+  it('never repeats an id, even though "uncategorised" is itself a built-in category', () => {
+    const ids = usedCategoryIds(all);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('lists uncategorised once, first, so the chip for it leads the row', () => {
+    const ids = usedCategoryIds(all);
+    expect(ids[0]).toBe(UNCATEGORISED_ID);
+    expect(ids.filter((id) => id === UNCATEGORISED_ID)).toEqual([UNCATEGORISED_ID]);
+  });
+
+  it('treats an explicit uncategorised id and a null category as the same chip', () => {
+    const explicit = tx({
+      date: '2026-03-06',
+      amount: -9,
+      description: 'X',
+      categoryId: UNCATEGORISED_ID,
+    });
+    const ids = usedCategoryIds([...all, explicit]);
+    expect(ids.filter((id) => id === UNCATEGORISED_ID)).toEqual([UNCATEGORISED_ID]);
+  });
+
+  it('offers only the categories the ledger actually uses', () => {
+    expect(usedCategoryIds([salary])).toEqual(['income-salary']);
+  });
+
+  it('has nothing to offer for an empty ledger', () => {
+    expect(usedCategoryIds([])).toEqual([]);
   });
 });
