@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { useRouter } from 'expo-router';
@@ -15,25 +15,120 @@ import {
   readCsv,
   readXlsx,
   yearFromFileName,
-  type DraftTransaction,
-  type ImportIssue,
   type ImportProfile,
+  type ImportResult,
+  type StatementAccount,
 } from '@finant/importers';
 import { Amount } from '../src/components/Amount';
 import { Card } from '../src/components/Card';
-import { getOrCreateLocalAccount } from '../src/db/accounts-repo';
+import { Chip } from '../src/components/Chip';
+import {
+  createAccount,
+  findAccountByIban,
+  getOrCreateLocalAccount,
+  listAccounts,
+  type AccountRow,
+} from '../src/db/accounts-repo';
+import { readSetting, SETTING_LAST_IMPORT_ACCOUNT, writeSetting } from '../src/db/settings-repo';
+import { newId } from '../src/db/transactions-repo';
 import { ingest, type IngestResult } from '../src/services/ingest';
 import { radius, spacing, useTheme } from '../src/theme';
 
-interface Staged {
+/**
+ * A picked file once its format is known, but before its rows are final. The
+ * import hash of every row includes the account id, so the file is parsed
+ * again (in memory, from the same text) whenever the owner picks another
+ * account. The preview then shows exactly what the database will hold.
+ */
+interface ParsedFile {
   fileName: string;
   /** Human-readable name of the format that was used. */
   formatLabel: string;
-  transactions: readonly DraftTransaction[];
-  issues: readonly ImportIssue[];
+  parse: (accountId: string) => ImportResult;
+  /** The account the statement itself names. camt.053 only; null for CSV and xlsx. */
+  statementAccount: StatementAccount | null;
+  /** The tracker spreadsheet is the owner's own ledger: always "My records", no picker. */
+  fixedToLocal: boolean;
+}
+
+/** The account the import will land in. `isNew` means it is created on confirm. */
+interface AccountChoice {
+  readonly id: string;
+  readonly isNew: boolean;
 }
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/**
+ * Reads the picked file and works out how to parse it. `probeAccountId` is
+ * only used to run the camt.053 reader once for its `statementAccount`; the
+ * rows from that run are discarded.
+ */
+async function parseFile(
+  asset: { uri: string; name: string },
+  probeAccountId: string,
+  forcedProfile: ImportProfile | undefined,
+): Promise<ParsedFile> {
+  const file = new File(asset.uri);
+  const bytes = await file.bytes();
+
+  // An .xlsx is a zip, so it is detected by the archive magic bytes rather
+  // than by a filename extension or a MIME type the picker may not set.
+  if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
+    const workbook = readXlsx(bytes);
+    const year = yearFromFileName(asset.name);
+    return {
+      fileName: asset.name,
+      formatLabel: `${PRESUPUESTO_XLSX.label} · ${year}`,
+      parse: (accountId) => importWorkbook(workbook, PRESUPUESTO_XLSX, { accountId, year }),
+      statementAccount: null,
+      fixedToLocal: true,
+    };
+  }
+
+  const text = await file.text();
+
+  if (text.trimStart().startsWith('<')) {
+    const parse = (accountId: string) => parseCamt053(text, { accountId });
+    return {
+      fileName: asset.name,
+      formatLabel: 'camt.053',
+      parse,
+      statementAccount: parse(probeAccountId).statementAccount,
+      fixedToLocal: false,
+    };
+  }
+
+  const profile =
+    forcedProfile ?? detectProfile(readCsv(text).header, BUILT_IN_PROFILES) ?? GENERIC_CSV;
+  const table = readCsv(text, { headerRow: profile.headerRow ?? 0 });
+  return {
+    fileName: asset.name,
+    formatLabel: profile.label,
+    parse: (accountId) => applyProfile(table, profile, { accountId }),
+    statementAccount: null,
+    fixedToLocal: false,
+  };
+}
+
+/** Statement IBAN first, then the account the last import went to, then "My records". */
+async function preselect(
+  file: ParsedFile,
+  known: readonly AccountRow[],
+  localId: string,
+): Promise<AccountChoice> {
+  if (file.fixedToLocal) return { id: localId, isNew: false };
+  const iban = file.statementAccount?.iban;
+  if (iban) {
+    const match = await findAccountByIban(iban);
+    if (match) return { id: match.id, isNew: false };
+  }
+  const lastUsed = await readSetting(SETTING_LAST_IMPORT_ACCOUNT);
+  if (lastUsed && known.some((account) => account.id === lastUsed)) {
+    return { id: lastUsed, isNew: false };
+  }
+  return { id: localId, isNew: false };
+}
 
 /**
  * File import. Everything happens on the device: the picked file is read from
@@ -44,15 +139,24 @@ export default function ImportScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
   const router = useRouter();
-  const [staged, setStaged] = useState<Staged | null>(null);
+  const [file, setFile] = useState<ParsedFile | null>(null);
+  const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  const [choice, setChoice] = useState<AccountChoice | null>(null);
+  const [newAccountName, setNewAccountName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<IngestResult | null>(null);
 
+  // Parsed for the chosen account, so the hashes in the preview are the ones stored.
+  const staged = useMemo(() => (file && choice ? file.parse(choice.id) : null), [file, choice]);
+  const needsName = choice?.isNew === true && newAccountName.trim() === '';
+
   const pick = async (forcedProfile?: ImportProfile) => {
     setError(null);
     setResult(null);
-    const result = await DocumentPicker.getDocumentAsync({
+    setFile(null);
+    setChoice(null);
+    const picked = await DocumentPicker.getDocumentAsync({
       type: [
         XLSX_MIME,
         'text/csv',
@@ -64,58 +168,21 @@ export default function ImportScreen() {
       ],
       copyToCacheDirectory: true,
     });
-    if (result.canceled || !result.assets[0]) return;
+    if (picked.canceled || !picked.assets[0]) return;
 
-    const asset = result.assets[0];
+    const asset = picked.assets[0];
     setBusy(true);
     try {
-      const accountId = await getOrCreateLocalAccount();
-      const file = new File(asset.uri);
-
-      // An .xlsx is a zip, so it is detected by the archive magic bytes rather
-      // than by a filename extension or a MIME type the picker may not set.
-      const head = (await file.bytes()).subarray(0, 4);
-      const isZip = head[0] === 0x50 && head[1] === 0x4b;
-
-      if (isZip) {
-        const workbook = readXlsx(await file.bytes());
-        const year = yearFromFileName(asset.name);
-        const parsed = importWorkbook(workbook, PRESUPUESTO_XLSX, { accountId, year });
-        setStaged({
-          fileName: asset.name,
-          formatLabel: `${PRESUPUESTO_XLSX.label} · ${year}`,
-          transactions: parsed.transactions,
-          issues: parsed.issues,
-        });
-        return;
-      }
-
-      const text = await file.text();
-
-      if (text.trimStart().startsWith('<')) {
-        const parsed = parseCamt053(text, { accountId });
-        setStaged({
-          fileName: asset.name,
-          formatLabel: 'camt.053',
-          transactions: parsed.transactions,
-          issues: parsed.issues,
-        });
-        return;
-      }
-
-      const table = readCsv(text);
-      const profile = forcedProfile ?? detectProfile(table.header, BUILT_IN_PROFILES) ?? GENERIC_CSV;
-      const parsed = applyProfile(
-        readCsv(text, { headerRow: profile.headerRow ?? 0 }),
-        profile,
-        { accountId },
-      );
-      setStaged({
-        fileName: asset.name,
-        formatLabel: profile.label,
-        transactions: parsed.transactions,
-        issues: parsed.issues,
-      });
+      // "My records" must exist before any other account can be offered or
+      // created; see getOrCreateLocalAccount.
+      const localId = await getOrCreateLocalAccount();
+      const known = await listAccounts();
+      const parsed = await parseFile(asset, localId, forcedProfile);
+      setAccounts(known);
+      // A statement that names its bank gives the new-account field a sensible default.
+      setNewAccountName(parsed.statementAccount?.name ?? '');
+      setChoice(await preselect(parsed, known, localId));
+      setFile(parsed);
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
@@ -123,14 +190,34 @@ export default function ImportScreen() {
     }
   };
 
+  const chooseNew = () =>
+    setChoice((current) => (current?.isNew ? current : { id: newId(), isNew: true }));
+
   const confirm = async () => {
-    if (!staged) return;
+    if (!file || !staged || !choice || needsName) return;
     setBusy(true);
     try {
+      if (choice.isNew) {
+        await createAccount({
+          id: choice.id,
+          name: newAccountName.trim(),
+          currency: staged.transactions[0]?.amount.currency ?? 'EUR',
+          provider: 'file-import',
+          // Stored so the next statement from this bank preselects the account.
+          iban: file.statementAccount?.iban ?? null,
+          institutionName: file.statementAccount?.name ?? null,
+        });
+        // The account now exists: a retry after a failed ingest must reuse it,
+        // not try to create it again. The id is unchanged, so the hashes hold.
+        setChoice({ id: choice.id, isNew: false });
+        setAccounts(await listAccounts());
+      }
+      if (!file.fixedToLocal) await writeSetting(SETTING_LAST_IMPORT_ACCOUNT, choice.id);
       // Stay on screen: the owner should see how many rows were new and how
       // many the unique indexes already held before the modal closes.
       setResult(await ingest(staged.transactions));
-      setStaged(null);
+      setFile(null);
+      setChoice(null);
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
@@ -139,9 +226,17 @@ export default function ImportScreen() {
   };
 
   return (
-    <ScrollView style={{ backgroundColor: theme.background }} contentContainerStyle={{ padding: spacing.lg }}>
+    <ScrollView
+      style={{ backgroundColor: theme.background }}
+      contentContainerStyle={{ padding: spacing.lg }}
+      keyboardShouldPersistTaps="handled"
+    >
       <Card title={t('import.title')}>
-        <Pressable onPress={() => void pick()} disabled={busy} style={[styles.button, { backgroundColor: theme.accent }]}>
+        <Pressable
+          onPress={() => void pick()}
+          disabled={busy}
+          style={[styles.button, { backgroundColor: theme.accent }]}
+        >
           <Text style={styles.buttonText}>{t('import.pickFile')}</Text>
         </Pressable>
         <Text style={{ color: theme.textMuted, fontSize: 12 }}>{t('import.supportedFormats')}</Text>
@@ -150,7 +245,9 @@ export default function ImportScreen() {
 
       {result ? (
         <Card title={t('import.result')}>
-          <Text style={{ color: theme.text }}>{t('import.imported', { count: result.inserted })}</Text>
+          <Text style={{ color: theme.text }}>
+            {t('import.imported', { count: result.inserted })}
+          </Text>
           {result.duplicates > 0 ? (
             <Text style={{ color: theme.textMuted }}>
               {t('import.duplicatesSkipped', { count: result.duplicates })}
@@ -165,11 +262,56 @@ export default function ImportScreen() {
         </Card>
       ) : null}
 
-      {staged ? (
+      {file && !file.fixedToLocal ? (
+        <Card title={t('import.account')}>
+          <View style={styles.chips}>
+            {accounts.map((account) => (
+              <Chip
+                key={account.id}
+                label={account.name}
+                selected={choice?.id === account.id}
+                onPress={() => setChoice({ id: account.id, isNew: false })}
+              />
+            ))}
+            <Chip
+              label={t('import.newAccount')}
+              selected={choice?.isNew === true}
+              onPress={chooseNew}
+            />
+          </View>
+          {choice?.isNew ? (
+            <>
+              <TextInput
+                value={newAccountName}
+                onChangeText={setNewAccountName}
+                placeholder={t('import.accountName')}
+                placeholderTextColor={theme.textMuted}
+                autoCapitalize="words"
+                autoCorrect={false}
+                style={[
+                  styles.input,
+                  {
+                    color: theme.text,
+                    borderColor: theme.border,
+                    backgroundColor: theme.surfaceAlt,
+                  },
+                ]}
+              />
+              {needsName ? (
+                <Text style={{ color: theme.textMuted, fontSize: 12 }}>
+                  {t('import.accountRequired')}
+                </Text>
+              ) : null}
+            </>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {file && staged ? (
         <>
           <Card
             title={t('import.preview')}
-            subtitle={t('import.detectedProfile', { profile: staged.formatLabel })}
+            subtitle={t('import.detectedProfile', { profile: file.formatLabel })}
           >
             <Text style={{ color: theme.text }}>
               {t('import.rowsReady', { count: staged.transactions.length })}
@@ -181,7 +323,10 @@ export default function ImportScreen() {
             ) : null}
 
             {staged.transactions.slice(0, 8).map((draft) => (
-              <View key={draft.importHash} style={[styles.row, { borderBottomColor: theme.border }]}>
+              <View
+                key={draft.importHash}
+                style={[styles.row, { borderBottomColor: theme.border }]}
+              >
                 <Text style={{ color: theme.text, flex: 1 }} numberOfLines={1}>
                   {draft.bookingDate} · {draft.description}
                 </Text>
@@ -191,8 +336,11 @@ export default function ImportScreen() {
 
             <Pressable
               onPress={() => void confirm()}
-              disabled={busy || staged.transactions.length === 0}
-              style={[styles.button, { backgroundColor: theme.accent, opacity: busy ? 0.6 : 1 }]}
+              disabled={busy || needsName || staged.transactions.length === 0}
+              style={[
+                styles.button,
+                { backgroundColor: theme.accent, opacity: busy || needsName ? 0.6 : 1 },
+              ]}
             >
               <Text style={styles.buttonText}>{t('import.confirm')}</Text>
             </Pressable>
@@ -214,8 +362,20 @@ export default function ImportScreen() {
 }
 
 const styles = StyleSheet.create({
-  button: { paddingVertical: spacing.md, borderRadius: radius.md, alignItems: 'center', marginTop: spacing.sm },
+  button: {
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
   buttonText: { color: '#FFFFFF', fontWeight: '600' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  input: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    fontSize: 15,
+  },
   row: {
     flexDirection: 'row',
     gap: spacing.sm,

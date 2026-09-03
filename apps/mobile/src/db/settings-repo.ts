@@ -22,3 +22,5 @@ export async function writeSetting(key: string, value: string): Promise<void> {
 export const SETTING_LOCALE = 'locale';
 export const SETTING_CURRENCY = 'currency';
 export const SETTING_APP_LOCK = 'appLock';
+/** Account id preselected on the import screen: the one the last import went to. */
+export const SETTING_LAST_IMPORT_ACCOUNT = 'lastImportAccount';

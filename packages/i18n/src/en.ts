@@ -88,6 +88,10 @@ export const en = {
     result: 'Import finished',
     imported_one: '{{count}} movement imported',
     imported_other: '{{count}} movements imported',
+    account: 'Account',
+    newAccount: 'New account',
+    accountName: 'Account name',
+    accountRequired: 'Give the new account a name.',
   },
   settings: {
     title: 'Settings',

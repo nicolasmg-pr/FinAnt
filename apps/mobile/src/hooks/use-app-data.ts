@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Transaction } from '@finant/core';
+import { listAccounts, type AccountRow } from '../db/accounts-repo';
 import { listAllTransactions } from '../db/transactions-repo';
 
 interface AppData {
   transactions: Transaction[];
+  /** Non-archived accounts, so screens can name where a movement came from. */
+  accounts: AccountRow[];
   loading: boolean;
   error: Error | null;
   reload: () => Promise<void>;
@@ -18,13 +21,16 @@ interface AppData {
  */
 export function useAppData(): AppData {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const reload = useCallback(async () => {
     try {
       setError(null);
-      setTransactions(await listAllTransactions());
+      const [rows, known] = await Promise.all([listAllTransactions(), listAccounts()]);
+      setTransactions(rows);
+      setAccounts(known);
     } catch (cause) {
       setError(cause as Error);
     } finally {
@@ -36,5 +42,5 @@ export function useAppData(): AppData {
     void reload();
   }, [reload]);
 
-  return { transactions, loading, error, reload };
+  return { transactions, accounts, loading, error, reload };
 }
