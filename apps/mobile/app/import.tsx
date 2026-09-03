@@ -154,6 +154,8 @@ export default function ImportScreen() {
   const pick = async (forcedProfile?: ImportProfile) => {
     setError(null);
     setResult(null);
+    setFile(null);
+    setChoice(null);
     const picked = await DocumentPicker.getDocumentAsync({
       type: [
         XLSX_MIME,
