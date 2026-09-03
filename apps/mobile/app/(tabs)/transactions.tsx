@@ -4,7 +4,6 @@ import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
-  BUILT_IN_CATEGORIES,
   CATEGORY_BY_ID,
   DATE_RANGE_PRESETS,
   EMPTY_FILTER,
@@ -17,6 +16,7 @@ import {
   isValidISODate,
   money,
   presetOf,
+  usedCategoryIds,
   type DateRangePreset,
   type Money,
   type Transaction,
@@ -93,11 +93,7 @@ export default function TransactionsScreen() {
 
   // Only the categories the ledger actually uses: offering twenty chips for a
   // file that touched four of them is a worse list, not a more complete one.
-  const usedCategoryIds = useMemo(() => {
-    const present = new Set(transactions.map((tx) => tx.categoryId ?? UNCATEGORISED_ID));
-    const ordered = BUILT_IN_CATEGORIES.filter((c) => present.has(c.id)).map((c) => c.id);
-    return present.has(UNCATEGORISED_ID) ? [UNCATEGORISED_ID, ...ordered] : ordered;
-  }, [transactions]);
+  const categoryIds = useMemo(() => usedCategoryIds(transactions), [transactions]);
 
   // One account needs no label; the name only helps once there is something to tell apart.
   const accountNames = useMemo(
@@ -125,7 +121,7 @@ export default function TransactionsScreen() {
             setPanelOpen={setPanelOpen}
             activeCount={activeCount}
             accounts={accounts}
-            categoryIds={usedCategoryIds}
+            categoryIds={categoryIds}
             resultCount={visible.length}
             net={net}
             uncategorisedCount={uncategorisedCount}

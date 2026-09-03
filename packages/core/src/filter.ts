@@ -1,4 +1,4 @@
-import { UNCATEGORISED_ID } from './categories';
+import { BUILT_IN_CATEGORIES, UNCATEGORISED_ID } from './categories';
 import { addMonths, yearMonthOf, yearOf } from './dates';
 import { normalise } from './normalise';
 import type { ISODate, Transaction, TransactionSide } from './types';
@@ -141,4 +141,20 @@ export function presetOf(filter: TransactionFilter, today: ISODate): DateRangePr
     if (range.from === filter.from && range.to === filter.to) return preset;
   }
   return null;
+}
+
+/**
+ * The category ids worth offering as filter chips: the ones the ledger actually
+ * uses, in the built-in order, with "uncategorised" pulled to the front.
+ *
+ * `UNCATEGORISED_ID` is itself a built-in category, so it has to be dropped
+ * from the ordered pass before being prepended — listing it from both sources
+ * renders two chips with the same key.
+ */
+export function usedCategoryIds(transactions: readonly Transaction[]): string[] {
+  const present = new Set(transactions.map((tx) => tx.categoryId ?? UNCATEGORISED_ID));
+  const ordered = BUILT_IN_CATEGORIES.filter(
+    (category) => category.id !== UNCATEGORISED_ID && present.has(category.id),
+  ).map((category) => category.id);
+  return present.has(UNCATEGORISED_ID) ? [UNCATEGORISED_ID, ...ordered] : ordered;
 }
