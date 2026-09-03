@@ -8,13 +8,24 @@ export interface CsvTable {
   readonly header: readonly string[];
   readonly rows: readonly (readonly string[])[];
   readonly delimiter: string;
+  /** Index of the header among the non-empty rows, after any preamble. */
+  readonly headerRow: number;
+  /**
+   * 1-based line in the source file for each data row, so an issue can name
+   * the line the owner sees in their editor. Blank lines and the newlines
+   * inside quoted fields both shift this away from the row index.
+   */
+  readonly rowLines: readonly number[];
 }
 
 const CANDIDATE_DELIMITERS = [';', ',', '\t', '|'] as const;
 
 /** Picks the delimiter that yields the most consistent column count. */
 export function detectDelimiter(text: string): string {
-  const sample = text.split(/\r?\n/).filter((l) => l.trim() !== '').slice(0, 20);
+  const sample = text
+    .split(/\r?\n/)
+    .filter((l) => l.trim() !== '')
+    .slice(0, 20);
   let best = ',';
   let bestScore = -1;
   for (const delimiter of CANDIDATE_DELIMITERS) {
@@ -43,14 +54,19 @@ function splitLine(line: string, delimiter: string): string[] {
 
 interface ParsedCsv {
   rows: string[][];
+  /** 1-based source line each row starts on. */
+  lines: number[];
 }
 
 function parse(text: string, delimiter: string): ParsedCsv {
   const rows: string[][] = [];
+  const lines: number[] = [];
   let row: string[] = [];
   let field = '';
   let inQuotes = false;
   let i = 0;
+  let line = 1;
+  let rowLine = 1;
 
   // Strip a UTF-8 BOM: Excel writes one, and it silently poisons the first header.
   if (text.charCodeAt(0) === 0xfeff) i = 1;
@@ -58,6 +74,7 @@ function parse(text: string, delimiter: string): ParsedCsv {
   while (i < text.length) {
     const ch = text[i]!;
     if (inQuotes) {
+      if (ch === '\n') line += 1;
       if (ch === '"') {
         if (text[i + 1] === '"') {
           field += '"';
@@ -90,9 +107,12 @@ function parse(text: string, delimiter: string): ParsedCsv {
     if (ch === '\n') {
       row.push(field);
       rows.push(row);
+      lines.push(rowLine);
       row = [];
       field = '';
       i += 1;
+      line += 1;
+      rowLine = line;
       continue;
     }
     field += ch;
@@ -101,8 +121,9 @@ function parse(text: string, delimiter: string): ParsedCsv {
   if (field !== '' || row.length > 0) {
     row.push(field);
     rows.push(row);
+    lines.push(rowLine);
   }
-  return { rows };
+  return { rows, lines };
 }
 
 /**
@@ -110,10 +131,39 @@ function parse(text: string, delimiter: string): ParsedCsv {
  * blocks that Spanish and German banks put above the real table (account
  * holder, IBAN, date range).
  */
-export function readCsv(text: string, options: { delimiter?: string; headerRow?: number } = {}): CsvTable {
+export function readCsv(
+  text: string,
+  options: { delimiter?: string; headerRow?: number } = {},
+): CsvTable {
+  const { rows, lines, delimiter } = readRows(text, options);
+  const headerRow = options.headerRow ?? 0;
+  const header = (rows[headerRow] ?? []).map((c) => c.trim());
+  return {
+    header,
+    rows: rows.slice(headerRow + 1),
+    delimiter,
+    headerRow,
+    rowLines: lines.slice(headerRow + 1),
+  };
+}
+
+/**
+ * Every non-empty row with the line it came from, before a header is chosen.
+ * Header discovery needs to look at the rows to decide which one is the header,
+ * so it cannot go through `readCsv`, which needs that answer up front.
+ */
+export function readRows(
+  text: string,
+  options: { delimiter?: string } = {},
+): { rows: readonly (readonly string[])[]; lines: readonly number[]; delimiter: string } {
   const delimiter = options.delimiter ?? detectDelimiter(text);
-  const all = parse(text, delimiter).rows.filter((r) => r.some((c) => c.trim() !== ''));
-  const headerIndex = options.headerRow ?? 0;
-  const header = (all[headerIndex] ?? []).map((c) => c.trim());
-  return { header, rows: all.slice(headerIndex + 1), delimiter };
+  const parsed = parse(text, delimiter);
+  const rows: string[][] = [];
+  const lines: number[] = [];
+  parsed.rows.forEach((row, i) => {
+    if (!row.some((c) => c.trim() !== '')) return;
+    rows.push(row);
+    lines.push(parsed.lines[i] ?? i + 1);
+  });
+  return { rows, lines, delimiter };
 }

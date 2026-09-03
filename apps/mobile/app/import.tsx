@@ -6,13 +6,11 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   applyProfile,
-  BUILT_IN_PROFILES,
-  detectProfile,
-  GENERIC_CSV,
+  decodeStatement,
   importWorkbook,
   parseCamt053,
   PRESUPUESTO_XLSX,
-  readCsv,
+  readStatementCsv,
   readXlsx,
   yearFromFileName,
   type ImportProfile,
@@ -86,7 +84,9 @@ async function parseFile(
     };
   }
 
-  const text = await file.text();
+  // Decoded from the bytes already in hand, not via `file.text()`: German
+  // exports are ISO-8859-1, and a UTF-8 read turns every umlaut into U+FFFD.
+  const text = decodeStatement(bytes);
 
   if (text.trimStart().startsWith('<')) {
     const parse = (accountId: string) => parseCamt053(text, { accountId });
@@ -99,9 +99,9 @@ async function parseFile(
     };
   }
 
-  const profile =
-    forcedProfile ?? detectProfile(readCsv(text).header, BUILT_IN_PROFILES) ?? GENERIC_CSV;
-  const table = readCsv(text, { headerRow: profile.headerRow ?? 0 });
+  // The header is found by scanning, not assumed to be row 0: bank exports put
+  // an account/period preamble above the table.
+  const { table, profile } = readStatementCsv(text, { profile: forcedProfile });
   return {
     fileName: asset.name,
     formatLabel: profile.label,

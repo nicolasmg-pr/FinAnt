@@ -32,6 +32,21 @@ separator, sign convention, and which column carries what.
 Header lookup is case- and accent-insensitive and falls back to a substring
 match, so `Fecha operación`, `FECHA OPERACION` and `Fecha` all resolve.
 
+**The header row is found, not assumed.** Bank exports open with a preamble
+block — account holder, IBAN, period, opening balance — and the table starts
+below it. `readStatementCsv` offers each of the first 40 rows to every profile
+in turn and takes the first one a profile recognises by its `detectHeaders`.
+With no match, the generic profile's header is the row whose width the body of
+the file agrees with, scored as columns × rows so a long two-column preamble
+loses to the table underneath it. Issue line numbers come from the reader,
+which records the source line of every row, so a blank line or a newline inside
+a quoted field does not shift them.
+
+**Encoding is sniffed, not assumed.** `decodeStatement` reads the bytes as
+UTF-8 when they are valid UTF-8 and as windows-1252 otherwise. German exports
+are still ISO-8859-1; read as UTF-8, every umlaut becomes U+FFFD and lands in
+the stored narrative and in the rules that match on it.
+
 Parsing rules worth knowing:
 
 - **Dates**: day-first is the default (`03/04/2026` is 3 April). A profile can
@@ -92,6 +107,47 @@ sheet's own SUM totals, then lists any concept with no category mapping. It
 exits non-zero on a mismatch. The file is read locally and nothing leaves the
 machine; real exports never enter the repository — `packages/importers/tests/`
 generates its fixtures in code instead.
+
+## ING Deutschland — Umsatzanzeige (.csv)
+
+`ING_UMSATZANZEIGE` in `src/profiles/ing.ts`. Exported from the ING web
+banking as `Umsatzanzeige_<IBAN>_<YYYYMMDD>.csv`. Semicolon-delimited,
+ISO-8859-1, `DD.MM.YYYY`, comma decimal separator, signed amounts.
+
+Thirteen preamble lines (`Umsatzanzeige`, `IBAN`, `Kontoname`, `Bank`, `Kunde`,
+`Zeitraum`, `Saldo`, `Sortierung`, and a paragraph about pending movements)
+sit above the table. The header is:
+
+```
+Buchung;Wertstellungsdatum;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;Saldo;Währung;Betrag;Währung
+```
+
+| Column | Index | Mapped to |
+| --- | --- | --- |
+| `Buchung` | 0 | `bookingDate` |
+| `Wertstellungsdatum` | 1 | `valueDate` |
+| `Auftraggeber/Empfänger` | 2 | `counterparty` |
+| `Buchungstext` | 3 | `reference` |
+| `Verwendungszweck` | 4 | `description` |
+| `Saldo` | 5 | `balance` (running balance after the movement) |
+| `Währung` | 6 | — (currency of `Saldo`) |
+| `Betrag` | 7 | `amount` |
+| `Währung` | 8 | `currency` |
+
+Two traps this profile exists to avoid:
+
+- **`Buchung` is the booking date.** The generic profile's substring match hits
+  `Wertstellungsdatum` first, which moves a movement booked on 1 March but
+  valued on 28 February into the wrong month.
+- **`Währung` appears twice.** Resolved by name, the amount would take the
+  balance's currency. The profile pins index 8.
+
+`Verwendungszweck` is empty on card withdrawals and some direct debits; the
+importer then falls back to the counterparty for the description.
+
+`Saldo` is a running balance that reconciles exactly: for consecutive rows,
+`Saldo(n) - Betrag(n) = Saldo(n+1)`. That is what the bank view's balance
+reconciliation checks an import against.
 
 ## Other CSV exports
 

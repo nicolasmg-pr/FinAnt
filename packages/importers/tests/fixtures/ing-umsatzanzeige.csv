@@ -1,0 +1,17 @@
+Umsatzanzeige;Datei erstellt am: 03.09.2026 12:35
+
+IBAN;DE00 0000 0000 0000 0000 00
+Kontoname;Girokonto
+Bank;ING
+Kunde;Muster Person
+Zeitraum;01.01.2026 - 03.09.2026
+Saldo;100,00;EUR
+
+Sortierung;Datum absteigend
+
+In der CSV-Datei finden Sie alle bereits gebuchten Umsätze. Die vorgemerkten Umsätze werden nicht aufgenommen, auch wenn sie in Ihrem Internetbanking angezeigt werden.
+
+Buchung;Wertstellungsdatum;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;Saldo;Währung;Betrag;Währung
+02.03.2026;03.03.2026;MUSTER MARKT GMBH;Lastschrift;Einkauf Filiale 12;100,00;EUR;-25,40;EUR
+01.03.2026;01.03.2026;ARBEITGEBER AG;Gehalt/Rente;Gehalt Februar;125,40;EUR;1.234,56;EUR
+28.02.2026;28.02.2026;BARGELDAUSZAHLUNG;Lastschrift;;-1.109,16;EUR;-100,00;EUR
