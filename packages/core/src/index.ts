@@ -15,3 +15,4 @@ export * from './budget';
 export * from './period';
 export * from './transfers';
 export * from './filter';
+export * from './balance';
