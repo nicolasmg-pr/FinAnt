@@ -19,10 +19,14 @@ type Filter = 'all' | 'uncategorised';
 export default function TransactionsScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { transactions, loading, reload } = useAppData();
+  const { transactions, accounts, loading, reload } = useAppData();
   const [filter, setFilter] = useState<Filter>('all');
 
-  useFocusEffect(useCallback(() => { void reload(); }, [reload]));
+  useFocusEffect(
+    useCallback(() => {
+      void reload();
+    }, [reload]),
+  );
 
   const uncategorisedCount = useMemo(
     () => transactions.filter((tx) => !tx.categoryId || tx.categoryId === UNCATEGORISED_ID).length,
@@ -35,6 +39,12 @@ export default function TransactionsScreen() {
         ? transactions
         : transactions.filter((tx) => !tx.categoryId || tx.categoryId === UNCATEGORISED_ID),
     [transactions, filter],
+  );
+
+  // One account needs no label; the name only helps once there is something to tell apart.
+  const accountNames = useMemo(
+    () => (accounts.length > 1 ? new Map(accounts.map((a) => [a.id, a.name])) : null),
+    [accounts],
   );
 
   return (
@@ -59,13 +69,21 @@ export default function TransactionsScreen() {
         ListEmptyComponent={
           <Text style={[styles.empty, { color: theme.textMuted }]}>{t('transactions.empty')}</Text>
         }
-        renderItem={({ item }) => <Row transaction={item} />}
+        renderItem={({ item }) => (
+          <Row transaction={item} accountName={accountNames?.get(item.accountId) ?? null} />
+        )}
       />
     </View>
   );
 }
 
-function Row({ transaction }: { transaction: Transaction }) {
+function Row({
+  transaction,
+  accountName,
+}: {
+  transaction: Transaction;
+  accountName: string | null;
+}) {
   const theme = useTheme();
   const { t } = useTranslation();
   const router = useRouter();
@@ -77,12 +95,11 @@ function Row({ transaction }: { transaction: Transaction }) {
   const date = formatBookingDate(transaction.bookingDate, { day: '2-digit', month: 'short' });
   const meta = [date, label(transaction.categoryId)];
   if (transaction.excludedFromStats) meta.push(t('transactions.excludedTag'));
+  if (accountName) meta.push(accountName);
 
   return (
     <Pressable
-      onPress={() =>
-        router.push({ pathname: '/transaction/[id]', params: { id: transaction.id } })
-      }
+      onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: transaction.id } })}
       accessibilityRole="button"
       style={[styles.row, { borderBottomColor: theme.border, opacity: counted ? 1 : 0.55 }]}
     >
