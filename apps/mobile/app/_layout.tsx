@@ -68,6 +68,7 @@ export default function RootLayout() {
           name="transaction/[id]"
           options={{ presentation: 'modal', headerShown: true }}
         />
+        <Stack.Screen name="categories" options={{ headerShown: true }} />
       </Stack>
     </SafeAreaProvider>
   );

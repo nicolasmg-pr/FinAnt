@@ -109,6 +109,13 @@ export default function SettingsScreen() {
         </Link>
       </Card>
 
+      <Card title={t('categories.title')}>
+        <Text style={{ color: theme.textMuted }}>{t('categories.body')}</Text>
+        <Link href="/categories" style={[styles.link, { color: theme.accent }]}>
+          {t('categories.manage')}
+        </Link>
+      </Card>
+
       <Card title={t('settings.autoExclusions')}>
         <Text style={{ color: theme.textMuted }}>{t('settings.autoExclusionsBody')}</Text>
         {exclusions.length === 0 ? (

@@ -209,6 +209,70 @@ export const MIGRATIONS: readonly { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    version: 8,
+    sql: `
+      -- Categories stop being a constant the screens read and become rows the
+      -- owner can add to, hide and reorder. Two columns make that work.
+      --
+      -- position is the order the list renders in. The shipped taxonomy is
+      -- grouped by meaning, not alphabetically — "Rent" belongs next to
+      -- "Mortgage", not between "Refunds" and "Restaurants" — and a category
+      -- the owner adds has to be able to sit somewhere in that order.
+      ALTER TABLE categories ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+
+      -- customised marks a shipped category the owner has renamed, recoloured
+      -- or given another icon. syncBuiltInCategories() runs on every launch and
+      -- would otherwise put the shipped label and colour straight back the next
+      -- time the app opened, silently undoing the edit.
+      ALTER TABLE categories ADD COLUMN customised INTEGER NOT NULL DEFAULT 0;
+
+      -- Backfill in the order the taxonomy shipped at this version. Spelled out
+      -- as literal ids rather than generated from BUILT_IN_CATEGORIES: a
+      -- migration must produce the same result on a device replaying it three
+      -- releases late, and a generated one would change under it. Ids the CASE
+      -- does not name keep 0 and are placed by syncBuiltInCategories(), which
+      -- runs straight after migrations and rewrites every shipped position.
+      UPDATE categories SET position = CASE id
+          WHEN 'income-salary' THEN 0
+          WHEN 'income-freelance' THEN 1
+          WHEN 'income-benefits' THEN 2
+          WHEN 'income-investment' THEN 3
+          WHEN 'income-refund' THEN 4
+          WHEN 'income-other' THEN 5
+          WHEN 'housing-rent' THEN 6
+          WHEN 'housing-mortgage' THEN 7
+          WHEN 'housing-utilities' THEN 8
+          WHEN 'housing-internet' THEN 9
+          WHEN 'housing-maintenance' THEN 10
+          WHEN 'food-groceries' THEN 11
+          WHEN 'food-restaurants' THEN 12
+          WHEN 'transport-public' THEN 13
+          WHEN 'transport-car' THEN 14
+          WHEN 'transport-travel' THEN 15
+          WHEN 'health-medical' THEN 16
+          WHEN 'insurance' THEN 17
+          WHEN 'insurance-health' THEN 18
+          WHEN 'insurance-car' THEN 19
+          WHEN 'subscriptions' THEN 20
+          WHEN 'education' THEN 21
+          WHEN 'childcare' THEN 22
+          WHEN 'shopping' THEN 23
+          WHEN 'leisure' THEN 24
+          WHEN 'sport' THEN 25
+          WHEN 'gifts-donations' THEN 26
+          WHEN 'card-payment' THEN 27
+          WHEN 'shared-costs' THEN 28
+          WHEN 'taxes' THEN 29
+          WHEN 'fees-interest' THEN 30
+          WHEN 'savings' THEN 31
+          WHEN 'cash' THEN 32
+          WHEN 'transfer-internal' THEN 33
+          WHEN 'uncategorised' THEN 34
+          ELSE position
+        END;
+    `,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;

@@ -12,9 +12,6 @@ import {
 import { useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
-  BUILT_IN_CATEGORIES,
-  CATEGORY_BY_ID,
-  UNCATEGORISED_ID,
   abs,
   budgetPeriod,
   formatMoney,
@@ -30,20 +27,12 @@ import { Card } from '../../src/components/Card';
 import { CategoryChip } from '../../src/components/CategoryChip';
 import { deleteBudget, listBudgets, saveBudget } from '../../src/db/budgets-repo';
 import { useAppData } from '../../src/hooks/use-app-data';
+import { useCategories } from '../../src/hooks/use-categories';
 import { usePayPeriod } from '../../src/hooks/use-pay-period';
 import { intlLocale } from '../../src/i18n';
 import { radius, spacing, useTheme } from '../../src/theme';
 
 const CURRENCY = 'EUR';
-
-/**
- * Categories a limit can be set on: expense categories only, minus the
- * uncategorised bucket. A limit on "uncategorised" would track the state of the
- * classification rather than a spending decision.
- */
-const BUDGETABLE = BUILT_IN_CATEGORIES.filter(
-  (c) => c.kind === 'expense' && !c.archived && c.id !== UNCATEGORISED_ID,
-);
 
 interface Draft {
   categoryId: string | null;
@@ -56,6 +45,7 @@ export default function BudgetsScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { transactions, loading, reload } = useAppData();
+  const { byId: categoryById, selectable } = useCategories();
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -80,10 +70,14 @@ export default function BudgetsScreen() {
   );
 
   const budgeted = new Set(budgets.map((b) => b.categoryId));
-  const available = BUDGETABLE.filter((c) => !budgeted.has(c.id));
+  // A limit belongs on a spending decision, so only expense categories are
+  // offered. `selectable` has already dropped the hidden ones and the
+  // uncategorised bucket, whose limit would track the state of the
+  // classification rather than anything the owner chose to spend.
+  const available = selectable.filter((c) => c.kind === 'expense' && !budgeted.has(c.id));
 
   const label = (categoryId: string): string => {
-    const category = CATEGORY_BY_ID.get(categoryId);
+    const category = categoryById.get(categoryId);
     return category?.labelKey ? t(category.labelKey) : (category?.name ?? categoryId);
   };
 
@@ -182,7 +176,7 @@ export default function BudgetsScreen() {
                   <BudgetBar
                     ratio={entry.ratio}
                     state={entry.state}
-                    color={CATEGORY_BY_ID.get(entry.categoryId)?.color}
+                    color={categoryById.get(entry.categoryId)?.color}
                   />
                   <Remainder amount={entry.remaining} />
                 </Card>
