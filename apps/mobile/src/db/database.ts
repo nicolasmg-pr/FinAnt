@@ -1,7 +1,13 @@
 import * as SQLite from 'expo-sqlite';
-import { BUILT_IN_CATEGORIES, DEFAULT_RULES } from '@finant/core';
+import {
+  BUILT_IN_CATEGORIES,
+  DEFAULT_RULES,
+  parseRetiredShippedRules,
+  shippedRulesToInstall,
+} from '@finant/core';
 import { destroyDatabaseKey, getOrCreateDatabaseKey } from '../security/keys';
 import { LATEST_VERSION, MIGRATIONS } from './schema';
+import { SETTING_RETIRED_SHIPPED_RULES } from './settings-repo';
 
 const DATABASE_NAME = 'finant.db';
 
@@ -23,7 +29,8 @@ async function open(): Promise<SQLite.SQLiteDatabase> {
   await db.execAsync('PRAGMA journal_mode = WAL;');
   await db.execAsync('PRAGMA foreign_keys = ON;');
   await migrate(db);
-  await seed(db);
+  await syncBuiltInCategories(db);
+  await syncDefaultRules(db);
   return db;
 }
 
@@ -68,19 +75,46 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
   }
 }
 
-/** Installs the shipped categories and rules on a fresh database. */
-async function seed(db: SQLite.SQLiteDatabase): Promise<void> {
-  const existing = await db.getFirstAsync<{ count: number }>(
-    'SELECT COUNT(*) AS count FROM categories;',
-  );
-  if ((existing?.count ?? 0) > 0) return;
-
-  const now = new Date().toISOString();
+/**
+ * Brings the `categories` table in line with the shipped taxonomy, on every
+ * launch rather than once on a fresh database.
+ *
+ * Seeding once was why a category added in a later release never reached a
+ * device that had already been seeded: `seed()` returned early the moment the
+ * table held a row. This upserts by id instead, so a new shipped category
+ * arrives on the next launch and a relabelled one is relabelled.
+ *
+ * Three things it deliberately does not do:
+ *
+ * - it never writes `archived`, so a category the owner hid stays hidden;
+ * - it never deletes, so a category the owner created is left alone (and a
+ *   shipped id that disappeared from a future release keeps its history);
+ * - it never overwrites the name, colour or icon of a row the owner has edited
+ *   (`customised = 1`), which would otherwise undo that edit at every launch.
+ *
+ * `kind`, `position` and `built_in` are refreshed unconditionally: the first
+ * two are ours to order and the third is what makes a category undeletable.
+ */
+export async function syncBuiltInCategories(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.withTransactionAsync(async () => {
-    for (const category of BUILT_IN_CATEGORIES) {
+    for (const [position, category] of BUILT_IN_CATEGORIES.entries()) {
       await db.runAsync(
-        `INSERT INTO categories (id, label_key, name, kind, parent_id, color, icon, built_in, archived)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0);`,
+        `INSERT INTO categories
+           (id, label_key, name, kind, parent_id, color, icon, position, built_in, archived, customised)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0)
+         ON CONFLICT(id) DO UPDATE SET
+           label_key = CASE WHEN categories.customised = 1 THEN categories.label_key
+                            ELSE excluded.label_key END,
+           name      = CASE WHEN categories.customised = 1 THEN categories.name
+                            ELSE excluded.name END,
+           color     = CASE WHEN categories.customised = 1 THEN categories.color
+                            ELSE excluded.color END,
+           icon      = CASE WHEN categories.customised = 1 THEN categories.icon
+                            ELSE excluded.icon END,
+           kind      = excluded.kind,
+           parent_id = excluded.parent_id,
+           position  = excluded.position,
+           built_in  = 1;`,
         category.id,
         category.labelKey ?? null,
         category.name,
@@ -88,11 +122,51 @@ async function seed(db: SQLite.SQLiteDatabase): Promise<void> {
         category.parentId,
         category.color,
         category.icon,
+        position,
       );
     }
-    for (const rule of DEFAULT_RULES) {
+  });
+}
+
+/**
+ * Installs the shipped rules a database is missing, on every launch.
+ *
+ * Categories are handled by `syncBuiltInCategories()`, which runs first; this
+ * is the same idea for rules and exists for the same reason. Installing once on
+ * a fresh database meant a rule added in a later release never reached a device
+ * that had already been seeded — the two insurance rules would have shipped
+ * with no way of ever running.
+ *
+ * What it does not do matters as much:
+ *
+ * - an existing rule is never rewritten, so a shipped rule the owner disabled
+ *   or re-pointed stays as they left it;
+ * - a shipped rule the owner deleted is not reinstalled, because `deleteRule`
+ *   records a tombstone and `shippedRulesToInstall` skips it. Without that, a
+ *   plain `INSERT OR IGNORE` would bring it back on every launch, forever.
+ */
+async function syncDefaultRules(db: SQLite.SQLiteDatabase): Promise<void> {
+  const rows = await db.getAllAsync<{ id: string }>('SELECT id FROM rules;');
+  // Read off the handle being opened, not through the repositories: this runs
+  // inside `open()`, and anything that called `getDatabase()` here would await
+  // the very open it is part of.
+  const setting = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM settings WHERE key = ?;',
+    SETTING_RETIRED_SHIPPED_RULES,
+  );
+  const retired = parseRetiredShippedRules(setting?.value ?? null);
+  const missing = shippedRulesToInstall(
+    DEFAULT_RULES,
+    rows.map((row) => row.id),
+    retired,
+  );
+  if (missing.length === 0) return;
+
+  const now = new Date().toISOString();
+  await db.withTransactionAsync(async () => {
+    for (const rule of missing) {
       await db.runAsync(
-        `INSERT INTO rules (id, category_id, priority, enabled, learned, match_json, created_at)
+        `INSERT OR IGNORE INTO rules (id, category_id, priority, enabled, learned, match_json, created_at)
          VALUES (?, ?, ?, 1, 0, ?, ?);`,
         rule.id,
         rule.categoryId,

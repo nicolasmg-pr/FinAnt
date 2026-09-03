@@ -1,7 +1,8 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { CATEGORY_BY_ID, type CategoryTotal } from '@finant/core';
+import type { CategoryTotal } from '@finant/core';
 import { Amount } from './Amount';
+import { useCategories } from '../hooks/use-categories';
 import { radius, spacing, useTheme } from '../theme';
 
 /**
@@ -9,15 +10,24 @@ import { radius, spacing, useTheme } from '../theme';
  * is unreadable at phone width; a sorted bar list answers "where did it go"
  * in one glance and stays legible at any count.
  */
-export function CategoryBreakdown({ totals, limit = 6 }: { totals: readonly CategoryTotal[]; limit?: number }) {
+export function CategoryBreakdown({
+  totals,
+  limit = 6,
+}: {
+  totals: readonly CategoryTotal[];
+  limit?: number;
+}) {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { byId } = useCategories();
 
   return (
     <View style={{ gap: spacing.md }}>
       {totals.slice(0, limit).map((entry) => {
-        const category = CATEGORY_BY_ID.get(entry.categoryId);
-        const label = category?.labelKey ? t(category.labelKey) : (category?.name ?? entry.categoryId);
+        const category = byId.get(entry.categoryId);
+        const label = category?.labelKey
+          ? t(category.labelKey)
+          : (category?.name ?? entry.categoryId);
         return (
           <View key={entry.categoryId} style={{ gap: spacing.xs }}>
             <View style={styles.row}>

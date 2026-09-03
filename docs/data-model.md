@@ -38,8 +38,9 @@ only gives a signed amount uses `sideFromAmount()`.
 - `institutions` — the banks the owner holds accounts with. See banks and
   balances below.
 - `transactions` — the ledger. See dedupe, soft delete and transfers below.
-- `categories` — shipped taxonomy plus any the owner adds. Ids are stable and
-  never renamed; rules and history point at them.
+- `categories` — shipped taxonomy plus any the owner adds. **This table is what
+  the screens render**, not the `BUILT_IN_CATEGORIES` constant. Ids are stable
+  and never renamed; rules and history point at them. See below.
 - `rules` — categorisation rules, `match_json` holding a `RuleMatch` tree.
   Shipped rules sit at priority 100-400, rules learned from a manual correction
   at 1000, so a correction always wins.
@@ -48,6 +49,104 @@ only gives a signed amount uses `sideFromAmount()`.
 - `budgets` — monthly limit per category.
 - `import_profiles` — user-defined column mappings for file import.
 - `settings` — key/value: locale, main currency, app lock, last import account.
+
+## Categories
+
+`BUILT_IN_CATEGORIES` in `packages/core/src/categories.ts` is the shipped seed
+and the fallback the launch sync writes from. Everything on screen comes from
+the `categories` table, so the owner can add a category, rename one, recolour
+one and hide the ones they never use.
+
+**Ids are permanent.** `insurance` was relabelled "Other insurance" when
+`insurance-health` and `insurance-car` were split out of it, and it kept its id:
+shipped rules, budgets and years of movements point at it, and renaming it would
+either orphan them or silently merge two different buckets of money. Rename the
+label, never the id. Nothing reclassifies history either — movements already
+filed under `insurance` stay there until the owner moves them.
+
+### Migration 8
+
+`position INTEGER NOT NULL DEFAULT 0` is the render order. The shipped taxonomy
+is grouped by meaning rather than alphabetically, and a category the owner adds
+has to be able to sit somewhere in that order. The backfill spells out the ids
+as literals instead of generating them from `BUILT_IN_CATEGORIES`: a migration
+has to produce the same result on a device replaying it three releases late, and
+a generated one would change under it.
+
+`customised INTEGER NOT NULL DEFAULT 0` marks a shipped category whose name,
+colour or icon the owner has edited. Without it the launch sync would put the
+shipped values straight back the next time the app opened.
+
+### `syncBuiltInCategories()`
+
+Runs on every launch, straight after the migrations, and upserts each shipped
+category by id. It replaces the category half of `seed()`, which returned early
+the moment the table held a row — which is why a category shipped in a later
+release never reached a device that had already been seeded.
+
+It refreshes `kind`, `parent_id`, `position` and `built_in` unconditionally, and
+`label_key`, `name`, `color`, `icon` only while `customised = 0`. Three things it
+deliberately never does:
+
+- it never writes `archived`, so a category the owner hid stays hidden;
+- it never deletes, so a category the owner created is left alone, and a shipped
+  id dropped from a future release keeps its history;
+- it never overwrites an edit of the owner's, per `customised` above.
+
+Rules keep the once-only seeding. A shipped rule the owner disabled, or a
+learned rule that now outranks it, must not be re-installed behind them — so a
+rule added in a later release, unlike a category, still only reaches a fresh
+install.
+
+### Ids of categories the owner creates
+
+Every one is `user-` plus a UUID, and no shipped id starts with `user-`. That
+reservation is what guarantees a category the owner adds today can never collide
+with a category a future release ships — a collision would merge two unrelated
+buckets on the next launch, and there would be no way to tell them apart
+afterwards, because ids are never renamed.
+
+A category the owner created has no `label_key`: its name _is_ its label, in
+every language. `useCategoryLabel` falls back to the stored name. Renaming a
+shipped category clears its `label_key` for the same reason; recolouring one
+does not.
+
+### Hiding, deleting and reassigning
+
+A **built-in** category can only be hidden. `rules.category_id` is
+`ON DELETE CASCADE`, so deleting one would take the shipped rules that classify
+half the statement with it, and orphan the history filed under it. The screen
+offers "Hide", not "Delete", and says why. A hidden category leaves every picker
+and still renders on the movements that carry it.
+
+A **user** category with no movements is deleted outright.
+
+A **user** category with movements makes the owner pick a replacement first. The
+reassignment and the delete run in one `withTransactionAsync`, reassignment
+first. `transactions.category_id` is `ON DELETE SET NULL`: deleting the category
+out from under its movements would silently uncategorise every one of them,
+which is exactly what this flow exists to prevent. Soft-deleted movements are
+reassigned too. Rules pointing at the category go with it, and the confirmation
+says how many.
+
+### Shipped rules reach an existing device too
+
+`syncDefaultRules()` runs alongside `syncBuiltInCategories()` on every launch
+and inserts the shipped rules the database does not already hold. Installing
+them once, on a fresh database, was why the two insurance rules would have
+arrived on an already-seeded device with no rule able to fire.
+
+It never rewrites an existing rule: a shipped rule the owner disabled or
+re-pointed stays as they left it. And it never brings a deleted one back —
+`deleteRule` writes the id into the `retiredShippedRules` setting when it
+belongs to the shipped set, and the install skips anything tombstoned. Without
+that, a plain `INSERT OR IGNORE` over `DEFAULT_RULES` would resurrect a deleted
+rule on every launch, forever. A learned rule leaves no tombstone, because
+nothing would ever reinstall it.
+
+The tombstones are read straight off the handle being opened rather than
+through `settings-repo`: the sync runs inside `open()`, and anything calling
+`getDatabase()` from there would await the very open it is part of.
 
 ## Banks and balances
 

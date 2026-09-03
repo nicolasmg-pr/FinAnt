@@ -63,3 +63,27 @@ describe('categorise', () => {
     expect(learnRuleFrom(tx({ date: '2026-01-05', amount: -5, description: '12 34' }), 'shopping', () => 'x')).toBeNull();
   });
 });
+
+describe('insurance', () => {
+  const at = (description: string) =>
+    categorise(tx({ date: '2026-02-03', amount: -89.4, description }), DEFAULT_RULES).categoryId;
+
+  it('files health insurance under its own category in all three languages', () => {
+    expect(at('BEITRAG KRANKENVERSICHERUNG FEBRUAR')).toBe('insurance-health');
+    expect(at('LASTSCHRIFT KRANKENKASSE')).toBe('insurance-health');
+    expect(at('RECIBO SEGURO DE SALUD')).toBe('insurance-health');
+    expect(at('HEALTH INSURANCE PREMIUM')).toBe('insurance-health');
+  });
+
+  it('files car insurance under its own category in all three languages', () => {
+    expect(at('KFZ-VERSICHERUNG JAHRESBEITRAG')).toBe('insurance-car');
+    expect(at('AUTOVERSICHERUNG RATE')).toBe('insurance-car');
+    expect(at('RECIBO SEGURO DE COCHE')).toBe('insurance-car');
+    expect(at('CAR INSURANCE RENEWAL')).toBe('insurance-car');
+  });
+
+  it('leaves every other insurance in the general bucket, which keeps its id', () => {
+    expect(at('HAUSRATVERSICHERUNG BEITRAG')).toBe('insurance');
+    expect(at('RECIBO SEGURO DEL HOGAR')).toBe('insurance');
+  });
+});

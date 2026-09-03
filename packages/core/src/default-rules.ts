@@ -86,6 +86,21 @@ export const DEFAULT_RULES: readonly CategoryRule[] = [
     'linea directa', 'adeslas', 'sanitas', 'dkv', 'huk coburg', 'ergo', 'debeka',
     'versicherung', 'krankenkasse', 'aok', 'tk ', 'barmer', 'techniker krankenkasse',
   ])),
+
+  // Insurance splits three ways, and these two sit *above* r-insurance so a
+  // health or car policy is not swallowed by the "versicherung" / "seguro" the
+  // narrative shares with every other policy. Keyed on the words a statement
+  // uses, never on insurer brand names: Spanish and German insurers all sell
+  // every kind of policy, so a brand match would file a home policy as a car
+  // one. Movements already filed under `insurance` stay there.
+  rule('r-insurance-health', 'insurance-health', 320, contains([
+    'krankenversicherung', 'krankenkasse', 'kranken zusatzversicherung',
+    'seguro de salud', 'seguro medico', 'health insurance',
+  ])),
+  rule('r-insurance-car', 'insurance-car', 320, contains([
+    'kfz versicherung', 'autoversicherung', 'kraftfahrzeugversicherung',
+    'seguro de coche', 'seguro de auto', 'seguro del coche', 'car insurance',
+  ])),
   rule('r-health', 'health-medical', 250, contains([
     'farmacia', 'apotheke', 'clinica', 'klinik', 'hospital', 'dentista', 'zahnarzt',
     'arztpraxis', 'optica', 'fielmann', 'medico', 'praxis',
@@ -135,3 +150,50 @@ export const DEFAULT_RULES: readonly CategoryRule[] = [
     'own transfer', 'internal transfer',
   ])),
 ];
+
+/** Ids of every rule this release ships, for telling ours from a learned one. */
+const SHIPPED_RULE_IDS: ReadonlySet<string> = new Set(DEFAULT_RULES.map((r) => r.id));
+
+export function isShippedRuleId(id: string): boolean {
+  return SHIPPED_RULE_IDS.has(id);
+}
+
+/**
+ * Which shipped rules a database is still missing.
+ *
+ * Rules were installed once, on a fresh database, which meant a rule added in a
+ * later release never reached a device that had already been seeded — the two
+ * insurance rules would have shipped with no way of ever running. Installing
+ * the missing ones on every launch fixes that, but a plain `INSERT OR IGNORE`
+ * over the whole set would also bring back a rule the owner deleted, every
+ * launch, forever. So a deleted shipped rule leaves a tombstone and is passed
+ * in here as retired.
+ *
+ * Existing rules are never rewritten: the owner may have disabled or
+ * re-pointed one, and that is their decision, not a drift to correct.
+ */
+export function shippedRulesToInstall(
+  shipped: readonly CategoryRule[],
+  existingIds: readonly string[],
+  retiredIds: readonly string[],
+): CategoryRule[] {
+  const known = new Set([...existingIds, ...retiredIds]);
+  return shipped.filter((rule) => !known.has(rule.id));
+}
+
+/**
+ * Reads the retired-rule tombstones out of their stored form.
+ *
+ * A value that is not a JSON array of strings reads as no tombstones: a corrupt
+ * setting must not stop the database from opening, and the worst case of
+ * treating it as empty is that a deleted shipped rule comes back once.
+ */
+export function parseRetiredShippedRules(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}

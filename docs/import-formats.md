@@ -179,15 +179,43 @@ parses the file again whenever the owner picks another account: the preview
 shows the rows exactly as the database will hold them, never rows hashed for
 one account and stored in another.
 
+### Bank first, then the account
+
+A bank groups accounts, so the picker (`apps/mobile/src/components/AccountPicker.tsx`,
+shared with manual movement entry) asks in two rows: the bank, then the
+accounts of that bank. The bank row lists every institution, "Not in a bank"
+for the accounts belonging to none — "My records" among them — and **+ New
+bank**; the account row lists only the accounts of the chosen bank, plus **+
+New account**. Choosing another bank moves the account choice to that bank's
+first account, or to a new account when it holds none: an account is never left
+selected under a bank it does not belong to.
+
+Either level may still have to be created, and nothing is written until the
+owner confirms. `AccountChoice` (`packages/core/src/account-choice.ts`) carries
+that intent — the bank and account ids, whether each is new, and the names typed
+for them — and the account id of a new account is generated **up front**, because
+the preview's rows are already hashed for it. On confirm the bank is created
+first, then the account under it, then the rows are ingested. Creating the bank
+returns the one already carrying that name, and both steps are recorded in the
+choice as they succeed, so a retry after a failed ingest reuses them instead of
+leaving a second bank or a second account behind.
+
+### Which one is preselected
+
 - **camt.053** names its own account. `Stmt/Acct/Id/IBAN` and the servicing
   institution `Stmt/Acct/Svcr/FinInstnId/Nm` come back as `statementAccount`
   (IBAN compacted: no spaces, upper case). An existing account with that IBAN is
-  preselected. When the owner creates a new account for the file, the IBAN and
-  institution name are stored on it, so the next statement from that bank finds
-  its account by itself. The IBAN is never shown on screen; accounts are named.
-  A file whose statements name more than one account is imported whole into
-  the chosen account, and the preview's issues list says so.
+  preselected, **and so is the bank it sits under**. When the owner creates a new
+  account for the file, the IBAN and institution name are stored on it, so the
+  next statement from that bank finds its account by itself; a new bank created
+  for that file starts from the institution name the statement gave. The IBAN is
+  never shown on screen; accounts are named. A file whose statements name more
+  than one account is imported whole into the chosen account, and the preview's
+  issues list says so.
 - **CSV** carries no account identity. The account the last import went to
-  (`lastImportAccount` in `settings`) is preselected, then "My records".
-- **The Presupuesto workbook** always lands in "My records" and shows no picker.
-  It is the owner's own ledger, not a bank's statement.
+  (`lastImportAccount` in `settings`), and its bank, are preselected.
+- Failing both, **"My records"**, which sits under no bank. An account whose
+  bank has since been deleted is offered under "Not in a bank" too, the same
+  place the banks screen lists it.
+- **The Presupuesto workbook** always lands in "My records" and shows no picker
+  at all. It is the owner's own ledger, not a bank's statement.
