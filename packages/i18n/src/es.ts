@@ -44,6 +44,14 @@ export const es: Translations = {
       low: 'Baja — aún no hay historial suficiente',
     },
   },
+  manual: {
+    isRefund: 'Es una devolución o un reembolso',
+    isClawback: 'Es dinero que me han retirado',
+    dateInvalid: 'Usa el formato AAAA-MM-DD.',
+    descriptionPlaceholder: 'Qué fue',
+    counterpartyPlaceholder: 'Con quién',
+    categoryOptional: 'Déjalo en blanco y lo clasificarán las reglas.',
+  },
   transactions: {
     title: 'Movimientos',
     search: 'Buscar movimientos',

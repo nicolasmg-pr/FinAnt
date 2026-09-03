@@ -1,7 +1,8 @@
 import Feather from '@expo/vector-icons/Feather';
-import { Tabs } from 'expo-router';
+import { Link, Tabs } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useTheme } from '../../src/theme';
+import { Pressable } from 'react-native';
+import { spacing, useTheme } from '../../src/theme';
 
 export default function TabsLayout() {
   const theme = useTheme();
@@ -29,6 +30,18 @@ export default function TabsLayout() {
         options={{
           title: t('nav.transactions'),
           tabBarIcon: ({ color, size }) => <Feather name="list" color={color} size={size} />,
+          headerRight: () => (
+            <Link href="/movement/new" asChild>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('transactions.addManual')}
+                hitSlop={12}
+                style={{ paddingHorizontal: spacing.lg }}
+              >
+                <Feather name="plus" color={theme.accent} size={22} />
+              </Pressable>
+            </Link>
+          ),
         }}
       />
       <Tabs.Screen

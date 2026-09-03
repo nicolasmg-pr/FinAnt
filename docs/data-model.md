@@ -205,6 +205,31 @@ turned up, and offers "Re-anchor to my current balance", which re-opens the
 balance form. Nothing is corrected automatically: only the owner knows whether
 the new rows are real or the figure they typed was wrong.
 
+## Adding a movement by hand
+
+`app/movement/new.tsx`, reached from the **+** in the movements tab header. It
+writes nothing directly: the draft goes through `ingest()`, the same door a
+statement uses, so a manual movement is categorised by the same rules, matched
+against the same internal transfers and filtered by the same exclusion rules as
+an imported one.
+
+Two details worth knowing:
+
+- **Direction is chosen, not derived.** The form asks for income or expense and
+  `signedAmountFor()` produces the signed amount from it. A "refund or
+  repayment" switch is what makes the awkward half of the model reachable: a
+  positive amount that stays on the *expense* side, where it reduces the
+  month's spending instead of inflating its income. Its income-side mirror is
+  money taken back off a salary — negative, still income.
+- **A manual row is never deduplicated against another.** Its `import_hash`
+  carries a fresh discriminator, so two identical coffees entered on the same
+  day are two movements. Typing a movement is a deliberate act; a statement
+  re-import is not, which is why only the latter needs collapsing.
+
+A category picked on the form is the owner's own classification and is trusted
+over the rule engine, exactly as a category that arrived with a file is.
+Leaving it blank lets the rules decide.
+
 ## Dedupe
 
 Enforced by the database, not by application discipline:
