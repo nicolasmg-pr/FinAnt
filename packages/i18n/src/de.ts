@@ -44,6 +44,14 @@ export const de: Translations = {
       low: 'Niedrig — noch zu wenig Verlauf',
     },
   },
+  manual: {
+    isRefund: 'Das ist eine Erstattung oder Rückzahlung',
+    isClawback: 'Das ist zurückgeholtes Geld',
+    dateInvalid: 'Format JJJJ-MM-TT verwenden.',
+    descriptionPlaceholder: 'Worum ging es',
+    counterpartyPlaceholder: 'Mit wem',
+    categoryOptional: 'Leer lassen, dann entscheiden die Regeln.',
+  },
   transactions: {
     title: 'Umsätze',
     search: 'Umsätze durchsuchen',

@@ -43,6 +43,14 @@ export const en = {
       low: 'Low — not enough history yet',
     },
   },
+  manual: {
+    isRefund: 'This is a refund or repayment',
+    isClawback: 'This is money taken back',
+    dateInvalid: 'Use the form YYYY-MM-DD.',
+    descriptionPlaceholder: 'What was it',
+    counterpartyPlaceholder: 'Who it was with',
+    categoryOptional: 'Leave this blank and the rules will classify it.',
+  },
   transactions: {
     title: 'Movements',
     search: 'Search movements',
