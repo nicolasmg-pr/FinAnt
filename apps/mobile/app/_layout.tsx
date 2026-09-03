@@ -51,6 +51,10 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="import" options={{ presentation: 'modal', headerShown: true, title: 'Import' }} />
+        <Stack.Screen
+          name="transaction/[id]"
+          options={{ presentation: 'modal', headerShown: true }}
+        />
       </Stack>
     </SafeAreaProvider>
   );
