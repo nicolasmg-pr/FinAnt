@@ -8,6 +8,7 @@ export const es: Translations = {
     delete: 'Eliminar',
     edit: 'Editar',
     done: 'Hecho',
+    back: 'Atrás',
     retry: 'Reintentar',
     loading: 'Cargando…',
     search: 'Buscar',

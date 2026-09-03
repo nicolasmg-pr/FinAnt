@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useTranslation } from 'react-i18next';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getDatabase } from '../src/db/database';
 import { initI18n } from '../src/i18n';
@@ -14,6 +15,7 @@ import { spacing, useTheme } from '../src/theme';
  */
 export default function RootLayout() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -58,16 +60,29 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          headerStyle: { backgroundColor: theme.background },
+          headerTitleStyle: { color: theme.text },
+          headerTintColor: theme.accent,
+          // Without this the iOS back button reads "(tabs)": the label comes
+          // from the previous route's title, and that route is a router group.
+          headerBackTitle: t('common.back'),
+        }}
+      >
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
           name="import"
-          options={{ presentation: 'modal', headerShown: true, title: 'Import' }}
+          options={{ presentation: 'modal', headerShown: true, title: t('import.title') }}
         />
         <Stack.Screen
           name="transaction/[id]"
           options={{ presentation: 'modal', headerShown: true }}
         />
+        {/* Registered so it gets a header: the stack hides them by default, and
+            without one this screen opens with no way back but a swipe. */}
+        <Stack.Screen name="movement/new" options={{ presentation: 'modal', headerShown: true }} />
         <Stack.Screen name="categories" options={{ headerShown: true }} />
       </Stack>
     </SafeAreaProvider>
