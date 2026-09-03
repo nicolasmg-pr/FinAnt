@@ -253,6 +253,11 @@ export default function ImportScreen() {
               {t('import.duplicatesSkipped', { count: result.duplicates })}
             </Text>
           ) : null}
+          {result.transfersMatched > 0 ? (
+            <Text style={{ color: theme.textMuted }}>
+              {t('import.transfersMatched', { count: result.transfersMatched })}
+            </Text>
+          ) : null}
           <Pressable
             onPress={() => router.back()}
             style={[styles.button, { backgroundColor: theme.accent }]}

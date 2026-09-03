@@ -16,6 +16,7 @@ import {
   PAYROLL_CATEGORY_ID,
   UNCATEGORISED_ID,
   countsTowardStats,
+  formatMoney,
   learnRuleFrom,
   type Category,
   type Transaction,
@@ -33,7 +34,7 @@ import {
   setExcludedFromStats,
 } from '../../src/db/transactions-repo';
 import { useCategoryLabel } from '../../src/hooks/use-category-label';
-import { formatBookingDate } from '../../src/i18n';
+import { formatBookingDate, intlLocale } from '../../src/i18n';
 import { radius, spacing, useTheme } from '../../src/theme';
 
 /**
@@ -59,6 +60,8 @@ export default function TransactionDetailScreen() {
 
   const [tx, setTx] = useState<Transaction | null>(null);
   const [accountName, setAccountName] = useState<string | null>(null);
+  /** The other half of a matched transfer, with the name of its account. */
+  const [peer, setPeer] = useState<{ tx: Transaction; accountName: string | null } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [learn, setLearn] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -76,7 +79,10 @@ export default function TransactionDetailScreen() {
       setTx(row);
       setSelected(row.categoryId);
       const accounts = await listAccounts();
-      setAccountName(accounts.find((a) => a.id === row.accountId)?.name ?? null);
+      const nameOf = (accountId: string) => accounts.find((a) => a.id === accountId)?.name ?? null;
+      setAccountName(nameOf(row.accountId));
+      const other = row.transferPeerId ? await getTransaction(row.transferPeerId) : null;
+      setPeer(other ? { tx: other, accountName: nameOf(other.accountId) } : null);
     })().catch((cause: unknown) => setError((cause as Error).message));
   }, [id, router]);
 
@@ -163,6 +169,22 @@ export default function TransactionDetailScreen() {
           <Text style={[styles.tag, { color: theme.textMuted, borderColor: theme.border }]}>
             {tx.excludedFromStats ? t('transactions.excludedTag') : label(tx.categoryId)}
           </Text>
+        ) : null}
+        {peer ? (
+          <Pressable
+            onPress={() =>
+              router.push({ pathname: '/transaction/[id]', params: { id: peer.tx.id } })
+            }
+            accessibilityRole="link"
+          >
+            <Text style={[styles.peer, { color: theme.accent }]}>
+              {t('transactions.transferMatched', {
+                amount: formatMoney(peer.tx.amount, intlLocale()),
+                account: peer.accountName ?? '',
+                date: formatBookingDate(peer.tx.bookingDate, { day: 'numeric', month: 'short' }),
+              })}
+            </Text>
+          </Pressable>
         ) : null}
       </Card>
 
@@ -290,6 +312,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
   },
+  peer: { fontSize: 13, marginTop: spacing.xs },
   field: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
   fieldLabel: { fontSize: 13 },
   fieldValue: { fontSize: 13, flexShrink: 1, textAlign: 'right' },

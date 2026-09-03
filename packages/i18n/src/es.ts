@@ -69,6 +69,8 @@ export const es: Translations = {
       none: 'sin clasificar',
     },
     excludedTag: 'Excluido',
+    transferMatched:
+      'Traspaso entre tus cuentas · emparejado con {{amount}} · {{account}} · {{date}}',
     deleteConfirm:
       '¿Eliminar este movimiento? No volverá a aparecer si importas el mismo extracto otra vez.',
   },
@@ -93,6 +95,8 @@ export const es: Translations = {
     newAccount: 'Cuenta nueva',
     accountName: 'Nombre de la cuenta',
     accountRequired: 'Pon un nombre a la cuenta nueva.',
+    transfersMatched_one: '{{count}} traspaso entre tus cuentas emparejado',
+    transfersMatched_other: '{{count}} traspasos entre tus cuentas emparejados',
   },
   settings: {
     title: 'Ajustes',
