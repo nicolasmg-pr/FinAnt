@@ -23,12 +23,12 @@ import {
   yearMonthOf,
   type Budget,
   type BudgetProgress,
-  type Category,
   type Money,
 } from '@finant/core';
 import { Amount } from '../../src/components/Amount';
 import { BudgetBar } from '../../src/components/BudgetBar';
 import { Card } from '../../src/components/Card';
+import { CategoryChip } from '../../src/components/CategoryChip';
 import { deleteBudget, listBudgets, saveBudget } from '../../src/db/budgets-repo';
 import { useAppData } from '../../src/hooks/use-app-data';
 import { intlLocale } from '../../src/i18n';
@@ -307,35 +307,6 @@ function Remainder({ amount }: { amount: Money }) {
   );
 }
 
-function CategoryChip({
-  category,
-  label,
-  selected,
-  onPress,
-}: {
-  category: Category;
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  const theme = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[
-        styles.chip,
-        {
-          borderColor: selected ? category.color : theme.border,
-          backgroundColor: selected ? theme.surfaceAlt : 'transparent',
-        },
-      ]}
-    >
-      <View style={[styles.chipDot, { backgroundColor: category.color }]} />
-      <Text style={{ color: theme.text, fontSize: 13 }}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { padding: spacing.lg, paddingBottom: spacing.xxl },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
@@ -354,16 +325,6 @@ const styles = StyleSheet.create({
   },
   sheetTitle: { fontSize: 17, fontWeight: '700' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  chipDot: { width: 8, height: 8, borderRadius: radius.pill },
   input: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.md,
