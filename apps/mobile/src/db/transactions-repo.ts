@@ -1,5 +1,11 @@
 import * as Crypto from 'expo-crypto';
-import type { Transaction, TransactionSide, YearMonth } from '@finant/core';
+import {
+  INTERNAL_TRANSFER_ID,
+  type Transaction,
+  type TransactionSide,
+  type TransferPair,
+  type YearMonth,
+} from '@finant/core';
 import { getDatabase } from './database';
 import { toTransaction, type TransactionRow } from './mappers';
 
@@ -120,23 +126,71 @@ export async function countUncategorised(): Promise<number> {
   return row?.count ?? 0;
 }
 
-/** A manual choice is recorded as such so a later re-run of the rules cannot overwrite it. */
+/**
+ * A manual choice is recorded as such so a later re-run of the rules cannot
+ * overwrite it. It also ends any transfer pairing: the owner has said what
+ * this row is, so the link is cleared on both sides. The other side keeps its
+ * `transfer-internal` category and is not re-paired, because this row is now
+ * manual and therefore off limits to the matcher.
+ */
 export async function setCategory(transactionId: string, categoryId: string): Promise<void> {
   const db = await getDatabase();
-  await db.runAsync(
-    `UPDATE transactions SET category_id = ?, category_source = 'manual' WHERE id = ?;`,
-    categoryId,
-    transactionId,
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      'UPDATE transactions SET transfer_peer_id = NULL WHERE transfer_peer_id = ?;',
+      transactionId,
+    );
+    await db.runAsync(
+      `UPDATE transactions
+          SET category_id = ?, category_source = 'manual', transfer_peer_id = NULL
+        WHERE id = ?;`,
+      categoryId,
+      transactionId,
+    );
+  });
 }
 
-export async function setExcludedFromStats(transactionId: string, excluded: boolean): Promise<void> {
+export async function setExcludedFromStats(
+  transactionId: string,
+  excluded: boolean,
+): Promise<void> {
   const db = await getDatabase();
   await db.runAsync(
     'UPDATE transactions SET excluded_from_stats = ? WHERE id = ?;',
     excluded ? 1 : 0,
     transactionId,
   );
+}
+
+/**
+ * Records every matched pair in one transaction: both rows become
+ * `transfer-internal` (source `auto`) and point at each other. The WHERE
+ * guards repeat the matcher's own rules, so a row the owner categorised or
+ * a row linked by a concurrent run is left alone rather than overwritten.
+ */
+export async function linkTransferPairs(pairs: readonly TransferPair[]): Promise<void> {
+  if (pairs.length === 0) return;
+  const db = await getDatabase();
+  await db.withTransactionAsync(async () => {
+    for (const pair of pairs) {
+      for (const [id, peerId] of [
+        [pair.outId, pair.inId],
+        [pair.inId, pair.outId],
+      ] as const) {
+        await db.runAsync(
+          `UPDATE transactions
+              SET category_id = ?, category_source = 'auto', transfer_peer_id = ?
+            WHERE id = ?
+              AND deleted_at IS NULL
+              AND transfer_peer_id IS NULL
+              AND category_source != 'manual';`,
+          INTERNAL_TRANSFER_ID,
+          peerId,
+          id,
+        );
+      }
+    }
+  });
 }
 
 /**

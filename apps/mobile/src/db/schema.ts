@@ -131,6 +131,17 @@ export const MIGRATIONS: readonly { version: number; sql: string }[] = [
       CREATE INDEX idx_tx_deleted ON transactions(deleted_at);
     `,
   },
+  {
+    version: 5,
+    sql: `
+      -- Two halves of a move between the owner's own accounts point at each
+      -- other. Both are categorised transfer-internal, which already keeps them
+      -- out of every total; the link is what lets the detail screen show the
+      -- counterpart and lets a manual re-categorisation undo the pairing.
+      ALTER TABLE transactions ADD COLUMN transfer_peer_id TEXT;
+      CREATE INDEX idx_tx_transfer_peer ON transactions(transfer_peer_id);
+    `,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
