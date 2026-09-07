@@ -1,14 +1,31 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
+import Svg, {
+  Circle,
+  Defs,
+  LinearGradient,
+  Line,
+  Path,
+  Stop,
+  Text as SvgText,
+} from 'react-native-svg';
+import Animated, {
+  useAnimatedProps,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import type { NetWorthPoint } from '@finant/core';
-import { useTheme } from '../theme';
+import { type as typeScale, useMotion, useTheme } from '../design';
 
-const HEIGHT = 170;
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+
+const HEIGHT = 190;
 const PADDING = 8;
 const AXIS = 18;
 /** Below this a point has no room to be read, so the chart scrolls instead. */
 const MIN_SLOT = 26;
+/** Long enough to cover any path this chart can draw at phone width. */
+const DASH_SPAN = 4000;
 
 /**
  * The money held at the end of every period, as one line.
@@ -17,8 +34,10 @@ const MIN_SLOT = 26;
  * 9.200 € should read as level, and a chart fitted to its own two extremes
  * would draw that as a cliff.
  *
- * The projected tail is dashed and stroked separately. It is a projection, and
- * a projection drawn in the same ink as recorded fact is a lie by styling.
+ * The projected tail is dashed, stroked separately, and — unlike the booked
+ * run — carries no gradient underneath it. It is a projection, and a
+ * projection drawn in the same ink as recorded fact is a lie by styling; a
+ * filled area reads as more solid still, so the fill stops where fact stops.
  *
  * `labels` is index-aligned with `points`; an empty string leaves a point
  * unlabelled, which is how the caller thins a long axis.
@@ -31,8 +50,18 @@ export function BalanceChart({
   labels: readonly string[];
 }) {
   const theme = useTheme();
+  const motion = useMotion();
   const [width, setWidth] = useState(320);
   const scroller = useRef<ScrollView | null>(null);
+
+  // Drawn once, on mount. A line that redraws itself every time the data
+  // changes is noise, not feedback.
+  const reveal = useSharedValue(motion.enabled ? DASH_SPAN : 0);
+  useEffect(() => {
+    if (motion.enabled) reveal.value = withTiming(0, { duration: motion.settle });
+    else reveal.value = 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [motion.enabled]);
 
   const values = points.map((point) => point.total.minor);
   const min = Math.min(0, ...values);
@@ -62,8 +91,24 @@ export function BalanceChart({
   // leaving a gap where the projection takes over.
   const projected = firstProjected === -1 ? '' : path(Math.max(0, lastActual), points.length);
 
+  // The booked line closed down to the zero baseline, so the gradient has an
+  // area to fill.
+  const bookedArea =
+    booked && lastActual >= 0
+      ? `${booked} L${x(lastActual).toFixed(1)},${y(0).toFixed(1)} L${x(0).toFixed(1)},${y(0).toFixed(1)} Z`
+      : '';
+
+  const revealProps = useAnimatedProps(() => ({ strokeDashoffset: reveal.value }));
+
   const chart = (
     <Svg width={chartWidth} height={HEIGHT}>
+      <Defs>
+        <LinearGradient id="balanceFill" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={theme.accent} stopOpacity={0.18} />
+          <Stop offset="1" stopColor={theme.accent} stopOpacity={0} />
+        </LinearGradient>
+      </Defs>
+      {bookedArea ? <Path d={bookedArea} fill="url(#balanceFill)" /> : null}
       <Line
         x1={PADDING}
         y1={y(0)}
@@ -72,7 +117,18 @@ export function BalanceChart({
         stroke={theme.border}
         strokeWidth={1}
       />
-      {booked ? <Path d={booked} stroke={theme.accent} strokeWidth={2} fill="none" /> : null}
+      {booked ? (
+        <AnimatedPath
+          d={booked}
+          stroke={theme.accent}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+          strokeDasharray={DASH_SPAN}
+          animatedProps={revealProps}
+        />
+      ) : null}
       {projected ? (
         <Path
           d={projected}
@@ -87,8 +143,10 @@ export function BalanceChart({
         <Circle
           cx={x(lastActual)}
           cy={y(points[lastActual]?.total.minor ?? 0)}
-          r={3.5}
+          r={4}
           fill={theme.accent}
+          stroke={theme.background}
+          strokeWidth={2}
         />
       ) : null}
       {labels.map((label, i) =>
@@ -98,7 +156,8 @@ export function BalanceChart({
             x={x(i)}
             y={HEIGHT - 4}
             fill={theme.textMuted}
-            fontSize={9}
+            // svg's Text takes a number, not a style role.
+            fontSize={typeScale.caption.fontSize}
             textAnchor="middle"
           >
             {label}
