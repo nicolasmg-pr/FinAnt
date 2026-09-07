@@ -144,7 +144,7 @@ export const en = {
     add: 'Add a bank',
     edit: 'Edit bank',
     name: 'Bank name',
-    balance: 'Current balance',
+    balance: 'Balance today',
     asOf: 'As of',
     balanceOn: 'Balance on {{date}}',
     noBalance: 'No balance recorded',
@@ -168,8 +168,7 @@ export const en = {
     invalidAmount: 'Enter an amount, such as 1.234,56.',
     invalidDate: 'Use the format YYYY-MM-DD.',
     nameRequired: 'Give the bank a name.',
-    drift:
-      'Movements of {{amount}} dated on or before {{date}} arrived after you set this balance.',
+    openingOn: 'Started at {{amount}} on {{date}}',
     deleteConfirm: 'Remove {{name}}? Its accounts stay, without a bank.',
   },
   import: {

@@ -4,13 +4,12 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   add,
-  balanceAsOf,
-  deriveOpeningBalance,
+  balanceAt,
   formatMoney,
   isValidISODate,
-  money,
-  reconcileAnchor,
+  openingBalance,
   toDecimalString,
+  type BalanceAnchor,
   type Money,
   type Transaction,
 } from '@finant/core';
@@ -45,8 +44,14 @@ interface AccountView {
   readonly movementCount: number;
   /** Balance today, or null when no balance was ever asserted for the account. */
   readonly balance: Money | null;
-  /** Non-zero when movements behind the anchor date arrived after it was set. */
-  readonly driftMinor: number;
+  /**
+   * What the account held before its first movement, derived backwards from
+   * the assertion. Null until both a balance and some history exist. This is
+   * the figure that makes the imported statements add up.
+   */
+  readonly opening: Money | null;
+  /** The day the first movement was booked, for labelling `opening`. */
+  readonly firstMovement: string | null;
 }
 
 /** Bank name, its accounts, and the sum of the balances they state. */
@@ -85,28 +90,28 @@ function accountView(
   today: string,
 ): AccountView {
   const base = { row, movementCount: movements.length };
+  const blank = { ...base, balance: null, opening: null, firstMovement: null };
   const asserted = row.balance_minor;
   const asOf = row.balance_date;
-  const opening = row.opening_balance_minor;
-  if (asserted === null || asOf === null || opening === null) {
-    return { ...base, balance: null, driftMinor: 0 };
-  }
+  if (asserted === null || asOf === null) return blank;
+
+  const anchor: BalanceAnchor = { assertedMinor: asserted, asOf, currency: row.currency };
+  const booked = movements.filter((tx) => tx.bookingDate <= asOf);
+  const first = booked.reduce<string | null>(
+    (min, tx) => (min === null || tx.bookingDate < min ? tx.bookingDate : min),
+    null,
+  );
   try {
-    const anchor = {
-      assertedMinor: asserted,
-      asOf,
-      openingMinor: opening,
-      currency: row.currency,
-    };
     return {
       ...base,
-      balance: balanceAsOf(movements, opening, today, row.currency),
-      driftMinor: reconcileAnchor(movements, anchor).driftMinor,
+      balance: balanceAt(movements, anchor, today),
+      opening: first === null ? null : openingBalance(movements, anchor),
+      firstMovement: first,
     };
   } catch {
     // A movement in another currency: core refuses to sum it, and a balance we
     // cannot state honestly is better left blank than guessed.
-    return { ...base, balance: null, driftMinor: 0 };
+    return blank;
   }
 }
 
@@ -272,14 +277,15 @@ export default function BanksScreen() {
     });
   };
 
-  /** Stores the owner's claim and the opening balance it implies. */
+  /**
+   * Stores the owner's claim, and nothing derived from it. What the account
+   * held earlier is worked out from this whenever it is asked for, so a
+   * statement imported later cannot argue with the figure they typed.
+   */
   const assertBalance = async (accountId: string, asserted: Money, date: string) => {
-    const movements = movementsByAccount.get(accountId) ?? [];
-    const opening = deriveOpeningBalance(movements, asserted.minor, date, asserted.currency);
     await setAccountBalance(accountId, {
       assertedMinor: asserted.minor,
       balanceDate: date,
-      openingMinor: opening.minor,
     });
   };
 
@@ -558,9 +564,6 @@ function AccountLine({
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
-  // The drift is the negation of what arrived behind the anchor, so this is the
-  // total of the movements that turned up after the balance was asserted.
-  const arrived = money(-view.driftMinor, view.row.currency);
 
   return (
     <View style={[styles.account, { borderTopColor: theme.border }]}>
@@ -582,11 +585,11 @@ function AccountLine({
         {view.row.balance_date ? ` · ${t('banks.balanceOn', { date: view.row.balance_date })}` : ''}
       </Text>
 
-      {view.driftMinor !== 0 && view.row.balance_date ? (
-        <Text style={[styles.meta, { color: theme.warning }]}>
-          {t('banks.drift', {
-            amount: formatMoney(arrived, intlLocale()),
-            date: view.row.balance_date,
+      {view.opening && view.firstMovement ? (
+        <Text style={[styles.meta, { color: theme.textMuted }]}>
+          {t('banks.openingOn', {
+            amount: formatMoney(view.opening, intlLocale()),
+            date: view.firstMovement,
           })}
         </Text>
       ) : null}

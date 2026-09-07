@@ -1,4 +1,4 @@
-import { balanceAsOf } from './balance';
+import { balanceAt, type BalanceAnchor } from './balance';
 import { lastOfMonth, monthRange, yearMonthOf, yearOf } from './dates';
 import { money, zero, type CurrencyCode, type Money } from './money';
 import type { ISODate, Transaction, YearMonth } from './types';
@@ -20,8 +20,8 @@ import type { ISODate, Transaction, YearMonth } from './types';
 /** One account as the dashboard reads it out of the database. */
 export interface NetWorthAccount {
   readonly accountId: string;
-  /** Derived when the owner anchored the account; null when they never did. */
-  readonly openingMinor: number | null;
+  /** What the owner said this account holds, and when. Null when they never said. */
+  readonly anchor: BalanceAnchor | null;
   readonly currency: CurrencyCode;
   /** This account's non-deleted movements. */
   readonly movements: readonly Transaction[];
@@ -67,16 +67,13 @@ export interface NetWorthOptions {
 
 /** The total across the counted accounts on one day. */
 function totalOn(
-  accounts: readonly { openingMinor: number; movements: readonly Transaction[] }[],
+  accounts: readonly { anchor: BalanceAnchor; movements: readonly Transaction[] }[],
   asOf: ISODate,
   currency: CurrencyCode,
 ): Money {
   let total = zero(currency);
   for (const account of accounts) {
-    total = money(
-      total.minor + balanceAsOf(account.movements, account.openingMinor, asOf, currency).minor,
-      currency,
-    );
+    total = money(total.minor + balanceAt(account.movements, account.anchor, asOf).minor, currency);
   }
   return total;
 }
@@ -98,8 +95,8 @@ export function netWorthSeries(
   // An account in another currency is not converted: FinAnt holds no rate, and
   // a made-up one would put an invented number on the owner's net worth.
   const counted = accounts.filter(
-    (account) => account.openingMinor !== null && account.currency === currency,
-  ) as readonly (NetWorthAccount & { openingMinor: number })[];
+    (account) => account.anchor !== null && account.currency === currency,
+  ) as readonly (NetWorthAccount & { anchor: BalanceAnchor })[];
 
   const series = {
     granularity,

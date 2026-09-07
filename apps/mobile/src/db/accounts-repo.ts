@@ -14,7 +14,11 @@ export interface AccountRow {
   balance_minor: number | null;
   /** The day that assertion was made about, `YYYY-MM-DD`. */
   balance_date: string | null;
-  /** Opening balance derived from the assertion; see packages/core/src/balance.ts. */
+  /**
+   * Legacy. Held a derived opening balance while balances were computed
+   * forwards from one; the assertion above is now the only source of truth and
+   * nothing reads this. Kept because migrations are append-only.
+   */
   opening_balance_minor: number | null;
 }
 
@@ -79,23 +83,22 @@ export async function getOrCreateLocalAccount(currency = 'EUR'): Promise<string>
 }
 
 /**
- * Records the balance the owner says the account holds on `balanceDate`, plus
- * the opening balance derived from it. Both are stored: the assertion is what
- * the owner can be shown and re-checked against, the opening balance is what
- * every later figure is computed from.
+ * Records the balance the owner says the account holds on `balanceDate`.
+ *
+ * That claim is the whole truth about the account: every other figure is
+ * measured from it, forwards for a later day and backwards for an earlier one.
+ * Nothing is derived and stored alongside it, so importing history can never
+ * contradict it. See packages/core/src/balance.ts.
  */
 export async function setAccountBalance(
   accountId: string,
-  balance: { assertedMinor: number; balanceDate: string; openingMinor: number },
+  balance: { assertedMinor: number; balanceDate: string },
 ): Promise<void> {
   const db = await getDatabase();
   await db.runAsync(
-    `UPDATE accounts
-        SET balance_minor = ?, balance_date = ?, opening_balance_minor = ?
-      WHERE id = ?;`,
+    'UPDATE accounts SET balance_minor = ?, balance_date = ? WHERE id = ?;',
     balance.assertedMinor,
     balance.balanceDate,
-    balance.openingMinor,
     accountId,
   );
 }
