@@ -5,6 +5,7 @@ import {
   daysBetween,
   firstOfMonth,
   inDateRange,
+  lastOfMonth,
   monthRange,
   monthsBetween,
   yearMonthOf,
@@ -52,5 +53,27 @@ describe('dates', () => {
     expect(inDateRange('2026-07-27', '2026-07-28', '2026-08-27')).toBe(false);
     expect(inDateRange('2031-01-01', '2026-07-28', null)).toBe(true);
     expect(inDateRange('2026-07-27', '2026-07-28', null)).toBe(false);
+  });
+});
+
+describe('lastOfMonth', () => {
+  it('closes a 31-day month', () => {
+    expect(lastOfMonth('2026-01')).toBe('2026-01-31');
+  });
+
+  it('closes a 30-day month', () => {
+    expect(lastOfMonth('2026-04')).toBe('2026-04-30');
+  });
+
+  it('knows February in a common year', () => {
+    expect(lastOfMonth('2026-02')).toBe('2026-02-28');
+  });
+
+  it('knows February in a leap year', () => {
+    expect(lastOfMonth('2028-02')).toBe('2028-02-29');
+  });
+
+  it('knows 1900 was not a leap year', () => {
+    expect(lastOfMonth('1900-02')).toBe('1900-02-28');
   });
 });

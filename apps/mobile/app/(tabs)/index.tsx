@@ -1,18 +1,24 @@
-import { useCallback, useMemo } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   detectRecurring,
   forecastYear,
   money,
   monthsOfYear,
+  netWorthSeries,
   summarisePeriod,
   yearMonthOf,
+  type Granularity,
+  type NetWorthAccount,
+  type Transaction,
 } from '@finant/core';
 import { Amount } from '../../src/components/Amount';
+import { BalanceChart } from '../../src/components/BalanceChart';
 import { Card } from '../../src/components/Card';
 import { CategoryBreakdown } from '../../src/components/CategoryBreakdown';
+import { Chip } from '../../src/components/Chip';
 import { ForecastChart } from '../../src/components/ForecastChart';
 import { useAppData } from '../../src/hooks/use-app-data';
 import { usePayPeriod } from '../../src/hooks/use-pay-period';
@@ -24,7 +30,9 @@ const CURRENCY = 'EUR';
 export default function DashboardScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { transactions, loading, reload } = useAppData();
+  const router = useRouter();
+  const { transactions, accounts, loading, reload } = useAppData();
+  const [granularity, setGranularity] = useState<Granularity>('month');
 
   // Re-read on focus: an import happened on another screen.
   useFocusEffect(
@@ -47,6 +55,53 @@ export default function DashboardScreen() {
     [transactions, year, today],
   );
   const recurring = useMemo(() => detectRecurring(transactions, CURRENCY), [transactions]);
+
+  // One bucket per account: a balance is the sum of one account's own
+  // movements on top of that account's opening balance, never of the ledger.
+  const netWorthAccounts = useMemo<NetWorthAccount[]>(() => {
+    const byAccount = new Map<string, Transaction[]>();
+    for (const tx of transactions) {
+      const bucket = byAccount.get(tx.accountId) ?? [];
+      bucket.push(tx);
+      byAccount.set(tx.accountId, bucket);
+    }
+    return accounts.map((row) => ({
+      accountId: row.id,
+      openingMinor: row.opening_balance_minor,
+      currency: row.currency,
+      movements: byAccount.get(row.id) ?? [],
+    }));
+  }, [transactions, accounts]);
+
+  // Only whole months ahead: the current month's remainder is already part of
+  // the balance held today, and adding it again would count it twice.
+  const projected = useMemo(
+    () =>
+      forecast.months
+        .filter((month) => month.kind === 'projected')
+        .map((month) => ({ period: month.month, netMinor: month.net.minor })),
+    [forecast],
+  );
+
+  const netWorth = useMemo(
+    () =>
+      netWorthSeries(netWorthAccounts, {
+        today,
+        granularity,
+        currency: CURRENCY,
+        projected,
+      }),
+    [netWorthAccounts, today, granularity, projected],
+  );
+
+  const netWorthLabels = useMemo(
+    () =>
+      periodLabels(
+        netWorth.points.map((point) => point.period),
+        granularity,
+      ),
+    [netWorth, granularity],
+  );
 
   const monthLabels = useMemo(() => {
     const formatter = new Intl.DateTimeFormat(intlLocale(), { month: 'narrow' });
@@ -80,6 +135,47 @@ export default function DashboardScreen() {
         <RefreshControl refreshing={loading} onRefresh={reload} tintColor={theme.accent} />
       }
     >
+      <Card
+        title={t('dashboard.total')}
+        subtitle={netWorth.accountsCounted > 0 ? t(`dashboard.asOfToday`) : undefined}
+      >
+        {netWorth.accountsCounted === 0 ? (
+          <Pressable onPress={() => router.push('/banks')} accessibilityRole="button">
+            <Text style={{ color: theme.textMuted }}>{t('dashboard.noBalances')}</Text>
+            <Text style={[styles.hint, { color: theme.accent }]}>{t('dashboard.setBalances')}</Text>
+          </Pressable>
+        ) : (
+          <>
+            <Amount value={netWorth.current} tone="neutral" style={styles.total} />
+            {netWorth.accountsSkipped > 0 ? (
+              <Pressable onPress={() => router.push('/banks')} accessibilityRole="button">
+                <Text style={[styles.hint, { color: theme.warning }]}>
+                  {t('dashboard.balanceMissing', { count: netWorth.accountsSkipped })}
+                </Text>
+              </Pressable>
+            ) : null}
+            <BalanceChart points={netWorth.points} labels={netWorthLabels} />
+            <View style={styles.granularity}>
+              <Chip
+                label={t('dashboard.byMonth')}
+                selected={granularity === 'month'}
+                onPress={() => setGranularity('month')}
+              />
+              <Chip
+                label={t('dashboard.byYear')}
+                selected={granularity === 'year'}
+                onPress={() => setGranularity('year')}
+              />
+            </View>
+            {netWorth.points.some((point) => point.kind === 'projected') ? (
+              <Text style={[styles.hint, { color: theme.textMuted }]}>
+                {t('dashboard.projectedTail')}
+              </Text>
+            ) : null}
+          </>
+        )}
+      </Card>
+
       <Card title={periodTitle}>
         <View style={styles.figures}>
           <Figure label={t('dashboard.income')}>
@@ -144,6 +240,22 @@ export default function DashboardScreen() {
   );
 }
 
+/**
+ * Axis labels for the balance chart, thinned to at most eight so they stay
+ * legible: a year label at every year, and a month narrow otherwise.
+ */
+function periodLabels(periods: readonly string[], granularity: Granularity): string[] {
+  if (granularity === 'year') return [...periods];
+  const formatter = new Intl.DateTimeFormat(intlLocale(), { month: 'narrow' });
+  const step = Math.ceil(periods.length / 8);
+  return periods.map((period, i) => {
+    if (i % step !== 0 && i !== periods.length - 1) return '';
+    const narrow = formatter.format(new Date(`${period}-01T00:00:00Z`));
+    // January carries the year, so a line spanning several years says which.
+    return period.endsWith('-01') ? `${narrow} ${period.slice(2, 4)}` : narrow;
+  });
+}
+
 function Figure({ label, children }: { label: string; children: React.ReactNode }) {
   const theme = useTheme();
   return (
@@ -157,6 +269,8 @@ function Figure({ label, children }: { label: string; children: React.ReactNode 
 const styles = StyleSheet.create({
   screen: { padding: spacing.lg, paddingBottom: spacing.xxl },
   hint: { fontSize: 13 },
+  total: { fontSize: 30, fontWeight: '700' },
+  granularity: { flexDirection: 'row', gap: spacing.sm },
   figures: {
     flexDirection: 'row',
     justifyContent: 'space-between',
