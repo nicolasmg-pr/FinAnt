@@ -120,7 +120,10 @@ export default function DashboardScreen() {
   const savingsRate =
     summary.income.minor > 0 ? Math.round((summary.net.minor / summary.income.minor) * 100) : null;
 
-  if (transactions.length === 0 && !loading) {
+  // Only when there is nothing at all to say. A balance the owner has
+  // asserted is worth showing on its own: it answers "what do I have" without
+  // a single movement having been imported.
+  if (transactions.length === 0 && netWorth.accountsCounted === 0 && !loading) {
     return (
       // The colour goes on the ScrollView, not its content container: the
       // container is only as tall as the card, so everything below it fell
@@ -163,19 +166,25 @@ export default function DashboardScreen() {
                 </Text>
               </Pressable>
             ) : null}
-            <BalanceChart points={netWorth.points} labels={netWorthLabels} />
-            <View style={styles.granularity}>
-              <Chip
-                label={t('dashboard.byMonth')}
-                selected={granularity === 'month'}
-                onPress={() => setGranularity('month')}
-              />
-              <Chip
-                label={t('dashboard.byYear')}
-                selected={granularity === 'year'}
-                onPress={() => setGranularity('year')}
-              />
-            </View>
+            {/* One point is a dot, not a line, and a switch with nothing to
+                switch is noise: both wait for a second period. */}
+            {netWorth.points.length > 1 ? (
+              <>
+                <BalanceChart points={netWorth.points} labels={netWorthLabels} />
+                <View style={styles.granularity}>
+                  <Chip
+                    label={t('dashboard.byMonth')}
+                    selected={granularity === 'month'}
+                    onPress={() => setGranularity('month')}
+                  />
+                  <Chip
+                    label={t('dashboard.byYear')}
+                    selected={granularity === 'year'}
+                    onPress={() => setGranularity('year')}
+                  />
+                </View>
+              </>
+            ) : null}
             {netWorth.points.some((point) => point.kind === 'projected') ? (
               <Text style={[styles.hint, { color: theme.textMuted }]}>
                 {t('dashboard.projectedTail')}
@@ -185,82 +194,103 @@ export default function DashboardScreen() {
         )}
       </Card>
 
-      <Card title={periodTitle}>
-        <View style={styles.figures}>
-          <Figure label={t('dashboard.income')}>
-            <Amount value={summary.income} tone="income" style={styles.figureValue} />
-          </Figure>
-          <Figure label={t('dashboard.expenses')}>
-            <Amount value={summary.expenses} tone="expense" style={styles.figureValue} />
-          </Figure>
-          <Figure label={t('dashboard.net')}>
-            <Amount value={summary.net} style={styles.figureValue} />
-          </Figure>
-        </View>
-        {savingsRate !== null ? (
-          <Text style={{ color: theme.textMuted }}>
-            {t('dashboard.savingsRate')}: {savingsRate}%
-          </Text>
-        ) : null}
-        {period.anchored ? (
-          <Text style={[styles.hint, { color: theme.textMuted }]}>
-            {t('dashboard.payPeriodHint')}
-          </Text>
-        ) : null}
-      </Card>
-
-      <Card title={t('dashboard.topCategories')}>
-        <CategoryBreakdown totals={summary.expensesByCategory} />
-      </Card>
-
-      <Pressable
-        onPress={() => setYearView(yearView === 'projected' ? 'booked' : 'projected')}
-        accessibilityRole="button"
-        accessibilityHint={t('dashboard.tapToToggle')}
-      >
-        <Card
-          title={yearView === 'projected' ? t('dashboard.yearForecast') : t('dashboard.yearBooked')}
-          subtitle={
-            yearView === 'projected'
-              ? t(`dashboard.confidence.${forecast.confidence}`, { months: forecast.historyMonths })
-              : t('dashboard.bookedMonths', { count: booked.months.length })
-          }
-        >
-          <ForecastChart
-            months={yearView === 'projected' ? forecast.months : booked.months}
-            labels={
-              yearView === 'projected' ? monthLabels : monthLabels.slice(0, booked.months.length)
-            }
-          />
-          <View style={styles.figures}>
-            <Figure label={t('dashboard.income')}>
-              <Amount value={yearTotals.totalIncome} tone="income" style={styles.figureValue} />
-            </Figure>
-            <Figure label={t('dashboard.expenses')}>
-              <Amount value={yearTotals.totalExpenses} tone="expense" style={styles.figureValue} />
-            </Figure>
-            <Figure label={t('dashboard.net')}>
-              <Amount value={yearTotals.totalNet} style={styles.figureValue} />
-            </Figure>
-          </View>
-          <Text style={[styles.hint, { color: theme.accent }]}>
-            {yearView === 'projected' ? t('dashboard.showBooked') : t('dashboard.showProjection')}
-          </Text>
+      {/* Everything below is about movements, so it waits for one. */}
+      {transactions.length === 0 ? (
+        <Card title={t('dashboard.title')}>
+          <Text style={{ color: theme.textMuted }}>{t('dashboard.noData')}</Text>
         </Card>
-      </Pressable>
-
-      {recurring.length > 0 ? (
-        <Card title={t('dashboard.recurring')}>
-          {recurring.slice(0, 6).map((series) => (
-            <View key={series.key} style={styles.recurringRow}>
-              <Text style={{ color: theme.text, flexShrink: 1 }} numberOfLines={1}>
-                {series.label}
-              </Text>
-              <Amount value={money(series.typicalAmount.minor, CURRENCY)} />
+      ) : (
+        <>
+          <Card title={periodTitle}>
+            <View style={styles.figures}>
+              <Figure label={t('dashboard.income')}>
+                <Amount value={summary.income} tone="income" style={styles.figureValue} />
+              </Figure>
+              <Figure label={t('dashboard.expenses')}>
+                <Amount value={summary.expenses} tone="expense" style={styles.figureValue} />
+              </Figure>
+              <Figure label={t('dashboard.net')}>
+                <Amount value={summary.net} style={styles.figureValue} />
+              </Figure>
             </View>
-          ))}
-        </Card>
-      ) : null}
+            {savingsRate !== null ? (
+              <Text style={{ color: theme.textMuted }}>
+                {t('dashboard.savingsRate')}: {savingsRate}%
+              </Text>
+            ) : null}
+            {period.anchored ? (
+              <Text style={[styles.hint, { color: theme.textMuted }]}>
+                {t('dashboard.payPeriodHint')}
+              </Text>
+            ) : null}
+          </Card>
+
+          <Card title={t('dashboard.topCategories')}>
+            <CategoryBreakdown totals={summary.expensesByCategory} />
+          </Card>
+
+          <Pressable
+            onPress={() => setYearView(yearView === 'projected' ? 'booked' : 'projected')}
+            accessibilityRole="button"
+            accessibilityHint={t('dashboard.tapToToggle')}
+          >
+            <Card
+              title={
+                yearView === 'projected' ? t('dashboard.yearForecast') : t('dashboard.yearBooked')
+              }
+              subtitle={
+                yearView === 'projected'
+                  ? t(`dashboard.confidence.${forecast.confidence}`, {
+                      months: forecast.historyMonths,
+                    })
+                  : t('dashboard.bookedMonths', { count: booked.months.length })
+              }
+            >
+              <ForecastChart
+                months={yearView === 'projected' ? forecast.months : booked.months}
+                labels={
+                  yearView === 'projected'
+                    ? monthLabels
+                    : monthLabels.slice(0, booked.months.length)
+                }
+              />
+              <View style={styles.figures}>
+                <Figure label={t('dashboard.income')}>
+                  <Amount value={yearTotals.totalIncome} tone="income" style={styles.figureValue} />
+                </Figure>
+                <Figure label={t('dashboard.expenses')}>
+                  <Amount
+                    value={yearTotals.totalExpenses}
+                    tone="expense"
+                    style={styles.figureValue}
+                  />
+                </Figure>
+                <Figure label={t('dashboard.net')}>
+                  <Amount value={yearTotals.totalNet} style={styles.figureValue} />
+                </Figure>
+              </View>
+              <Text style={[styles.hint, { color: theme.accent }]}>
+                {yearView === 'projected'
+                  ? t('dashboard.showBooked')
+                  : t('dashboard.showProjection')}
+              </Text>
+            </Card>
+          </Pressable>
+
+          {recurring.length > 0 ? (
+            <Card title={t('dashboard.recurring')}>
+              {recurring.slice(0, 6).map((series) => (
+                <View key={series.key} style={styles.recurringRow}>
+                  <Text style={{ color: theme.text, flexShrink: 1 }} numberOfLines={1}>
+                    {series.label}
+                  </Text>
+                  <Amount value={money(series.typicalAmount.minor, CURRENCY)} />
+                </View>
+              ))}
+            </Card>
+          ) : null}
+        </>
+      )}
     </ScrollView>
   );
 }
