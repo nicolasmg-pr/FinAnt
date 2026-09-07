@@ -30,7 +30,7 @@ import { useAppData } from '../../src/hooks/use-app-data';
 import { useCategories } from '../../src/hooks/use-categories';
 import { usePayPeriod } from '../../src/hooks/use-pay-period';
 import { intlLocale } from '../../src/i18n';
-import { radius, spacing, useTheme } from '../../src/theme';
+import { radius, spacing, typeMoney, useTheme } from '../../src/design';
 
 const CURRENCY = 'EUR';
 
@@ -154,7 +154,7 @@ export default function BudgetsScreen() {
                   <Text style={[styles.rowLabel, { color: theme.textMuted }]} numberOfLines={1}>
                     {t('budgets.unbudgeted')}
                   </Text>
-                  <Amount value={progress.unbudgetedSpent} tone="neutral" style={styles.rowValue} />
+                  <Amount value={progress.unbudgetedSpent} tone="neutral" size="label" />
                 </View>
               ) : null}
             </Card>
@@ -166,7 +166,7 @@ export default function BudgetsScreen() {
                     <Text style={[styles.rowLabel, { color: theme.text }]} numberOfLines={1}>
                       {label(entry.categoryId)}
                     </Text>
-                    <Text style={[styles.rowValue, { color: theme.textMuted }]}>
+                    <Text style={[typeMoney.label, { color: theme.textMuted }]}>
                       {t('budgets.spentOfLimit', {
                         spent: formatMoney(entry.spent, intlLocale()),
                         limit: formatMoney(entry.limit, intlLocale()),
@@ -306,7 +306,6 @@ const styles = StyleSheet.create({
   screen: { padding: spacing.lg, paddingBottom: spacing.xxl },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
   rowLabel: { fontSize: 15, fontWeight: '500', flexShrink: 1 },
-  rowValue: { fontSize: 13, fontVariant: ['tabular-nums'] },
   hint: { fontSize: 13, textAlign: 'center', marginTop: spacing.sm },
   addButton: { borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
   addButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },

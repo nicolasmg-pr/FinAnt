@@ -475,7 +475,7 @@ function Row({
           {meta.join(' · ')}
         </Text>
       </View>
-      <Amount value={transaction.amount} style={styles.amount} />
+      <Amount value={transaction.amount} />
     </Pressable>
   );
 }
@@ -539,6 +539,5 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, gap: 2 },
   description: { fontSize: 15, fontWeight: '500' },
   meta: { fontSize: 12 },
-  amount: { fontSize: 15, fontWeight: '600' },
   empty: { textAlign: 'center', marginTop: spacing.xxl },
 });

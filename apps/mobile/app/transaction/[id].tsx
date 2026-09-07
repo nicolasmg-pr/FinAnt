@@ -267,7 +267,7 @@ export default function TransactionDetailScreen() {
       <Stack.Screen options={{ title: t('transactions.detailTitle') }} />
 
       <Card>
-        <Amount value={tx.amount} style={styles.amount} />
+        <Amount value={tx.amount} size="display" />
         <Text style={[styles.headline, { color: theme.text }]}>
           {tx.counterparty ?? tx.description}
         </Text>
@@ -434,7 +434,6 @@ const styles = StyleSheet.create({
   screen: { padding: spacing.lg, paddingBottom: spacing.xxl },
   hint: { fontSize: 13 },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  amount: { fontSize: 32, fontWeight: '700' },
   headline: { fontSize: 17, fontWeight: '600' },
   tag: {
     alignSelf: 'flex-start',

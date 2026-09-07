@@ -420,7 +420,7 @@ export default function BanksScreen() {
                   {bank.institution.name}
                 </Text>
                 {bank.total ? (
-                  <Amount value={bank.total} tone="neutral" style={styles.bankValue} />
+                  <Amount value={bank.total} tone="neutral" size="heading" />
                 ) : (
                   <Text style={{ color: theme.textMuted }}>{t('banks.noBalance')}</Text>
                 )}
@@ -573,7 +573,7 @@ function AccountLine({
             {view.row.name}
           </Text>
           {view.balance ? (
-            <Amount value={view.balance} tone="neutral" style={styles.accountValue} />
+            <Amount value={view.balance} tone="neutral" />
           ) : (
             <Text style={{ color: theme.textMuted, fontSize: 13 }}>{t('banks.noBalance')}</Text>
           )}
@@ -612,7 +612,6 @@ const styles = StyleSheet.create({
   screen: { padding: spacing.lg, paddingBottom: spacing.xxl },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
   bankName: { fontSize: 16, fontWeight: '600', flexShrink: 1 },
-  bankValue: { fontSize: 16, fontWeight: '700' },
   meta: { fontSize: 13 },
   account: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -622,7 +621,6 @@ const styles = StyleSheet.create({
   },
   accountName: { fontSize: 15, flexShrink: 1 },
   accountLinks: { flexDirection: 'row', gap: spacing.lg, marginTop: 2 },
-  accountValue: { fontSize: 15 },
   addAccount: {
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: spacing.sm,
