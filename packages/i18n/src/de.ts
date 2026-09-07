@@ -163,7 +163,8 @@ export const de: Translations = {
     issues_one: '{{count}} Zeile konnte nicht gelesen werden',
     issues_other: '{{count}} Zeilen konnten nicht gelesen werden',
     confirm: 'Importieren',
-    supportedFormats: 'Excel- oder Google-Sheets-Tabelle (.xlsx), Bank-CSV oder camt.053-XML',
+    supportedFormats:
+      'Excel- oder Google-Sheets-Tabelle (.xlsx), Bank-CSV, camt.053-XML oder Trade-Republic-PDF-Auszug',
     result: 'Import abgeschlossen',
     imported_one: '{{count}} Umsatz importiert',
     imported_other: '{{count}} Umsätze importiert',
