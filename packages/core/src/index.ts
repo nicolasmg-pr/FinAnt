@@ -18,3 +18,4 @@ export * from './filter';
 export * from './balance';
 export * from './exclusion';
 export * from './account-choice';
+export * from './networth';

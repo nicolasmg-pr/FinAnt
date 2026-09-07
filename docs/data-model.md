@@ -205,6 +205,32 @@ turned up, and offers "Re-anchor to my current balance", which re-opens the
 balance form. Nothing is corrected automatically: only the owner knows whether
 the new rows are real or the figure they typed was wrong.
 
+### The total, and how it moves
+
+`packages/core/src/networth.ts` sums the anchored accounts into one figure and
+one line. `netWorthSeries()` takes every account with its own movements and
+reports the total standing at the end of each period, at month or year
+granularity.
+
+Two rules keep the figure honest:
+
+- **An account with no anchor is skipped, not counted from zero.** It is
+  reported in `accountsSkipped` and the dashboard names how many were left out.
+  Counting it from zero would understate the total by whatever it opened with,
+  and understating is the one direction a balance must not err in.
+- **An account in another currency is skipped too.** FinAnt holds no exchange
+  rate and will not invent one.
+
+The period `today` falls in closes on `today`, not on its last calendar day: a
+movement already imported with a later date this month is real, but it is not
+money the owner has now.
+
+The projected tail is not computed here. The dashboard passes the whole future
+months of `forecastYear()` in as `projected`, and this module runs their net
+forward from the total held today, marking those points `projected`; the chart
+draws them dashed. The current month is never passed in — its remainder is
+already inside the balance held today, and adding it again would count it twice.
+
 ## How a rule matches
 
 `RuleMatch` has three text kinds, and the difference between two of them cost a
@@ -243,7 +269,7 @@ Two details worth knowing:
 - **Direction is chosen, not derived.** The form asks for income or expense and
   `signedAmountFor()` produces the signed amount from it. A "refund or
   repayment" switch is what makes the awkward half of the model reachable: a
-  positive amount that stays on the *expense* side, where it reduces the
+  positive amount that stays on the _expense_ side, where it reduces the
   month's spending instead of inflating its income. Its income-side mirror is
   money taken back off a salary — negative, still income.
 - **A manual row is never deduplicated against another.** Its `import_hash`

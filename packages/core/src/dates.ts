@@ -66,6 +66,16 @@ export function firstOfMonth(date: ISODate): ISODate {
 }
 
 /**
+ * The last calendar day of a month, `2026-02` -> `2026-02-29`. Day 0 of the
+ * following month is the last of this one, and asking UTC for it keeps the leap
+ * rule in one place instead of restating it here.
+ */
+export function lastOfMonth(ym: YearMonth): ISODate {
+  const day = new Date(Date.UTC(yearOf(ym), monthOf(ym), 0)).getUTCDate();
+  return `${ym}-${String(day).padStart(2, '0')}`;
+}
+
+/**
  * Inclusive at both ends; a `null` upper bound is open. Plain string comparison
  * is exact on zero-padded `YYYY-MM-DD`, which is why the format is fixed.
  */
