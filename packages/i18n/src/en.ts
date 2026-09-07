@@ -161,7 +161,8 @@ export const en = {
     issues_one: '{{count}} row could not be read',
     issues_other: '{{count}} rows could not be read',
     confirm: 'Import',
-    supportedFormats: 'Excel or Google Sheets tracker (.xlsx), bank CSV, or camt.053 XML',
+    supportedFormats:
+      'Excel or Google Sheets tracker (.xlsx), bank CSV, camt.053 XML, or a Trade Republic PDF statement',
     result: 'Import finished',
     imported_one: '{{count}} movement imported',
     imported_other: '{{count}} movements imported',

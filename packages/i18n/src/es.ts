@@ -164,7 +164,8 @@ export const es: Translations = {
     issues_one: 'No se pudo leer {{count}} fila',
     issues_other: 'No se pudieron leer {{count}} filas',
     confirm: 'Importar',
-    supportedFormats: 'Hoja de Excel o Google Sheets (.xlsx), CSV del banco o XML camt.053',
+    supportedFormats:
+      'Hoja de Excel o Google Sheets (.xlsx), CSV del banco, XML camt.053 o extracto PDF de Trade Republic',
     result: 'Importación terminada',
     imported_one: '{{count}} movimiento importado',
     imported_other: '{{count}} movimientos importados',
