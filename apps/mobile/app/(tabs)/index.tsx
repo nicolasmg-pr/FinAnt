@@ -3,6 +3,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
+  bookedYear,
   detectRecurring,
   forecastYear,
   money,
@@ -33,6 +34,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { transactions, accounts, loading, reload } = useAppData();
   const [granularity, setGranularity] = useState<Granularity>('month');
+  const [yearView, setYearView] = useState<'projected' | 'booked'>('projected');
 
   // Re-read on focus: an import happened on another screen.
   useFocusEffect(
@@ -52,6 +54,10 @@ export default function DashboardScreen() {
   );
   const forecast = useMemo(
     () => forecastYear(transactions, year, CURRENCY, { today }),
+    [transactions, year, today],
+  );
+  const booked = useMemo(
+    () => bookedYear(transactions, year, CURRENCY, { today }),
     [transactions, year, today],
   );
   const recurring = useMemo(() => detectRecurring(transactions, CURRENCY), [transactions]);
@@ -107,6 +113,9 @@ export default function DashboardScreen() {
     const formatter = new Intl.DateTimeFormat(intlLocale(), { month: 'narrow' });
     return monthsOfYear(year).map((m) => formatter.format(new Date(`${m}-01T00:00:00Z`)));
   }, [year]);
+
+  // Whichever of the two the card is showing; both carry the same three totals.
+  const yearTotals = yearView === 'projected' ? forecast : booked;
 
   const savingsRate =
     summary.income.minor > 0 ? Math.round((summary.net.minor / summary.income.minor) * 100) : null;
@@ -204,25 +213,41 @@ export default function DashboardScreen() {
         <CategoryBreakdown totals={summary.expensesByCategory} />
       </Card>
 
-      <Card
-        title={t('dashboard.yearForecast')}
-        subtitle={t(`dashboard.confidence.${forecast.confidence}`, {
-          months: forecast.historyMonths,
-        })}
+      <Pressable
+        onPress={() => setYearView(yearView === 'projected' ? 'booked' : 'projected')}
+        accessibilityRole="button"
+        accessibilityHint={t('dashboard.tapToToggle')}
       >
-        <ForecastChart months={forecast.months} labels={monthLabels} />
-        <View style={styles.figures}>
-          <Figure label={t('dashboard.income')}>
-            <Amount value={forecast.totalIncome} tone="income" style={styles.figureValue} />
-          </Figure>
-          <Figure label={t('dashboard.expenses')}>
-            <Amount value={forecast.totalExpenses} tone="expense" style={styles.figureValue} />
-          </Figure>
-          <Figure label={t('dashboard.net')}>
-            <Amount value={forecast.totalNet} style={styles.figureValue} />
-          </Figure>
-        </View>
-      </Card>
+        <Card
+          title={yearView === 'projected' ? t('dashboard.yearForecast') : t('dashboard.yearBooked')}
+          subtitle={
+            yearView === 'projected'
+              ? t(`dashboard.confidence.${forecast.confidence}`, { months: forecast.historyMonths })
+              : t('dashboard.bookedMonths', { count: booked.months.length })
+          }
+        >
+          <ForecastChart
+            months={yearView === 'projected' ? forecast.months : booked.months}
+            labels={
+              yearView === 'projected' ? monthLabels : monthLabels.slice(0, booked.months.length)
+            }
+          />
+          <View style={styles.figures}>
+            <Figure label={t('dashboard.income')}>
+              <Amount value={yearTotals.totalIncome} tone="income" style={styles.figureValue} />
+            </Figure>
+            <Figure label={t('dashboard.expenses')}>
+              <Amount value={yearTotals.totalExpenses} tone="expense" style={styles.figureValue} />
+            </Figure>
+            <Figure label={t('dashboard.net')}>
+              <Amount value={yearTotals.totalNet} style={styles.figureValue} />
+            </Figure>
+          </View>
+          <Text style={[styles.hint, { color: theme.accent }]}>
+            {yearView === 'projected' ? t('dashboard.showBooked') : t('dashboard.showProjection')}
+          </Text>
+        </Card>
+      </Pressable>
 
       {recurring.length > 0 ? (
         <Card title={t('dashboard.recurring')}>

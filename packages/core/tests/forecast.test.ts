@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { summariseMonth } from '../src/aggregate';
 import { detectRecurring } from '../src/recurring';
-import { forecastYear } from '../src/forecast';
+import { bookedYear, forecastYear } from '../src/forecast';
 import { syntheticYear, tx } from './factory';
 
 describe('summariseMonth', () => {
@@ -23,7 +23,12 @@ describe('summariseMonth', () => {
   it('excludes internal transfers and flagged rows from every total', () => {
     const withTransfer = [
       ...txs,
-      tx({ date: '2026-01-15', amount: -500, description: 'TRASPASO', categoryId: 'transfer-internal' }),
+      tx({
+        date: '2026-01-15',
+        amount: -500,
+        description: 'TRASPASO',
+        categoryId: 'transfer-internal',
+      }),
       tx({ date: '2026-01-16', amount: -70, description: 'REEMBOLSO', excludedFromStats: true }),
     ];
     expect(summariseMonth(withTransfer, '2026-01', 'EUR').expenses.minor).toBe(100000);
@@ -126,5 +131,55 @@ describe('refunds on the expense side', () => {
     const s = summariseMonth(onlyRefund, '2026-02', 'EUR');
     expect(s.expenses.minor).toBe(-2000);
     expect(s.expensesByCategory[0]?.share).toBe(0);
+  });
+});
+
+describe('bookedYear', () => {
+  const txs = [
+    tx({ date: '2026-01-25', amount: 2600, description: 'NOMINA' }),
+    tx({ date: '2026-01-01', amount: -950, description: 'ALQUILER' }),
+    tx({ date: '2026-02-25', amount: 2600, description: 'NOMINA' }),
+    tx({ date: '2026-02-01', amount: -950, description: 'ALQUILER' }),
+    // Dated inside the current month, so it is booked and must be counted.
+    tx({ date: '2026-03-01', amount: -950, description: 'ALQUILER' }),
+    // Next year: no business in this year's totals whatever the toggle says.
+    tx({ date: '2027-01-01', amount: -950, description: 'ALQUILER' }),
+  ];
+
+  it('stops at the month containing today, current month included', () => {
+    const booked = bookedYear(txs, 2026, 'EUR', { today: '2026-03-15' });
+    expect(booked.months.map((month) => month.month)).toEqual(['2026-01', '2026-02', '2026-03']);
+  });
+
+  it('reports every month as booked fact, never as a projection', () => {
+    const booked = bookedYear(txs, 2026, 'EUR', { today: '2026-03-15' });
+    expect(booked.months.every((month) => month.kind === 'actual')).toBe(true);
+    expect(booked.months.every((month) => month.confidence === 'high')).toBe(true);
+  });
+
+  it('totals only the months it reports', () => {
+    const booked = bookedYear(txs, 2026, 'EUR', { today: '2026-03-15' });
+    expect(booked.totalIncome.minor).toBe(520000);
+    expect(booked.totalExpenses.minor).toBe(285000);
+    expect(booked.totalNet.minor).toBe(235000);
+  });
+
+  it('runs the cumulative net through the months in order', () => {
+    const booked = bookedYear(txs, 2026, 'EUR', { today: '2026-03-15' });
+    expect(booked.months.map((month) => month.cumulativeNet.minor)).toEqual([
+      165000, 330000, 235000,
+    ]);
+  });
+
+  it('covers all twelve months of a year that is already over', () => {
+    const booked = bookedYear(txs, 2026, 'EUR', { today: '2027-04-01' });
+    expect(booked.months).toHaveLength(12);
+    expect(booked.totalIncome.minor).toBe(520000);
+  });
+
+  it('reports no month of a year that has not started', () => {
+    const booked = bookedYear(txs, 2028, 'EUR', { today: '2026-03-15' });
+    expect(booked.months).toEqual([]);
+    expect(booked.totalNet.minor).toBe(0);
   });
 });
