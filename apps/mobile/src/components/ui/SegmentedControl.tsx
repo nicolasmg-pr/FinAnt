@@ -1,7 +1,16 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
-import { MAX_FONT_SCALE, radius, spacing, type, useElevation, useMotion, useTheme } from '../../design';
+import {
+  MAX_FONT_SCALE,
+  radius,
+  spacing,
+  type,
+  useElevation,
+  useIsDark,
+  useMotion,
+  useTheme,
+} from '../../design';
 
 const PADDING = 3;
 
@@ -25,6 +34,10 @@ export function SegmentedControl<T extends string>({
   const theme = useTheme();
   const motion = useMotion();
   const elevation = useElevation(1);
+  const dark = useIsDark();
+  // Dark theme raises by lightness, so the thumb has to sit above the trough
+  // rather than take the plain surface, which is darker than surfaceAlt.
+  const thumbColor = dark ? theme.surfaceRaised : theme.surface;
   const [width, setWidth] = useState(0);
 
   const segment = options.length > 0 ? (width - PADDING * 2) / options.length : 0;
@@ -42,11 +55,11 @@ export function SegmentedControl<T extends string>({
     <View
       accessibilityRole="tablist"
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-      style={[styles.trough, { backgroundColor: theme.surfaceAlt }]}
+      style={[styles.trough, { backgroundColor: theme.surfaceSunken }]}
     >
       {width > 0 ? (
         <Animated.View
-          style={[styles.thumb, { backgroundColor: theme.surface }, elevation, thumb]}
+          style={[styles.thumb, elevation, { backgroundColor: thumbColor }, thumb]}
           pointerEvents="none"
         />
       ) : null}

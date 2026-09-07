@@ -22,6 +22,9 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: t('nav.dashboard'),
+          // The screen renders its own large title in the scroll body, so the
+          // bar would only repeat it. The other tabs follow in the chrome task.
+          headerShown: false,
           tabBarIcon: ({ color, size }) => <Feather name="pie-chart" color={color} size={size} />,
         }}
       />

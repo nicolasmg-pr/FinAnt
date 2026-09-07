@@ -16,11 +16,15 @@ export function Amount({
   value,
   tone = 'auto',
   size = 'body',
+  fit = false,
   style,
 }: {
   value: Money;
   tone?: 'auto' | 'income' | 'expense' | 'neutral';
   size?: TypeRole;
+  /** Shrink to one line rather than wrap. For a figure in a fixed-width tile,
+   * where a wrapped amount reads as two numbers. */
+  fit?: boolean;
   style?: TextStyle;
 }) {
   const theme = useTheme();
@@ -30,7 +34,13 @@ export function Amount({
     resolved === 'income' ? theme.income : resolved === 'expense' ? theme.expense : theme.text;
 
   return (
-    <Text style={[typeMoney[size], { color }, style]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+    <Text
+      style={[typeMoney[size], { color }, style]}
+      maxFontSizeMultiplier={MAX_FONT_SCALE}
+      numberOfLines={fit ? 1 : undefined}
+      adjustsFontSizeToFit={fit}
+      minimumFontScale={0.7}
+    >
       {formatMoney(value, intlLocale())}
     </Text>
   );

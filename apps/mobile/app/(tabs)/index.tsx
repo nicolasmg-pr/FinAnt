@@ -1,7 +1,10 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   bookedYear,
   detectRecurring,
@@ -19,17 +22,24 @@ import { Amount } from '../../src/components/Amount';
 import { BalanceChart } from '../../src/components/BalanceChart';
 import { Card } from '../../src/components/Card';
 import { CategoryBreakdown } from '../../src/components/CategoryBreakdown';
-import { Chip } from '../../src/components/Chip';
 import { ForecastChart } from '../../src/components/ForecastChart';
+import { ListRow } from '../../src/components/ui/ListRow';
+import { SegmentedControl } from '../../src/components/ui/SegmentedControl';
+import { StatTile } from '../../src/components/ui/StatTile';
+import { Touchable } from '../../src/components/ui/Touchable';
 import { useAppData } from '../../src/hooks/use-app-data';
 import { usePayPeriod } from '../../src/hooks/use-pay-period';
 import { intlLocale } from '../../src/i18n';
-import { spacing, useTheme } from '../../src/theme';
+import { radius, spacing, type, useMotion, useTheme } from '../../src/design';
 
 const CURRENCY = 'EUR';
 
 export default function DashboardScreen() {
   const theme = useTheme();
+  const motion = useMotion();
+  // The tab hides its header so the title can scroll away with the content;
+  // without the inset that title would sit under the notch.
+  const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const router = useRouter();
   const { transactions, accounts, loading, reload } = useAppData();
@@ -140,11 +150,10 @@ export default function DashboardScreen() {
       // through to the navigator's own scene colour and left a grey seam.
       <ScrollView
         style={{ backgroundColor: theme.background }}
-        contentContainerStyle={styles.screen}
+        contentContainerStyle={[styles.screen, { paddingTop: insets.top + spacing.lg }]}
       >
-        <Card title={t('dashboard.title')}>
-          <Text style={{ color: theme.textMuted }}>{t('dashboard.noData')}</Text>
-        </Card>
+        <Text style={[type.title, { color: theme.text }]}>{t('nav.dashboard')}</Text>
+        <Empty message={t('dashboard.noData')} />
       </ScrollView>
     );
   }
@@ -152,87 +161,102 @@ export default function DashboardScreen() {
   return (
     <ScrollView
       style={{ backgroundColor: theme.background }}
-      contentContainerStyle={styles.screen}
+      contentContainerStyle={[styles.screen, { paddingTop: insets.top + spacing.lg }]}
       refreshControl={
         <RefreshControl refreshing={loading} onRefresh={reload} tintColor={theme.accent} />
       }
     >
-      <Card
-        title={t('dashboard.total')}
-        subtitle={netWorth.accountsCounted > 0 ? t(`dashboard.asOfToday`) : undefined}
-      >
+      <Text style={[type.title, { color: theme.text }]}>{t('nav.dashboard')}</Text>
+
+      {/* The hero carries no card chrome: the balance is the page, not an item
+          on it. */}
+      <View style={styles.hero}>
+        <Text style={[type.caption, styles.heroLabel, { color: theme.textMuted }]}>
+          {t('dashboard.total')}
+        </Text>
+
         {netWorth.accountsCounted === 0 ? (
-          <Pressable onPress={() => router.push('/banks')} accessibilityRole="button">
-            <Text style={{ color: theme.textMuted }}>{t('dashboard.noBalances')}</Text>
-            <Text style={[styles.hint, { color: theme.accent }]}>{t('dashboard.setBalances')}</Text>
-          </Pressable>
+          <Touchable onPress={() => router.push('/banks')} accessibilityRole="button">
+            <Text style={[type.body, { color: theme.textMuted }]}>
+              {t('dashboard.noBalances')}
+            </Text>
+            <Text style={[type.body, { color: theme.accent }]}>{t('dashboard.setBalances')}</Text>
+          </Touchable>
         ) : (
           <>
-            <Amount value={netWorth.current} tone="neutral" style={styles.total} />
+            <Amount value={netWorth.current} tone="neutral" size="display" />
+            <Text style={[type.caption, { color: theme.textMuted }]}>
+              {t('dashboard.asOfToday')}
+            </Text>
+
             {netWorth.accountsSkipped > 0 ? (
-              <Pressable onPress={() => router.push('/banks')} accessibilityRole="button">
-                <Text style={[styles.hint, { color: theme.warning }]}>
+              <Touchable
+                onPress={() => router.push('/banks')}
+                accessibilityRole="button"
+                style={[styles.warning, { backgroundColor: theme.warningSoft }]}
+              >
+                <Feather name="alert-circle" size={14} color={theme.warning} />
+                <Text style={[type.label, styles.warningText, { color: theme.warning }]}>
                   {t('dashboard.balanceMissing', { count: netWorth.accountsSkipped })}
                 </Text>
-              </Pressable>
+              </Touchable>
             ) : null}
+
             {/* One point is a dot, not a line. */}
             {netWorth.points.length > 1 ? (
-              <BalanceChart points={netWorth.points} labels={netWorthLabels} />
+              <View style={styles.bleed}>
+                <BalanceChart points={netWorth.points} labels={netWorthLabels} />
+              </View>
             ) : null}
+
             {/* The switch outlives the chart on purpose: a single year collapses
                 to one point, and hiding the switch with the chart left no way
                 back to months. */}
             {transactions.length > 0 ? (
-              <View style={styles.granularity}>
-                <Chip
-                  label={t('dashboard.byMonth')}
-                  selected={granularity === 'month'}
-                  onPress={() => setGranularity('month')}
-                />
-                <Chip
-                  label={t('dashboard.byYear')}
-                  selected={granularity === 'year'}
-                  onPress={() => setGranularity('year')}
-                />
-              </View>
+              <SegmentedControl
+                options={[
+                  { value: 'month' as const, label: t('dashboard.byMonth') },
+                  { value: 'year' as const, label: t('dashboard.byYear') },
+                ]}
+                value={granularity}
+                onChange={setGranularity}
+              />
             ) : null}
+
             {netWorth.points.length > 1 &&
             netWorth.points.some((point) => point.kind === 'projected') ? (
-              <Text style={[styles.hint, { color: theme.textMuted }]}>
+              <Text style={[type.caption, { color: theme.textMuted }]}>
                 {t('dashboard.projectedTail')}
               </Text>
             ) : null}
           </>
         )}
-      </Card>
+      </View>
 
       {/* Everything below is about movements, so it waits for one. */}
       {transactions.length === 0 ? (
-        <Card title={t('dashboard.title')}>
-          <Text style={{ color: theme.textMuted }}>{t('dashboard.noData')}</Text>
-        </Card>
+        <Empty message={t('dashboard.noData')} />
       ) : (
         <>
           <Card title={periodTitle}>
             <View style={styles.figures}>
-              <Figure label={t('dashboard.income')}>
-                <Amount value={summary.income} tone="income" style={styles.figureValue} />
-              </Figure>
-              <Figure label={t('dashboard.expenses')}>
-                <Amount value={summary.expenses} tone="expense" style={styles.figureValue} />
-              </Figure>
-              <Figure label={t('dashboard.net')}>
-                <Amount value={summary.net} style={styles.figureValue} />
-              </Figure>
+              <StatTile label={t('dashboard.income')} tone="income">
+                <Amount value={summary.income} tone="income" size="heading" fit />
+              </StatTile>
+              <StatTile label={t('dashboard.expenses')} tone="expense">
+                <Amount value={summary.expenses} tone="expense" size="heading" fit />
+              </StatTile>
+              <StatTile label={t('dashboard.net')} tone="neutral">
+                <Amount value={summary.net} size="heading" fit />
+              </StatTile>
             </View>
             {savingsRate !== null ? (
-              <Text style={{ color: theme.textMuted }}>
+              <Text style={[type.label, { color: theme.textMuted }]}>
                 {t('dashboard.savingsRate')}: {savingsRate}%
               </Text>
             ) : null}
             {period.anchored ? (
-              <Text style={[styles.hint, { color: theme.textMuted }]}>
+              <Text style={[type.caption, { color: theme.textMuted }]}>
                 {t('dashboard.payPeriodHint')}
               </Text>
             ) : null}
@@ -242,23 +266,28 @@ export default function DashboardScreen() {
             <CategoryBreakdown totals={summary.expensesByCategory} />
           </Card>
 
-          <Pressable
-            onPress={() => setYearView(yearView === 'projected' ? 'booked' : 'projected')}
-            accessibilityRole="button"
-            accessibilityHint={t('dashboard.tapToToggle')}
+          <Card
+            subtitle={
+              yearView === 'projected'
+                ? t(`dashboard.confidence.${forecast.confidence}`, {
+                    months: forecast.historyMonths,
+                  })
+                : t('dashboard.bookedMonths', { count: booked.months.length })
+            }
           >
-            <Card
-              title={
-                yearView === 'projected' ? t('dashboard.yearForecast') : t('dashboard.yearBooked')
-              }
-              subtitle={
-                yearView === 'projected'
-                  ? t(`dashboard.confidence.${forecast.confidence}`, {
-                      months: forecast.historyMonths,
-                    })
-                  : t('dashboard.bookedMonths', { count: booked.months.length })
-              }
-            >
+            {/* Was a tap anywhere on the card, explained by a hint line at the
+                bottom. A projection and a booked figure are different claims;
+                which one you are looking at should be visible, not inferred. */}
+            <SegmentedControl
+              options={[
+                { value: 'projected' as const, label: t('dashboard.yearForecast') },
+                { value: 'booked' as const, label: t('dashboard.yearBooked') },
+              ]}
+              value={yearView}
+              onChange={setYearView}
+            />
+
+            <Animated.View key={yearView} entering={FadeIn.duration(motion.quick)}>
               <ForecastChart
                 months={yearView === 'projected' ? forecast.months : booked.months}
                 labels={
@@ -268,37 +297,28 @@ export default function DashboardScreen() {
                 }
               />
               <View style={styles.figures}>
-                <Figure label={t('dashboard.income')}>
-                  <Amount value={yearTotals.totalIncome} tone="income" style={styles.figureValue} />
-                </Figure>
-                <Figure label={t('dashboard.expenses')}>
-                  <Amount
-                    value={yearTotals.totalExpenses}
-                    tone="expense"
-                    style={styles.figureValue}
-                  />
-                </Figure>
-                <Figure label={t('dashboard.net')}>
-                  <Amount value={yearTotals.totalNet} style={styles.figureValue} />
-                </Figure>
+                <StatTile label={t('dashboard.income')} tone="income">
+                  <Amount value={yearTotals.totalIncome} tone="income" size="heading" fit />
+                </StatTile>
+                <StatTile label={t('dashboard.expenses')} tone="expense">
+                  <Amount value={yearTotals.totalExpenses} tone="expense" size="heading" fit />
+                </StatTile>
+                <StatTile label={t('dashboard.net')} tone="neutral">
+                  <Amount value={yearTotals.totalNet} size="heading" fit />
+                </StatTile>
               </View>
-              <Text style={[styles.hint, { color: theme.accent }]}>
-                {yearView === 'projected'
-                  ? t('dashboard.showBooked')
-                  : t('dashboard.showProjection')}
-              </Text>
-            </Card>
-          </Pressable>
+            </Animated.View>
+          </Card>
 
           {recurring.length > 0 ? (
             <Card title={t('dashboard.recurring')}>
-              {recurring.slice(0, 6).map((series) => (
-                <View key={series.key} style={styles.recurringRow}>
-                  <Text style={{ color: theme.text, flexShrink: 1 }} numberOfLines={1}>
-                    {series.label}
-                  </Text>
-                  <Amount value={money(series.typicalAmount.minor, CURRENCY)} />
-                </View>
+              {recurring.slice(0, 6).map((series, index) => (
+                <ListRow
+                  key={series.key}
+                  title={series.label}
+                  trailing={<Amount value={money(series.typicalAmount.minor, CURRENCY)} />}
+                  divider={index < Math.min(recurring.length, 6) - 1}
+                />
               ))}
             </Card>
           ) : null}
@@ -324,29 +344,33 @@ function periodLabels(periods: readonly string[], granularity: Granularity): str
   });
 }
 
-function Figure({ label, children }: { label: string; children: React.ReactNode }) {
+function Empty({ message }: { message: string }) {
   const theme = useTheme();
   return (
-    <View style={styles.figure}>
-      <Text style={[styles.figureLabel, { color: theme.textMuted }]}>{label}</Text>
-      {children}
+    <View style={styles.empty}>
+      <Feather name="inbox" size={32} color={theme.textMuted} />
+      <Text style={[type.body, styles.emptyText, { color: theme.textMuted }]}>{message}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  hint: { fontSize: 13 },
-  total: { fontSize: 30, fontWeight: '700' },
-  granularity: { flexDirection: 'row', gap: spacing.sm },
-  figures: {
+  screen: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
+  hero: { gap: spacing.sm, marginBottom: spacing.sm },
+  heroLabel: { textTransform: 'uppercase' },
+  // The chart reaches both screen edges; the screen's own padding is undone
+  // for its width only.
+  bleed: { marginHorizontal: -spacing.lg },
+  warning: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
     gap: spacing.sm,
-    marginTop: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
   },
-  figure: { flex: 1, gap: 2 },
-  figureLabel: { fontSize: 12 },
-  figureValue: { fontSize: 17, fontWeight: '700' },
-  recurringRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
+  warningText: { flexShrink: 1 },
+  figures: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  empty: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xxl },
+  emptyText: { textAlign: 'center' },
 });
