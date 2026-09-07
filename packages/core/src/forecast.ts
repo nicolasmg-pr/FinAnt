@@ -173,6 +173,67 @@ export function forecastYear(
   };
 }
 
+/** The booked half of a year: the same shape, with nothing projected in it. */
+export interface YearActuals {
+  readonly year: number;
+  readonly currency: CurrencyCode;
+  /** January through the month containing `today`; empty before the year starts. */
+  readonly months: readonly MonthForecast[];
+  readonly totalIncome: Money;
+  readonly totalExpenses: Money;
+  readonly totalNet: Money;
+}
+
+/**
+ * The year as recorded, with no projection anywhere in it.
+ *
+ * `forecastYear()` answers "how will this year end"; this answers "what has
+ * actually happened so far", which is the figure to check a projection
+ * against. The current month is included and reported as the fact it is: what
+ * is booked in it, with no pro-rated remainder added on.
+ *
+ * Months share `MonthForecast` so the same chart draws either view.
+ */
+export function bookedYear(
+  transactions: readonly Transaction[],
+  year: number,
+  currency: CurrencyCode,
+  options: ForecastOptions = {},
+): YearActuals {
+  const today = options.today ?? new Date().toISOString().slice(0, 10);
+  const currentMonth = yearMonthOf(today);
+
+  const months: MonthForecast[] = [];
+  let cumulative = 0;
+  for (const month of monthsOfYear(year)) {
+    // Nothing beyond the month we are living in: an empty December is not a
+    // month in which nothing happened, it is a month that has not happened.
+    if (month > currentMonth) break;
+    const actual = summariseMonth(transactions, month, currency);
+    cumulative += actual.net.minor;
+    months.push({
+      month,
+      kind: 'actual',
+      income: actual.income,
+      expenses: actual.expenses,
+      net: actual.net,
+      cumulativeNet: money(cumulative, currency),
+      confidence: 'high',
+    });
+  }
+
+  const totalIncome = months.reduce((acc, m) => acc + m.income.minor, 0);
+  const totalExpenses = months.reduce((acc, m) => acc + m.expenses.minor, 0);
+  return {
+    year,
+    currency,
+    months,
+    totalIncome: money(totalIncome, currency),
+    totalExpenses: money(totalExpenses, currency),
+    totalNet: money(totalIncome - totalExpenses, currency),
+  };
+}
+
 /** Convenience for the dashboard header: this month and the same month last year. */
 export function monthOverYear(
   transactions: readonly Transaction[],
