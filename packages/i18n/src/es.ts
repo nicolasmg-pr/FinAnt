@@ -153,7 +153,7 @@ export const es: Translations = {
   },
   import: {
     title: 'Importar un archivo',
-    pickFile: 'Elige un archivo CSV o camt.053',
+    pickFile: 'Elige un archivo de extracto',
     detectedProfile: 'Formato detectado: {{profile}}',
     chooseProfile: 'Elige el formato',
     preview: 'Vista previa',
