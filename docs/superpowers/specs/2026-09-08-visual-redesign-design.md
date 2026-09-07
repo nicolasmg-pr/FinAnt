@@ -81,19 +81,21 @@ Light:
 | `surface` | `#FFFFFF` | cards, sheets |
 | `surfaceRaised` | `#FFFFFF` | card inside a card (separated by shadow) |
 | `surfaceSunken` | `#E8EEED` | inputs, progress tracks, inset wells |
-| `surfaceAlt` | `#EAF0EF` | segmented-control trough, unselected chip |
+| `surfaceAlt` | `#E6EDEB` | segmented-control trough, unselected chip |
 | `border` | `#DDE5E3` | hairlines, kept for dividers only |
 | `text` | `#0F1D1B` | primary text |
-| `textMuted` | `#5F736F` | captions, labels, subtitles |
-| `accent` | `#0D8A7D` | interactive, balance line |
-| `accentPressed` | `#0A6F65` | pressed fill |
-| `accentSoft` | `#D8F0EC` | tinted button, selected chip, active tab pill |
-| `income` | `#46A758` | income figures, income bars |
-| `incomeSoft` | `#DCF2DE` | income stat tile background |
-| `expense` | `#D64550` | expense figures, expense bars, danger |
-| `expenseSoft` | `#FBE3E5` | expense stat tile background |
-| `warning` | `#C2761C` | missing balance, invalid date |
-| `warningSoft` | `#FBEBD6` | warning banner background |
+| `textMuted` | `#556A66` | captions, labels, subtitles |
+| `accent` | `#06695F` | interactive, balance line |
+| `accentPressed` | `#044F47` | pressed fill |
+| `accentSoft` | `#D3EEE9` | tinted button, selected chip, active tab pill |
+| `accentInk` | `#063F3A` | chart strokes drawn over other fills |
+| `onAccent` | `#FFFFFF` | text on an accent fill |
+| `income` | `#26703C` | income figures, income bars |
+| `incomeSoft` | `#DBF0E0` | income stat tile background |
+| `expense` | `#B32E3C` | expense figures, expense bars, danger |
+| `expenseSoft` | `#FADFE2` | expense stat tile background |
+| `warning` | `#8A5411` | missing balance, invalid date |
+| `warningSoft` | `#F8E8D2` | warning banner background |
 
 Dark, derived from the same hue anchors. Soft depth in the dark theme comes
 from lifting surface lightness, not from shadows — a shadow does not read on a
@@ -112,6 +114,8 @@ near-black ground:
 | `accent` | `#3FD0BE` |
 | `accentPressed` | `#2FB4A4` |
 | `accentSoft` | `#12332F` |
+| `accentInk` | `#9BF7E9` |
+| `onAccent` | `#04231F` |
 | `income` | `#6FD37A` |
 | `incomeSoft` | `#16301C` |
 | `expense` | `#F2777F` |
@@ -123,17 +127,24 @@ Both palettes share the same keys, as today, so the dark palette stays
 assignable to the light one's type.
 
 **Hue separation constraint.** The accent is teal (≈174°) and income is green
-(≈128°). They are 46° apart, which is enough side by side but not enough when
-one is a 2px line drawn over the other as a fill. `ForecastChart` does exactly
-that: green income bars, rose expense bars, accent net line. The line therefore
-keeps a lightness gap from the bars — in light theme the accent line is the
-darkest element in the chart, in dark theme the lightest — and the net line
-gains a 1px `background`-coloured halo so it separates from whatever it crosses.
-No chart may ever place `accent` and `income` as adjacent *fills*.
+(≈140°). Side by side that is enough; it is not enough when one is a 2px line
+drawn over the other as a fill. `ForecastChart` does exactly that: green income
+bars, rose expense bars, net line over both. The net line therefore does not
+use `accent` at all — it uses `accentInk`, which is deliberately off the
+lightness of both bar colours (light theme 1.95:1 against income, 1.89:1
+against expense; dark theme 1.50:1 and 2.19:1) — and it carries a 1px
+`background`-coloured halo, which is what actually guarantees separation where
+it crosses a bar. No chart may place `accent` and `income` as adjacent *fills*.
 
-**Contrast.** Every text-on-surface pair must reach WCAG AA (4.5:1 for body,
-3:1 for ≥19pt semibold). `textMuted` on `background` is the tightest pair in
-both themes and is verified explicitly, not assumed.
+**Contrast.** Every text-on-surface pair must reach WCAG AA 4.5:1 — the body
+threshold, applied to all of them rather than allowing large text 3:1, because
+amounts appear at both sizes and a token cannot know which. Nineteen pairs are
+asserted per theme, in a test, not by eye. The values above are the tuned
+result: the first pass failed nine light-theme pairs (accent on surface 4.24,
+income on surface 3.03, warning on warningSoft 3.04), which is why the light
+accent, income, expense, warning and textMuted are all darker than a soft-depth
+palette would naively pick. Tightest surviving pair is `textMuted` on
+`surfaceAlt` at 4.86:1.
 
 **Category colours.** Categories carry a `color` in the database. Those values
 are owner data and are not rewritten. What changes: a pastel default ramp
@@ -386,8 +397,13 @@ Each phase must leave the tree compiling and the app launchable.
 
 ## Verification
 
-The mobile app has no test runner — `npm test` covers `packages/*` only, and
-this work touches no package. Verification is therefore:
+The mobile app has no test runner and this work adds none: a test asserting a
+shadow radius is a tautology. One part of the token layer *is* worth testing,
+because it has an objective right answer — `palette.ts` is a pure module with
+no React Native import, so its light/dark key parity and all 19 contrast pairs
+per theme are asserted in node. `vitest.config.ts`'s `include` gains
+`apps/mobile/src/design/tests/**/*.test.ts` for it. Everything else is
+verified by:
 
 - `npm run typecheck` clean after every phase.
 - `npm run lint:fix` scoped to the changed paths (a repo-wide run reformats
@@ -397,9 +413,7 @@ this work touches no package. Verification is therefore:
   compared against the previous phase.
 - Reduce-motion enabled in simulator settings: confirm no animation runs.
 - Largest OS text size: confirm no row clips and no figure truncates.
-- Contrast check on the four tightest pairs per theme (`textMuted` on
-  `background`, `textMuted` on `surface`, `accent` on `background`, `accent` on
-  `accentSoft`).
+- `npm test` green, including the palette contrast test.
 
 Screenshots are for review in-session only. None is committed, and the
 simulator database is snapshotted before the app is driven, because its data is
