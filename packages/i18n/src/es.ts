@@ -143,7 +143,7 @@ export const es: Translations = {
   banks: {
     title: 'Bancos',
     viewMovements: 'Ver movimientos',
-    empty: 'Todavía no hay bancos. Añade uno con el saldo que tiene hoy.',
+    empty: 'Todavía no hay bancos. Añade uno y luego las cuentas que tiene.',
     add: 'Añadir banco',
     edit: 'Editar banco',
     name: 'Nombre del banco',
@@ -151,11 +151,17 @@ export const es: Translations = {
     asOf: 'A fecha de',
     balanceOn: 'Saldo a {{date}}',
     noBalance: 'Sin saldo registrado',
-    updateBalance: 'Actualizar saldo',
     addAccount: 'Añadir cuenta',
+    editAccount: 'Editar cuenta',
     accountName: 'Nombre de la cuenta',
     accountNamePlaceholder: 'Cuenta corriente',
     accountNameRequired: 'Dale un nombre a la cuenta.',
+    noAccounts: 'Este banco todavía no tiene cuentas.',
+    deleteAccountConfirm: '¿Eliminar {{name}}?',
+    deleteAccountMovements_one:
+      'Se elimina también su {{count}} movimiento. No se puede deshacer: habría que volver a importar el extracto.',
+    deleteAccountMovements_other:
+      'Se eliminan también sus {{count}} movimientos. No se puede deshacer: habría que volver a importar los extractos.',
     unassigned: 'Sin banco',
     moveToBank: 'Mover a un banco',
     accounts_one: '{{count}} cuenta',
@@ -167,7 +173,6 @@ export const es: Translations = {
     nameRequired: 'Dale un nombre al banco.',
     drift:
       'Después de fijar este saldo llegaron movimientos por {{amount}} con fecha del {{date}} o anterior.',
-    reanchor: 'Fijar de nuevo con mi saldo actual',
     deleteConfirm: '¿Quitar {{name}}? Sus cuentas se mantienen, sin banco.',
   },
   import: {

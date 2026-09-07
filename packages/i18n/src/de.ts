@@ -142,7 +142,7 @@ export const de: Translations = {
   banks: {
     title: 'Banken',
     viewMovements: 'Umsätze ansehen',
-    empty: 'Noch keine Banken. Füge eine mit dem Saldo hinzu, den sie heute hält.',
+    empty: 'Noch keine Banken. Füge eine hinzu und dann die Konten, die sie hält.',
     add: 'Bank hinzufügen',
     edit: 'Bank bearbeiten',
     name: 'Name der Bank',
@@ -150,11 +150,17 @@ export const de: Translations = {
     asOf: 'Stand vom',
     balanceOn: 'Saldo am {{date}}',
     noBalance: 'Kein Saldo hinterlegt',
-    updateBalance: 'Saldo aktualisieren',
     addAccount: 'Konto hinzufügen',
+    editAccount: 'Konto bearbeiten',
     accountName: 'Name des Kontos',
     accountNamePlaceholder: 'Girokonto',
     accountNameRequired: 'Gib dem Konto einen Namen.',
+    noAccounts: 'Diese Bank hat noch keine Konten.',
+    deleteAccountConfirm: '{{name}} löschen?',
+    deleteAccountMovements_one:
+      'Der {{count}} Umsatz wird mitgelöscht. Das lässt sich nicht rückgängig machen; der Kontoauszug müsste erneut importiert werden.',
+    deleteAccountMovements_other:
+      'Die {{count}} Umsätze werden mitgelöscht. Das lässt sich nicht rückgängig machen; die Kontoauszüge müssten erneut importiert werden.',
     unassigned: 'Ohne Bank',
     moveToBank: 'Zu einer Bank verschieben',
     accounts_one: '{{count}} Konto',
@@ -166,7 +172,6 @@ export const de: Translations = {
     nameRequired: 'Gib der Bank einen Namen.',
     drift:
       'Nach dem Festlegen dieses Saldos kamen Umsätze über {{amount}} mit Datum {{date}} oder früher hinzu.',
-    reanchor: 'Neu auf meinen aktuellen Saldo festlegen',
     deleteConfirm: '{{name}} entfernen? Die Konten bleiben erhalten, ohne Bank.',
   },
   import: {

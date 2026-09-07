@@ -140,7 +140,7 @@ export const en = {
   banks: {
     title: 'Banks',
     viewMovements: 'View movements',
-    empty: 'No banks yet. Add one with the balance it holds today.',
+    empty: 'No banks yet. Add one, then add the accounts it holds.',
     add: 'Add a bank',
     edit: 'Edit bank',
     name: 'Bank name',
@@ -148,11 +148,17 @@ export const en = {
     asOf: 'As of',
     balanceOn: 'Balance on {{date}}',
     noBalance: 'No balance recorded',
-    updateBalance: 'Update balance',
     addAccount: 'Add an account',
+    editAccount: 'Edit account',
     accountName: 'Account name',
     accountNamePlaceholder: 'Current account',
     accountNameRequired: 'Give the account a name.',
+    noAccounts: 'No accounts in this bank yet.',
+    deleteAccountConfirm: 'Delete {{name}}?',
+    deleteAccountMovements_one:
+      'Its {{count}} movement is deleted with it. This cannot be undone; the statement would have to be imported again.',
+    deleteAccountMovements_other:
+      'Its {{count}} movements are deleted with it. This cannot be undone; the statements would have to be imported again.',
     unassigned: 'Not in a bank',
     moveToBank: 'Move to a bank',
     accounts_one: '{{count}} account',
@@ -164,7 +170,6 @@ export const en = {
     nameRequired: 'Give the bank a name.',
     drift:
       'Movements of {{amount}} dated on or before {{date}} arrived after you set this balance.',
-    reanchor: 'Re-anchor to my current balance',
     deleteConfirm: 'Remove {{name}}? Its accounts stay, without a bank.',
   },
   import: {
