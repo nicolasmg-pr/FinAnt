@@ -150,7 +150,7 @@ export const en = {
   },
   import: {
     title: 'Import a file',
-    pickFile: 'Choose a CSV or camt.053 file',
+    pickFile: 'Choose a statement file',
     detectedProfile: 'Detected format: {{profile}}',
     chooseProfile: 'Choose the format',
     preview: 'Preview',
