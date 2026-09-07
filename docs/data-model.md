@@ -167,50 +167,59 @@ Migration 6 also adds three nullable columns to `accounts`:
 
 - `balance_minor` — what the owner asserted the account holds, in minor units.
 - `balance_date` — the day `YYYY-MM-DD` that claim was made about.
-- `opening_balance_minor` — the opening balance derived from that claim.
+- `opening_balance_minor` — legacy, unread. It held a derived opening balance
+  while balances were computed forwards from one; nothing writes or reads it
+  now, and it stays because migrations are append-only.
 
-All three are null for an account whose balance was never asserted; it shows no
-figure rather than a wrong zero.
+`balance_minor` and `balance_date` are null for an account whose balance was
+never asserted; it shows no figure rather than a wrong zero.
 
-### The anchor
+### The anchor is the truth
 
 FinAnt talks to no bank, so nothing tells it what an account holds. The owner
-asserts "this account holds `B` on `D`". `packages/core/src/balance.ts` turns
-that into a fixed historical fact:
+asserts "this account holds `B` on `D`", once, when they add the account. That
+assertion is the whole truth about the account, and every other figure is
+measured from it:
 
 ```
-O = B - Σ(amount of every movement in the account with bookingDate <= D)
-balance as of X = O + Σ(movements with bookingDate <= X)
+balance as of X, X >= D:  B + Σ(movements with D < bookingDate <= X)
+balance as of X, X <  D:  B - Σ(movements with X < bookingDate <= D)
 ```
 
-The opening balance `O` is stored, not `B`: an opening balance does not change
-when the next statement is imported, while a current balance does. By
-construction the second line gives back exactly `B` for `X = D`.
+A movement dated on or before `D` is therefore _already inside_ `B`. Asking for
+an earlier day runs the ledger backwards, which is how an account anchored once
+— today — still reports what it held in January. `openingBalance()` is that
+walk taken all the way to the first movement: the figure that makes the imported
+statements add up to what the owner says they have.
+
+**Nothing derived is stored, and the assertion is never recomputed.** An
+earlier version stored the derived opening balance and added every movement on
+top of it:
+
+```
+O = B - Σ(movements <= D)          # computed once, at the moment of assertion
+balance as of X = O + Σ(movements <= X)
+```
+
+That is wrong the moment history arrives after the assertion. An owner asserted
+272,19 € held today and then imported the year's statements — 1068,45 € of net
+spending, all dated before today — and the account reported **-796,26 €**. The
+app then showed a "drift" warning asking them to re-anchor, which is the app
+arguing with the one fact it was given. The owner's rule, and now the model's:
+_if I write a balance for today, that is the balance I have today._ The drift
+concept and `reconcileAnchor()` are gone with it.
 
 **Excluded rows and internal transfers are counted.** `countsTowardStats()`
 governs statistics, not balances: moving 200 € to a savings account leaves the
 current account 200 € lighter whatever the charts decide to show.
 
-### Drift
-
-A later import can insert movements dated on or before `D` — history the anchor
-already claimed to account for. `reconcileAnchor()` re-derives
-`O' = B - Σ(movements <= D)` from the current ledger and reports
-`driftMinor = O' - O`. Non-zero means the anchor no longer matches its history;
-the sign is the negation of what arrived, so 25 € of backfilled spending shows
-as a drift of +25 €.
-
-The banks screen shows that as a warning on the account, naming the total that
-turned up, and offers "Re-anchor to my current balance", which re-opens the
-balance form. Nothing is corrected automatically: only the owner knows whether
-the new rows are real or the figure they typed was wrong.
-
 ### The total, and how it moves
 
 `packages/core/src/networth.ts` sums the anchored accounts into one figure and
-one line. `netWorthSeries()` takes every account with its own movements and
-reports the total standing at the end of each period, at month or year
-granularity.
+one line. `netWorthSeries()` takes every account with its anchor and its own
+movements and reports the total standing at the end of each period, at month or
+year granularity — forwards from the anchor for a later period, backwards for
+an earlier one.
 
 Two rules keep the figure honest:
 

@@ -73,7 +73,17 @@ export default function DashboardScreen() {
     }
     return accounts.map((row) => ({
       accountId: row.id,
-      openingMinor: row.opening_balance_minor,
+      // The assertion itself, not a figure derived from it: the total is what
+      // the owner said their accounts hold, adjusted only by what has moved
+      // since they said it.
+      anchor:
+        row.balance_minor === null || row.balance_date === null
+          ? null
+          : {
+              assertedMinor: row.balance_minor,
+              asOf: row.balance_date,
+              currency: row.currency,
+            },
       currency: row.currency,
       movements: byAccount.get(row.id) ?? [],
     }));

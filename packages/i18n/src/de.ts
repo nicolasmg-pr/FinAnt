@@ -146,7 +146,7 @@ export const de: Translations = {
     add: 'Bank hinzufügen',
     edit: 'Bank bearbeiten',
     name: 'Name der Bank',
-    balance: 'Aktueller Saldo',
+    balance: 'Saldo heute',
     asOf: 'Stand vom',
     balanceOn: 'Saldo am {{date}}',
     noBalance: 'Kein Saldo hinterlegt',
@@ -170,8 +170,7 @@ export const de: Translations = {
     invalidAmount: 'Gib einen Betrag ein, zum Beispiel 1.234,56.',
     invalidDate: 'Verwende das Format JJJJ-MM-TT.',
     nameRequired: 'Gib der Bank einen Namen.',
-    drift:
-      'Nach dem Festlegen dieses Saldos kamen Umsätze über {{amount}} mit Datum {{date}} oder früher hinzu.',
+    openingOn: 'Startete am {{date}} mit {{amount}}',
     deleteConfirm: '{{name}} entfernen? Die Konten bleiben erhalten, ohne Bank.',
   },
   import: {

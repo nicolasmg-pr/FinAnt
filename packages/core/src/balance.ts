@@ -2,13 +2,23 @@ import { add, money, zero, type CurrencyCode, type Money } from './money';
 import type { ISODate, Transaction } from './types';
 
 /**
- * Account balances anchored on what the owner says the account holds.
+ * Account balances, anchored on what the owner says the account holds.
  *
  * FinAnt never talks to a bank, so no statement tells us the balance of an
- * account: the owner asserts "this account holds B today". That single claim,
- * plus the movements already on record, is enough to place the account on the
- * timeline — we derive the *opening* balance behind it and keep that, because
- * an opening balance is a fixed historical fact while a current balance is not.
+ * account: the owner asserts "this account holds B on D". That assertion is
+ * the truth about D, and everything else is measured from it.
+ *
+ * **The assertion is never recomputed and never contradicted.** Importing this
+ * year's statements under a balance asserted today cannot move today's figure —
+ * the statements describe how the account arrived there, not where it is. So a
+ * movement dated on or before D is already inside B, and one dated after D is
+ * added to it. Asking for a day before D runs the ledger *backwards*: that is
+ * how an account anchored once, today, still reports what it held in January.
+ *
+ * An earlier version stored a derived opening balance instead and added every
+ * movement on top of it. Importing a year of history then pushed a real 272,19 €
+ * balance to -796,26 €, and the app asked the owner to re-anchor rather than
+ * believing what they had already told it. There is nothing to re-anchor now.
  *
  * Every function here is pure and works on the movements of **one** account.
  * The caller passes that account's non-deleted rows; a deleted movement never
@@ -24,94 +34,64 @@ export interface BalanceAnchor {
   readonly assertedMinor: number;
   /** The day the claim was made about (`balance_date`), `YYYY-MM-DD`. */
   readonly asOf: ISODate;
-  /** The opening balance derived at the moment of the assertion. */
-  readonly openingMinor: number;
   readonly currency: CurrencyCode;
 }
 
-export interface AnchorReconciliation {
-  /** The opening balance the ledger implies right now. */
-  readonly expectedOpeningMinor: number;
-  /** The opening balance stored when the owner asserted the balance. */
-  readonly storedOpeningMinor: number;
-  /**
-   * `expected - stored`. Non-zero means movements dated on or before the
-   * anchor date arrived after the anchor was set, so the anchor no longer
-   * describes the history it claimed to account for. Its sign is the negation
-   * of what arrived: 25 € of backfilled spending raises the opening balance
-   * needed to still reach the asserted figure by 25 €.
-   */
-  readonly driftMinor: number;
-}
-
-/** Signed total of every movement booked on or before `asOf`. Throws on a currency mismatch. */
-export function sumThrough(
+/**
+ * Signed total of the movements in `(after, through]` — the lower bound
+ * exclusive, the upper inclusive. Plain string comparison is exact on
+ * zero-padded `YYYY-MM-DD`, and `add` refuses to sum two currencies rather
+ * than producing a wrong number.
+ */
+function sumBetween(
   transactions: readonly Transaction[],
-  asOf: ISODate,
+  after: ISODate,
+  through: ISODate,
   currency: CurrencyCode,
 ): Money {
   let total = zero(currency);
   for (const tx of transactions) {
-    // Plain string comparison is exact on zero-padded YYYY-MM-DD, and `add`
-    // refuses to sum two currencies rather than producing a wrong number.
-    if (tx.bookingDate <= asOf) total = add(total, tx.amount);
+    if (tx.bookingDate > after && tx.bookingDate <= through) total = add(total, tx.amount);
   }
   return total;
 }
 
 /**
- * The balance the account must have held before its first movement, given that
- * it holds `assertedMinor` on `asOf`: `O = B - Σ(movements <= asOf)`.
+ * The balance on any day, measured from the anchor.
  *
- * This is what gets stored, so a later movement — before, on or after the
- * anchor date — moves the derived balance instead of being contradicted by it.
+ * On the anchor date it is the asserted figure, exactly. After it, the
+ * movements booked since are added. Before it, the movements booked in between
+ * are taken back off.
  */
-export function deriveOpeningBalance(
-  transactions: readonly Transaction[],
-  assertedMinor: number,
-  asOf: ISODate,
-  currency: CurrencyCode,
-): Money {
-  const asserted = money(assertedMinor, currency);
-  return money(asserted.minor - sumThrough(transactions, asOf, currency).minor, currency);
-}
-
-/**
- * The balance on any day: `O + Σ(movements <= asOf)`. By construction this
- * returns the asserted figure on the anchor date itself.
- */
-export function balanceAsOf(
-  transactions: readonly Transaction[],
-  openingMinor: number,
-  asOf: ISODate,
-  currency: CurrencyCode,
-): Money {
-  const opening = money(openingMinor, currency);
-  return money(opening.minor + sumThrough(transactions, asOf, currency).minor, currency);
-}
-
-/**
- * Checks a stored anchor against the ledger as it stands now.
- *
- * A later import can insert movements dated on or before the anchor date —
- * history the anchor already claimed to account for. Re-deriving the opening
- * balance shows it: a non-zero drift means the two disagree. The owner is told;
- * nothing is re-anchored on their behalf, because only they know whether the
- * new rows are real or whether the figure they typed was wrong.
- */
-export function reconcileAnchor(
+export function balanceAt(
   transactions: readonly Transaction[],
   anchor: BalanceAnchor,
-): AnchorReconciliation {
-  const expected = deriveOpeningBalance(
-    transactions,
-    anchor.assertedMinor,
-    anchor.asOf,
-    anchor.currency,
-  );
-  return {
-    expectedOpeningMinor: expected.minor,
-    storedOpeningMinor: anchor.openingMinor,
-    driftMinor: expected.minor - anchor.openingMinor,
-  };
+  asOf: ISODate,
+): Money {
+  const asserted = money(anchor.assertedMinor, anchor.currency);
+  if (asOf >= anchor.asOf) {
+    return add(asserted, sumBetween(transactions, anchor.asOf, asOf, anchor.currency));
+  }
+  const since = sumBetween(transactions, asOf, anchor.asOf, anchor.currency);
+  return money(asserted.minor - since.minor, anchor.currency);
+}
+
+/**
+ * What the account held before its first movement — the figure that makes the
+ * imported history add up to the balance the owner asserted.
+ *
+ * With no movements it is the asserted figure itself. Movements dated after
+ * the anchor are not part of it: they happened after the assertion, so they
+ * say nothing about where the history started.
+ */
+export function openingBalance(transactions: readonly Transaction[], anchor: BalanceAnchor): Money {
+  const asserted = money(anchor.assertedMinor, anchor.currency);
+  let earliest: ISODate | null = null;
+  for (const tx of transactions) {
+    if (tx.bookingDate > anchor.asOf) continue;
+    if (earliest === null || tx.bookingDate < earliest) earliest = tx.bookingDate;
+  }
+  if (earliest === null) return asserted;
+  const since = sumBetween(transactions, '', anchor.asOf, anchor.currency);
+  return money(asserted.minor - since.minor, anchor.currency);
 }
