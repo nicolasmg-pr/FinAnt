@@ -21,6 +21,8 @@ import { Chip } from '../../src/components/Chip';
 import { FormSheet, type SheetField } from '../../src/components/FormSheet';
 import {
   createAccount,
+  deleteAccountWithMovements,
+  renameAccount,
   setAccountBalance,
   setAccountInstitution,
   type AccountRow,
@@ -55,29 +57,26 @@ interface BankView {
   readonly movementCount: number;
 }
 
-/** New bank when `id` is null (name plus a first balance), rename when it is set. */
+/** New bank when `id` is null, rename when it is set. A bank holds nothing else. */
 interface BankDraft {
   id: string | null;
   name: string;
-  balanceText: string;
-  dateText: string;
 }
 
-/** A second (or fifth) account under a bank that already exists. */
+/**
+ * An account being created (`id` null) or edited. The same three fields either
+ * way: what it is called, what it holds, and the day that is true of.
+ */
 interface AccountDraft {
+  id: string | null;
   institutionId: string;
   institutionName: string;
   name: string;
   balanceText: string;
   dateText: string;
-}
-
-interface BalanceDraft {
-  accountId: string;
-  accountName: string;
   currency: string;
-  balanceText: string;
-  dateText: string;
+  /** Named in the delete confirmation, and what makes that delete irreversible. */
+  movementCount: number;
 }
 
 function accountView(
@@ -160,7 +159,6 @@ export default function BanksScreen() {
   const [institutions, setInstitutions] = useState<InstitutionRow[]>([]);
   const [bankDraft, setBankDraft] = useState<BankDraft | null>(null);
   const [accountDraft, setAccountDraft] = useState<AccountDraft | null>(null);
-  const [balanceDraft, setBalanceDraft] = useState<BalanceDraft | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   const loadInstitutions = useCallback(async () => {
@@ -220,29 +218,43 @@ export default function BanksScreen() {
     setFormError(null);
     setAccountDraft((current) => (current ? { ...current, ...change } : current));
   };
-  const patchBalance = (change: Partial<BalanceDraft>) => {
-    setFormError(null);
-    setBalanceDraft((current) => (current ? { ...current, ...change } : current));
-  };
-
   const openNewBank = () => {
     setFormError(null);
-    setBankDraft({ id: null, name: '', balanceText: '', dateText: today });
+    setBankDraft({ id: null, name: '' });
   };
 
   const openBankEdit = (institution: InstitutionRow) => {
     setFormError(null);
-    setBankDraft({ id: institution.id, name: institution.name, balanceText: '', dateText: today });
+    setBankDraft({ id: institution.id, name: institution.name });
   };
 
   const openNewAccount = (institution: InstitutionRow) => {
     setFormError(null);
     setAccountDraft({
+      id: null,
       institutionId: institution.id,
       institutionName: institution.name,
       name: '',
       balanceText: '',
       dateText: today,
+      currency: CURRENCY,
+      movementCount: 0,
+    });
+  };
+
+  const openAccountEdit = (view: AccountView, institutionName: string) => {
+    setFormError(null);
+    setAccountDraft({
+      id: view.row.id,
+      institutionId: view.row.institution_id ?? '',
+      institutionName,
+      name: view.row.name,
+      // Prefilled as a plain decimal string, so re-asserting an unchanged
+      // balance is one tap and no float is involved either way.
+      balanceText: view.balance ? toDecimalString(view.balance) : '',
+      dateText: today,
+      currency: view.row.currency,
+      movementCount: view.movementCount,
     });
   };
 
@@ -257,19 +269,6 @@ export default function BanksScreen() {
     router.push({
       pathname: '/transactions',
       params: { accountIds: accountIds.join(','), at: String(Date.now()) },
-    });
-  };
-
-  const openBalance = (view: AccountView) => {
-    setFormError(null);
-    setBalanceDraft({
-      accountId: view.row.id,
-      accountName: view.row.name,
-      currency: view.row.currency,
-      // Prefilled as a plain decimal string, so re-asserting an unchanged
-      // balance is one tap and no float is involved either way.
-      balanceText: view.balance ? toDecimalString(view.balance) : '',
-      dateText: today,
     });
   };
 
@@ -310,21 +309,11 @@ export default function BanksScreen() {
       return;
     }
 
-    if (bankDraft.id) {
-      await renameInstitution(bankDraft.id, name);
-    } else {
-      const anchor = readAnchor(bankDraft.balanceText, bankDraft.dateText);
-      if (!anchor) return;
-      const institutionId = await createInstitution({ name });
-      const accountId = await createAccount({
-        name,
-        currency: CURRENCY,
-        provider: 'file-import',
-        institutionId,
-        institutionName: name,
-      });
-      await assertBalance(accountId, anchor.asserted, anchor.date);
-    }
+    // A new bank holds no account and states no balance. Both belong to the
+    // accounts the owner puts in it, which is the only place a balance can
+    // honestly live: that is where the movements are.
+    if (bankDraft.id) await renameInstitution(bankDraft.id, name);
+    else await createInstitution({ name });
 
     setBankDraft(null);
     await Promise.all([reload(), loadInstitutions()]);
@@ -337,33 +326,53 @@ export default function BanksScreen() {
       setFormError(t('banks.accountNameRequired'));
       return;
     }
-    const anchor = readAnchor(accountDraft.balanceText, accountDraft.dateText);
+    const anchor = readAnchor(
+      accountDraft.balanceText,
+      accountDraft.dateText,
+      accountDraft.currency,
+    );
     if (!anchor) return;
 
-    const accountId = await createAccount({
-      name,
-      currency: CURRENCY,
-      provider: 'file-import',
-      institutionId: accountDraft.institutionId,
-      institutionName: accountDraft.institutionName,
-    });
+    // The id survives a rename: every import hash of every movement is built
+    // on it, so changing it would orphan the account's whole history.
+    const accountId =
+      accountDraft.id ??
+      (await createAccount({
+        name,
+        currency: accountDraft.currency,
+        provider: 'file-import',
+        institutionId: accountDraft.institutionId,
+        institutionName: accountDraft.institutionName,
+      }));
+    if (accountDraft.id) await renameAccount(accountDraft.id, name);
     await assertBalance(accountId, anchor.asserted, anchor.date);
 
     setAccountDraft(null);
     await reload();
   };
 
-  const commitBalance = async () => {
-    if (!balanceDraft) return;
-    const anchor = readAnchor(
-      balanceDraft.balanceText,
-      balanceDraft.dateText,
-      balanceDraft.currency,
+  /** The one irreversible action here: the movements go with the account. */
+  const confirmDeleteAccount = (draft: AccountDraft) => {
+    const accountId = draft.id;
+    if (!accountId) return;
+    Alert.alert(
+      t('banks.deleteAccountConfirm', { name: draft.name }),
+      t('banks.deleteAccountMovements', { count: draft.movementCount }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              await deleteAccountWithMovements(accountId);
+              setAccountDraft(null);
+              await reload();
+            })();
+          },
+        },
+      ],
     );
-    if (!anchor) return;
-    await assertBalance(balanceDraft.accountId, anchor.asserted, anchor.date);
-    setBalanceDraft(null);
-    await reload();
   };
 
   const move = async (accountId: string, institutionId: string) => {
@@ -422,14 +431,18 @@ export default function BanksScreen() {
               <Text style={[styles.meta, { color: theme.accent }]}>{t('banks.viewMovements')}</Text>
             </Pressable>
 
-            {bank.accounts.map((view) => (
-              <AccountLine
-                key={view.row.id}
-                view={view}
-                onAssert={() => openBalance(view)}
-                onOpenMovements={() => openMovements([view.row.id])}
-              />
-            ))}
+            {bank.accounts.length === 0 ? (
+              <Text style={[styles.meta, { color: theme.textMuted }]}>{t('banks.noAccounts')}</Text>
+            ) : (
+              bank.accounts.map((view) => (
+                <AccountLine
+                  key={view.row.id}
+                  view={view}
+                  onEdit={() => openAccountEdit(view, bank.institution.name)}
+                  onOpenMovements={() => openMovements([view.row.id])}
+                />
+              ))
+            )}
 
             <Pressable
               onPress={() => openNewAccount(bank.institution)}
@@ -447,7 +460,7 @@ export default function BanksScreen() {
               <View key={view.row.id} style={styles.unassigned}>
                 <AccountLine
                   view={view}
-                  onAssert={() => openBalance(view)}
+                  onEdit={() => openAccountEdit(view, '')}
                   onOpenMovements={() => openMovements([view.row.id])}
                 />
                 {institutions.length > 0 ? (
@@ -492,9 +505,6 @@ export default function BanksScreen() {
             autoCapitalize: 'words',
             onChangeText: (name) => patchBank({ name }),
           },
-          // A rename touches no balance: the bank's first account was anchored
-          // when it was created, and every account has had its own anchor since.
-          ...(bankDraft?.id ? [] : anchorFields(bankDraft, patchBank, anchorLabels)),
         ]}
         error={formError}
         onCancel={() => setBankDraft(null)}
@@ -511,8 +521,8 @@ export default function BanksScreen() {
 
       <FormSheet
         visible={accountDraft !== null}
-        title={t('banks.addAccount')}
-        subtitle={accountDraft?.institutionName}
+        title={accountDraft?.id ? t('banks.editAccount') : t('banks.addAccount')}
+        subtitle={accountDraft?.institutionName || undefined}
         fields={[
           {
             key: 'name',
@@ -527,16 +537,7 @@ export default function BanksScreen() {
         error={formError}
         onCancel={() => setAccountDraft(null)}
         onSave={() => void commitAccount()}
-      />
-
-      <FormSheet
-        visible={balanceDraft !== null}
-        title={t('banks.updateBalance')}
-        subtitle={balanceDraft?.accountName}
-        fields={anchorFields(balanceDraft, patchBalance, anchorLabels)}
-        error={formError}
-        onCancel={() => setBalanceDraft(null)}
-        onSave={() => void commitBalance()}
+        onDelete={accountDraft?.id ? () => confirmDeleteAccount(accountDraft) : undefined}
       />
     </View>
   );
@@ -548,11 +549,11 @@ export default function BanksScreen() {
  */
 function AccountLine({
   view,
-  onAssert,
+  onEdit,
   onOpenMovements,
 }: {
   view: AccountView;
-  onAssert: () => void;
+  onEdit: () => void;
   onOpenMovements: () => void;
 }) {
   const theme = useTheme();
@@ -563,7 +564,7 @@ function AccountLine({
 
   return (
     <View style={[styles.account, { borderTopColor: theme.border }]}>
-      <Pressable onPress={onOpenMovements} accessibilityRole="button">
+      <Pressable onPress={onEdit} accessibilityRole="button">
         <View style={styles.row}>
           <Text style={[styles.accountName, { color: theme.text }]} numberOfLines={1}>
             {view.row.name}
@@ -582,22 +583,24 @@ function AccountLine({
       </Text>
 
       {view.driftMinor !== 0 && view.row.balance_date ? (
-        <>
-          <Text style={[styles.meta, { color: theme.warning }]}>
-            {t('banks.drift', {
-              amount: formatMoney(arrived, intlLocale()),
-              date: view.row.balance_date,
-            })}
-          </Text>
-          <Pressable onPress={onAssert}>
-            <Text style={[styles.meta, { color: theme.accent }]}>{t('banks.reanchor')}</Text>
-          </Pressable>
-        </>
-      ) : (
-        <Pressable onPress={onAssert}>
-          <Text style={[styles.meta, { color: theme.accent }]}>{t('banks.updateBalance')}</Text>
+        <Text style={[styles.meta, { color: theme.warning }]}>
+          {t('banks.drift', {
+            amount: formatMoney(arrived, intlLocale()),
+            date: view.row.balance_date,
+          })}
+        </Text>
+      ) : null}
+
+      <View style={styles.accountLinks}>
+        <Pressable onPress={onEdit} accessibilityRole="button">
+          <Text style={[styles.meta, { color: theme.accent }]}>{t('banks.editAccount')}</Text>
         </Pressable>
-      )}
+        {view.movementCount > 0 ? (
+          <Pressable onPress={onOpenMovements} accessibilityRole="button">
+            <Text style={[styles.meta, { color: theme.accent }]}>{t('banks.viewMovements')}</Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -615,6 +618,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   accountName: { fontSize: 15, flexShrink: 1 },
+  accountLinks: { flexDirection: 'row', gap: spacing.lg, marginTop: 2 },
   accountValue: { fontSize: 15 },
   addAccount: {
     borderTopWidth: StyleSheet.hairlineWidth,

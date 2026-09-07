@@ -100,6 +100,37 @@ export async function setAccountBalance(
   );
 }
 
+/** Renames an account. The id is permanent: every import hash is built on it. */
+export async function renameAccount(accountId: string, name: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync('UPDATE accounts SET name = ? WHERE id = ?;', name, accountId);
+}
+
+/**
+ * Deletes an account and every movement it owns.
+ *
+ * `transactions.account_id` cascades, so the rows go with the account rather
+ * than being left pointing at an account that is not there. A transfer peer in
+ * another account is unlinked first: the row it paired with is about to stop
+ * existing, and a peer id pointing at nothing would survive the cascade.
+ *
+ * This is the one irreversible action on the Banks screen. The movements are
+ * hard deleted, not flagged, so the statement they came from can be imported
+ * again from scratch.
+ */
+export async function deleteAccountWithMovements(accountId: string): Promise<void> {
+  const db = await getDatabase();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE transactions
+          SET transfer_peer_id = NULL
+        WHERE transfer_peer_id IN (SELECT id FROM transactions WHERE account_id = ?);`,
+      accountId,
+    );
+    await db.runAsync('DELETE FROM accounts WHERE id = ?;', accountId);
+  });
+}
+
 /**
  * Moves an account into a bank, or out of every bank with `null`. The
  * free-text `institution_name` a camt.053 import may have left is kept in step
