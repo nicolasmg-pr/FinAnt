@@ -176,26 +176,29 @@ export default function DashboardScreen() {
                 </Text>
               </Pressable>
             ) : null}
-            {/* One point is a dot, not a line, and a switch with nothing to
-                switch is noise: both wait for a second period. */}
+            {/* One point is a dot, not a line. */}
             {netWorth.points.length > 1 ? (
-              <>
-                <BalanceChart points={netWorth.points} labels={netWorthLabels} />
-                <View style={styles.granularity}>
-                  <Chip
-                    label={t('dashboard.byMonth')}
-                    selected={granularity === 'month'}
-                    onPress={() => setGranularity('month')}
-                  />
-                  <Chip
-                    label={t('dashboard.byYear')}
-                    selected={granularity === 'year'}
-                    onPress={() => setGranularity('year')}
-                  />
-                </View>
-              </>
+              <BalanceChart points={netWorth.points} labels={netWorthLabels} />
             ) : null}
-            {netWorth.points.some((point) => point.kind === 'projected') ? (
+            {/* The switch outlives the chart on purpose: a single year collapses
+                to one point, and hiding the switch with the chart left no way
+                back to months. */}
+            {transactions.length > 0 ? (
+              <View style={styles.granularity}>
+                <Chip
+                  label={t('dashboard.byMonth')}
+                  selected={granularity === 'month'}
+                  onPress={() => setGranularity('month')}
+                />
+                <Chip
+                  label={t('dashboard.byYear')}
+                  selected={granularity === 'year'}
+                  onPress={() => setGranularity('year')}
+                />
+              </View>
+            ) : null}
+            {netWorth.points.length > 1 &&
+            netWorth.points.some((point) => point.kind === 'projected') ? (
               <Text style={[styles.hint, { color: theme.textMuted }]}>
                 {t('dashboard.projectedTail')}
               </Text>
