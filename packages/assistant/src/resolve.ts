@@ -133,7 +133,8 @@ export function parsePatch(raw: string): { patch: FilterPatch; issues: readonly 
   }
 
   if ('side' in source) {
-    if (SIDE_VALUES.includes(source.side as never)) patch.side = source.side as FilterPatch['side'];
+    if (SIDE_VALUES.includes(source.side as never))
+      patch.side = source.side as NonNullable<FilterPatch['side']>;
     else issues.push({ kind: 'bad-field', field: 'side' });
   }
 

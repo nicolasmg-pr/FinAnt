@@ -33,6 +33,15 @@ downloads language packs over the network, Apple's framework is iOS-only, and a
 second LLM is both another 400+ MB and itself a multilingual task. A
 multilingual model removes the problem instead of moving it.
 
+### Which repository, and why it is safe to use a community one
+
+Qwen publishes GGUF conversions of 1.7B only at Q8_0, which is 1.8 GB — too much
+to hold resident beside an encrypted database on a 6 GB phone. Q4_K_M exists in
+bartowski's conversion, so that is where it comes from. The pinned SHA-256 is
+what makes that acceptable: it is the digest Hugging Face publishes for the
+file, the owner can compute it themselves, and any other bytes are refused
+whatever they claim to be.
+
 ### Why the model never computes
 
 A 1.7B model is unreliable at date arithmetic and at scaling euros to minor
@@ -108,7 +117,7 @@ nothing movement-derived to disk.
 ## Inference lifecycle
 
 - Context loads on sheet open, releases on sheet close and on `AppState`
-  background. 1.11 GB resident while backgrounded is a jetsam kill.
+  background. 1.28 GB resident while backgrounded is a jetsam kill.
 - Context stays alive between turns so the system prompt's KV cache is reused.
 - `n_ctx` 2048.
 - One generation at a time; a new message cancels the in-flight one.
@@ -123,8 +132,12 @@ must be corrected in the same commit.
 
 Constraints that keep the exception narrow:
 
-- One pinned host. iOS gets a scoped `NSExceptionDomains` entry, never
-  `NSAllowsArbitraryLoads`. Android gains `android.permission.INTERNET`.
+- One pinned host, checked at runtime. No iOS ATS change is needed: App
+  Transport Security blocks _insecure_ connections, and this is ordinary HTTPS,
+  so `NSAllowsArbitraryLoads` stays `false` with no exception domains. Android
+  needs no manifest change either — Expo's default manifest already declares
+  `android.permission.INTERNET`. Both of those were expected to be config
+  changes during design and turned out not to be.
 - SHA-256 pinned in source, verified before the model is marked installed.
   Mismatch deletes the file and refuses.
 - Fires only on an explicit tap. No launch check, no background refresh, no
@@ -159,7 +172,7 @@ model: patch application, omitted-key semantics, `reset`, unknown-id rejection,
 euro strings to minor units, every `RangeIntent` to bounds, prompt enum
 contents, and the aggregate orientation.
 
-Model quality cannot be CI-tested without shipping 1.11 GB. `npm run
+Model quality cannot be CI-tested without shipping 1.28 GB. `npm run
 eval:assistant` runs a fixture of phrasings across EN/ES/DE against an installed
 model and prints a pass rate. It is a local eval, not a gate.
 

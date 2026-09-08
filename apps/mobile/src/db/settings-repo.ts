@@ -19,13 +19,12 @@ export async function writeSetting(key: string, value: string): Promise<void> {
   );
 }
 
-export const SETTING_LOCALE = 'locale';
-export const SETTING_CURRENCY = 'currency';
-export const SETTING_APP_LOCK = 'appLock';
-/** Account id preselected on the import screen: the one the last import went to. */
-export const SETTING_LAST_IMPORT_ACCOUNT = 'lastImportAccount';
-/**
- * Ids of shipped rules the owner deleted, as a JSON array. Without it the
- * launch-time install would bring every one of them back on the next launch.
- */
-export const SETTING_RETIRED_SHIPPED_RULES = 'retiredShippedRules';
+export {
+  SETTING_APP_LOCK,
+  SETTING_ASSISTANT_BUBBLE_POSITION,
+  SETTING_ASSISTANT_ENABLED,
+  SETTING_CURRENCY,
+  SETTING_LAST_IMPORT_ACCOUNT,
+  SETTING_LOCALE,
+  SETTING_RETIRED_SHIPPED_RULES,
+} from './settings-keys';
