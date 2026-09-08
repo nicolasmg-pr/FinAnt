@@ -1,16 +1,30 @@
 import { Text, type TextStyle } from 'react-native';
 import { formatMoney, type Money } from '@finant/core';
 import { intlLocale } from '../i18n';
-import { useTheme } from '../theme';
+import { MAX_FONT_SCALE, typeMoney, useTheme, type TypeRole } from '../design';
 
 /**
  * Renders a signed amount. `tone` decides the colour independently of the sign,
  * because an expense total is displayed as a positive magnitude but must still
  * read as money going out.
+ *
+ * `size` names a role in the type scale instead of letting each caller pass a
+ * raw fontSize, which is how the app ended up with amounts at 30, 17, 14 and
+ * 13 with no rule behind any of them.
  */
-export function Amount({ value, tone = 'auto', style }: {
+export function Amount({
+  value,
+  tone = 'auto',
+  size = 'body',
+  fit = false,
+  style,
+}: {
   value: Money;
   tone?: 'auto' | 'income' | 'expense' | 'neutral';
+  size?: TypeRole;
+  /** Shrink to one line rather than wrap. For a figure in a fixed-width tile,
+   * where a wrapped amount reads as two numbers. */
+  fit?: boolean;
   style?: TextStyle;
 }) {
   const theme = useTheme();
@@ -20,7 +34,13 @@ export function Amount({ value, tone = 'auto', style }: {
     resolved === 'income' ? theme.income : resolved === 'expense' ? theme.expense : theme.text;
 
   return (
-    <Text style={[{ color, fontVariant: ['tabular-nums'] }, style]}>
+    <Text
+      style={[typeMoney[size], { color }, style]}
+      maxFontSizeMultiplier={MAX_FONT_SCALE}
+      numberOfLines={fit ? 1 : undefined}
+      adjustsFontSizeToFit={fit}
+      minimumFontScale={0.7}
+    >
       {formatMoney(value, intlLocale())}
     </Text>
   );

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { CategoryTotal } from '@finant/core';
 import { Amount } from './Amount';
 import { useCategories } from '../hooks/use-categories';
-import { radius, spacing, useTheme } from '../theme';
+import { radius, rampColorFor, spacing, type, useTheme } from '../design';
 
 /**
  * Ranked spending per category as proportional bars. A pie chart of 20 slices
@@ -28,22 +28,23 @@ export function CategoryBreakdown({
         const label = category?.labelKey
           ? t(category.labelKey)
           : (category?.name ?? entry.categoryId);
+        // A category that cannot be resolved still gets a stable colour of its
+        // own, rather than borrowing the accent and looking like every other
+        // unresolved row.
+        const color = category?.color ?? rampColorFor(entry.categoryId);
         return (
           <View key={entry.categoryId} style={{ gap: spacing.xs }}>
             <View style={styles.row}>
-              <Text style={[styles.label, { color: theme.text }]} numberOfLines={1}>
+              <Text style={[type.body, styles.label, { color: theme.text }]} numberOfLines={1}>
                 {label}
               </Text>
-              <Amount value={entry.total} tone="neutral" style={styles.value} />
+              <Amount value={entry.total} tone="neutral" size="label" />
             </View>
-            <View style={[styles.track, { backgroundColor: theme.surfaceAlt }]}>
+            <View style={[styles.track, { backgroundColor: theme.surfaceSunken }]}>
               <View
                 style={[
                   styles.fill,
-                  {
-                    backgroundColor: category?.color ?? theme.accent,
-                    width: `${Math.max(2, entry.share * 100)}%`,
-                  },
+                  { backgroundColor: color, width: `${Math.max(2, entry.share * 100)}%` },
                 ]}
               />
             </View>
@@ -56,8 +57,7 @@ export function CategoryBreakdown({
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
-  label: { fontSize: 14, flexShrink: 1 },
-  value: { fontSize: 14, fontWeight: '600' },
-  track: { height: 6, borderRadius: radius.pill, overflow: 'hidden' },
-  fill: { height: 6, borderRadius: radius.pill },
+  label: { flexShrink: 1 },
+  track: { height: 8, borderRadius: radius.pill, overflow: 'hidden' },
+  fill: { height: 8, borderRadius: radius.pill },
 });

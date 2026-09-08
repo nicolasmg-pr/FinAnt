@@ -1,16 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
-import {
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   abs,
   budgetPeriod,
@@ -25,12 +17,15 @@ import { Amount } from '../../src/components/Amount';
 import { BudgetBar } from '../../src/components/BudgetBar';
 import { Card } from '../../src/components/Card';
 import { CategoryChip } from '../../src/components/CategoryChip';
+import { Button } from '../../src/components/ui/Button';
+import { Field } from '../../src/components/ui/Field';
+import { Sheet } from '../../src/components/ui/Sheet';
 import { deleteBudget, listBudgets, saveBudget } from '../../src/db/budgets-repo';
 import { useAppData } from '../../src/hooks/use-app-data';
 import { useCategories } from '../../src/hooks/use-categories';
 import { usePayPeriod } from '../../src/hooks/use-pay-period';
 import { intlLocale } from '../../src/i18n';
-import { radius, spacing, useTheme } from '../../src/theme';
+import { radius, spacing, type, typeMoney, useTheme } from '../../src/design';
 
 const CURRENCY = 'EUR';
 
@@ -44,6 +39,7 @@ interface Draft {
 export default function BudgetsScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { transactions, loading, reload } = useAppData();
   const { byId: categoryById, selectable } = useCategories();
   const [budgets, setBudgets] = useState<Budget[]>([]);
@@ -134,15 +130,19 @@ export default function BudgetsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
+        <Text style={[type.title, styles.screenTitle, { color: theme.text }]}>
+          {t('budgets.title')}
+        </Text>
+
         {progress.categories.length === 0 ? (
-          <Card title={t('budgets.title')}>
-            <Text style={{ color: theme.textMuted }}>{t('budgets.noBudgets')}</Text>
+          <Card>
+            <Text style={[type.body, { color: theme.textMuted }]}>{t('budgets.noBudgets')}</Text>
           </Card>
         ) : (
           <>
             <Card title={t('budgets.allBudgets')} subtitle={periodTitle}>
-              <Text style={{ color: theme.textMuted }}>
+              <Text style={[typeMoney.body, { color: theme.textMuted }]}>
                 {t('budgets.spentOfLimit', {
                   spent: formatMoney(progress.totalSpent, intlLocale()),
                   limit: formatMoney(progress.totalLimit, intlLocale()),
@@ -151,140 +151,118 @@ export default function BudgetsScreen() {
               <Remainder amount={progress.totalRemaining} />
               {progress.unbudgetedSpent.minor !== 0 ? (
                 <View style={styles.row}>
-                  <Text style={[styles.rowLabel, { color: theme.textMuted }]} numberOfLines={1}>
+                  <Text
+                    style={[type.body, styles.grow, { color: theme.textMuted }]}
+                    numberOfLines={1}
+                  >
                     {t('budgets.unbudgeted')}
                   </Text>
-                  <Amount value={progress.unbudgetedSpent} tone="neutral" style={styles.rowValue} />
+                  <Amount value={progress.unbudgetedSpent} tone="neutral" size="label" />
                 </View>
               ) : null}
             </Card>
 
             {progress.categories.map((entry) => (
-              <Pressable key={entry.categoryId} onPress={() => openExisting(entry)}>
-                <Card>
+              <Card key={entry.categoryId} padded={false} onPress={() => openExisting(entry)}>
+                <View style={styles.budgetBody}>
                   <View style={styles.row}>
-                    <Text style={[styles.rowLabel, { color: theme.text }]} numberOfLines={1}>
+                    <Text
+                      style={[type.heading, styles.grow, { color: theme.text }]}
+                      numberOfLines={1}
+                    >
                       {label(entry.categoryId)}
                     </Text>
-                    <Text style={[styles.rowValue, { color: theme.textMuted }]}>
+                    <Text style={[typeMoney.label, { color: theme.textMuted }]}>
                       {t('budgets.spentOfLimit', {
                         spent: formatMoney(entry.spent, intlLocale()),
                         limit: formatMoney(entry.limit, intlLocale()),
                       })}
                     </Text>
                   </View>
+                  <Remainder amount={entry.remaining} />
+                </View>
+                {/* Flush to the card's bottom edge: the bar is the card's
+                    status, not one more line inside it. */}
+                <View style={styles.budgetBar}>
                   <BudgetBar
                     ratio={entry.ratio}
                     state={entry.state}
                     color={categoryById.get(entry.categoryId)?.color}
                   />
-                  <Remainder amount={entry.remaining} />
-                </Card>
-              </Pressable>
+                </View>
+              </Card>
             ))}
           </>
         )}
 
         {available.length === 0 ? (
-          <Text style={[styles.hint, { color: theme.textMuted }]}>
+          <Text style={[type.label, styles.hint, { color: theme.textMuted }]}>
             {t('budgets.allCategoriesBudgeted')}
           </Text>
         ) : (
-          <Pressable
-            onPress={openNew}
-            disabled={loading}
-            style={[styles.addButton, { backgroundColor: theme.accent }]}
-          >
-            <Text style={styles.addButtonText}>{t('budgets.add')}</Text>
-          </Pressable>
+          <Button label={t('budgets.add')} icon="plus" disabled={loading} onPress={openNew} />
         )}
       </ScrollView>
 
-      <Modal
+      <Sheet
         visible={draft !== null}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setDraft(null)}
+        onDismiss={() => setDraft(null)}
+        title={draft?.existing ? t('budgets.edit') : t('budgets.add')}
       >
-        <View style={styles.sheetBackdrop}>
-          <View
-            style={[styles.sheet, { backgroundColor: theme.surface, borderColor: theme.border }]}
-          >
-            <Text style={[styles.sheetTitle, { color: theme.text }]}>
-              {draft?.existing ? t('budgets.edit') : t('budgets.add')}
+        {draft?.existing && draft.categoryId ? (
+          <Text style={[type.body, { color: theme.textMuted }]}>{label(draft.categoryId)}</Text>
+        ) : (
+          <>
+            <Text style={[type.body, { color: theme.textMuted }]}>
+              {t('budgets.chooseCategory')}
             </Text>
-
-            {draft?.existing && draft.categoryId ? (
-              <Text style={{ color: theme.textMuted }}>{label(draft.categoryId)}</Text>
-            ) : (
-              <>
-                <Text style={{ color: theme.textMuted }}>{t('budgets.chooseCategory')}</Text>
-                <View style={styles.chips}>
-                  {available.map((category) => (
-                    <CategoryChip
-                      key={category.id}
-                      category={category}
-                      label={label(category.id)}
-                      selected={draft?.categoryId === category.id}
-                      onPress={() =>
-                        setDraft((current) =>
-                          current ? { ...current, categoryId: category.id } : current,
-                        )
-                      }
-                    />
-                  ))}
-                </View>
-              </>
-            )}
-
-            <Text style={{ color: theme.textMuted }}>{t('budgets.monthlyLimit')}</Text>
-            <TextInput
-              value={draft?.limitText ?? ''}
-              onChangeText={(text) => {
-                setFormError(null);
-                setDraft((current) => (current ? { ...current, limitText: text } : current));
-              }}
-              keyboardType="decimal-pad"
-              inputMode="decimal"
-              placeholder="0.00"
-              placeholderTextColor={theme.textMuted}
-              style={[
-                styles.input,
-                { color: theme.text, borderColor: theme.border, backgroundColor: theme.surfaceAlt },
-              ]}
-            />
-            {formError ? <Text style={{ color: theme.expense }}>{formError}</Text> : null}
-
-            <View style={styles.sheetActions}>
-              <Pressable onPress={() => setDraft(null)} style={styles.sheetAction}>
-                <Text style={{ color: theme.textMuted }}>{t('common.cancel')}</Text>
-              </Pressable>
-              {draft?.existing && draft.categoryId ? (
-                <Pressable
-                  onPress={() => draft.categoryId && confirmDelete(draft.categoryId)}
-                  style={styles.sheetAction}
-                >
-                  <Text style={{ color: theme.expense }}>{t('common.delete')}</Text>
-                </Pressable>
-              ) : null}
-              <Pressable
-                onPress={() => void commit()}
-                disabled={!draft?.categoryId}
-                style={styles.sheetAction}
-              >
-                <Text
-                  style={{
-                    color: draft?.categoryId ? theme.accent : theme.textMuted,
-                    fontWeight: '600',
-                  }}
-                >
-                  {t('common.save')}
-                </Text>
-              </Pressable>
+            <View style={styles.chips}>
+              {available.map((category) => (
+                <CategoryChip
+                  key={category.id}
+                  category={category}
+                  label={label(category.id)}
+                  selected={draft?.categoryId === category.id}
+                  onPress={() =>
+                    setDraft((current) =>
+                      current ? { ...current, categoryId: category.id } : current,
+                    )
+                  }
+                />
+              ))}
             </View>
-          </View>
+          </>
+        )}
+
+        <Field
+          label={t('budgets.monthlyLimit')}
+          value={draft?.limitText ?? ''}
+          onChangeText={(text) => {
+            setFormError(null);
+            setDraft((current) => (current ? { ...current, limitText: text } : current));
+          }}
+          keyboardType="decimal-pad"
+          inputMode="decimal"
+          placeholder="0.00"
+          error={formError ?? undefined}
+        />
+
+        <View style={styles.sheetActions}>
+          <Button label={t('common.cancel')} variant="secondary" onPress={() => setDraft(null)} />
+          {draft?.existing && draft.categoryId ? (
+            <Button
+              label={t('common.delete')}
+              variant="danger"
+              onPress={() => draft.categoryId && confirmDelete(draft.categoryId)}
+            />
+          ) : null}
+          <Button
+            label={t('common.save')}
+            disabled={!draft?.categoryId}
+            onPress={() => void commit()}
+          />
         </View>
-      </Modal>
+      </Sheet>
     </View>
   );
 }
@@ -298,40 +276,29 @@ function Remainder({ amount }: { amount: Money }) {
     amount: formatMoney(abs(amount), intlLocale()),
   });
   return (
-    <Text style={{ color: over ? theme.expense : theme.textMuted, fontSize: 13 }}>{text}</Text>
+    <Text style={[type.label, { color: over ? theme.expense : theme.textMuted }]}>{text}</Text>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  screenTitle: { marginBottom: spacing.lg },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
-  rowLabel: { fontSize: 15, fontWeight: '500', flexShrink: 1 },
-  rowValue: { fontSize: 13, fontVariant: ['tabular-nums'] },
-  hint: { fontSize: 13, textAlign: 'center', marginTop: spacing.sm },
-  addButton: { borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
-  addButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  sheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: {
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    padding: spacing.lg,
-    gap: spacing.sm,
+  grow: { flexShrink: 1 },
+  budgetBody: { padding: spacing.lg, gap: spacing.sm },
+  // The track's own corners are square; the card clips them to its radius.
+  budgetBar: {
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
+    overflow: 'hidden',
   },
-  sheetTitle: { fontSize: 17, fontWeight: '700' },
+  hint: { textAlign: 'center', marginTop: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    fontSize: 17,
-    fontVariant: ['tabular-nums'],
-  },
   sheetActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: spacing.lg,
+    flexWrap: 'wrap',
+    gap: spacing.sm,
     marginTop: spacing.sm,
   },
-  sheetAction: { paddingVertical: spacing.sm, paddingHorizontal: spacing.sm },
 });

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Link, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   DATE_RANGE_PRESETS,
   EMPTY_FILTER,
@@ -25,12 +26,18 @@ import {
 import { parseAmount } from '@finant/importers';
 import { Amount } from '../../src/components/Amount';
 import { Chip } from '../../src/components/Chip';
+import { Button } from '../../src/components/ui/Button';
+import { Field } from '../../src/components/ui/Field';
+import { ListRow } from '../../src/components/ui/ListRow';
+import { SectionHeader } from '../../src/components/ui/SectionHeader';
+import { Sheet } from '../../src/components/ui/Sheet';
+import { Touchable } from '../../src/components/ui/Touchable';
 import type { AccountRow } from '../../src/db/accounts-repo';
 import { useAppData } from '../../src/hooks/use-app-data';
 import { useCategories } from '../../src/hooks/use-categories';
 import { useCategoryLabel } from '../../src/hooks/use-category-label';
 import { formatBookingDate, intlLocale } from '../../src/i18n';
-import { radius, spacing, useTheme } from '../../src/theme';
+import { radius, rampColorFor, spacing, type, useTheme } from '../../src/design';
 
 const SIDES = ['all', 'income', 'expense'] as const;
 
@@ -57,6 +64,7 @@ function netOf(transactions: readonly Transaction[]): Money | null {
 export default function TransactionsScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { transactions, accounts, loading, reload } = useAppData();
   const { list: categories, byId: categoryById } = useCategories();
   const [filter, setFilter] = useState<TransactionFilter>(EMPTY_FILTER);
@@ -117,16 +125,13 @@ export default function TransactionsScreen() {
         refreshing={loading}
         onRefresh={reload}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingTop: insets.top + spacing.lg }]}
         ListHeaderComponent={
           <ListHeader
             filter={filter}
             setFilter={setFilter}
-            panelOpen={panelOpen}
-            setPanelOpen={setPanelOpen}
+            onOpenFilters={() => setPanelOpen(true)}
             activeCount={activeCount}
-            accounts={accounts}
-            categoryIds={categoryIds}
             resultCount={visible.length}
             net={net}
             uncategorisedCount={uncategorisedCount}
@@ -134,17 +139,28 @@ export default function TransactionsScreen() {
           />
         }
         ListEmptyComponent={
-          <Text style={[styles.empty, { color: theme.textMuted }]}>
+          <Text style={[type.body, styles.empty, { color: theme.textMuted }]}>
             {activeCount > 0 ? t('transactions.filters.noMatch') : t('transactions.empty')}
           </Text>
         }
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <Row
             transaction={item}
             accountName={accountNames?.get(item.accountId) ?? null}
             category={item.categoryId ? (categoryById.get(item.categoryId) ?? null) : null}
+            divider={index < visible.length - 1}
           />
         )}
+      />
+
+      <FilterSheet
+        visible={panelOpen}
+        onDismiss={() => setPanelOpen(false)}
+        filter={filter}
+        setFilter={setFilter}
+        activeCount={activeCount}
+        accounts={accounts}
+        categoryIds={categoryIds}
       />
     </View>
   );
@@ -153,11 +169,8 @@ export default function TransactionsScreen() {
 interface HeaderProps {
   filter: TransactionFilter;
   setFilter: (update: (current: TransactionFilter) => TransactionFilter) => void;
-  panelOpen: boolean;
-  setPanelOpen: (open: boolean) => void;
+  onOpenFilters: () => void;
   activeCount: number;
-  accounts: readonly AccountRow[];
-  categoryIds: readonly string[];
   resultCount: number;
   net: Money | null;
   uncategorisedCount: number;
@@ -165,7 +178,8 @@ interface HeaderProps {
 }
 
 /**
- * Search box, filter panel and result summary.
+ * Title, search field and result summary. The filters themselves live in a
+ * sheet now; this header only opens it.
  *
  * Declared at module level rather than inline so the list header keeps the same
  * component type across renders: an inline one is remounted on every keystroke
@@ -174,11 +188,8 @@ interface HeaderProps {
 function ListHeader({
   filter,
   setFilter,
-  panelOpen,
-  setPanelOpen,
+  onOpenFilters,
   activeCount,
-  accounts,
-  categoryIds,
   resultCount,
   net,
   uncategorisedCount,
@@ -186,13 +197,123 @@ function ListHeader({
 }: HeaderProps) {
   const theme = useTheme();
   const { t } = useTranslation();
+
+  return (
+    <View style={styles.header}>
+      <View style={styles.titleRow}>
+        <Text style={[type.title, { color: theme.text }]}>{t('nav.transactions')}</Text>
+        {/* Was the navigator's headerRight; the header is gone, the action is
+            not. */}
+        <Link href="/movement/new" asChild>
+          <Touchable
+            accessibilityRole="button"
+            accessibilityLabel={t('transactions.addManual')}
+            hitSlop={12}
+            // expo-router's Link clones this child and refuses an array
+            // style, so the two layers are flattened before they reach it.
+            style={StyleSheet.flatten([styles.add, { backgroundColor: theme.accentSoft }])}
+          >
+            <Feather name="plus" color={theme.accent} size={20} />
+          </Touchable>
+        </Link>
+      </View>
+
+      <View style={styles.searchRow}>
+        <View style={[styles.search, { backgroundColor: theme.surfaceSunken }]}>
+          <Feather name="search" size={16} color={theme.textMuted} />
+          <TextInput
+            value={filter.text}
+            onChangeText={(text) => setFilter((current) => ({ ...current, text }))}
+            placeholder={t('transactions.searchPlaceholder')}
+            placeholderTextColor={theme.textMuted}
+            accessibilityLabel={t('transactions.search')}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            style={[type.body, styles.searchInput, { color: theme.text }]}
+          />
+          {filter.text !== '' ? (
+            <Touchable
+              onPress={() => setFilter((current) => ({ ...current, text: '' }))}
+              accessibilityRole="button"
+              accessibilityLabel={t('common.cancel')}
+            >
+              <Feather name="x" size={16} color={theme.textMuted} />
+            </Touchable>
+          ) : null}
+        </View>
+
+        <Touchable
+          onPress={onOpenFilters}
+          accessibilityRole="button"
+          accessibilityLabel={t('transactions.filters.show')}
+          style={[
+            styles.filterButton,
+            { backgroundColor: activeCount > 0 ? theme.accentSoft : theme.surfaceSunken },
+          ]}
+        >
+          <Feather name="sliders" size={18} color={activeCount > 0 ? theme.accent : theme.text} />
+          {activeCount > 0 ? (
+            <View style={[styles.badge, { backgroundColor: theme.accent }]}>
+              <Text style={[type.caption, { color: theme.onAccent }]}>{activeCount}</Text>
+            </View>
+          ) : null}
+        </Touchable>
+      </View>
+
+      {uncategorisedCount > 0 && !filter.categoryIds.includes(UNCATEGORISED_ID) ? (
+        <Touchable
+          onPress={onShowUncategorised}
+          accessibilityRole="button"
+          style={[styles.banner, { backgroundColor: theme.accentSoft }]}
+        >
+          <Text style={[type.body, { color: theme.accent }]}>
+            {t('transactions.uncategorisedBanner', { count: uncategorisedCount })}
+          </Text>
+        </Touchable>
+      ) : null}
+
+      <Text style={[type.caption, { color: theme.textMuted }]}>
+        {t('transactions.filters.results', { count: resultCount })}
+        {net
+          ? ` · ${t('transactions.filters.net', { amount: formatMoney(net, intlLocale()) })}`
+          : ''}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * Every filter, in a sheet. It was an inline panel that pushed the list down
+ * the screen while it was open; the filters are a detour from reading the
+ * list, not part of it.
+ *
+ * The four typed bounds keep their own text. A half-typed date is not a filter
+ * yet, and a preset chip has to be able to rewrite what the date fields show —
+ * neither works if the input is driven straight off the filter.
+ */
+function FilterSheet({
+  visible,
+  onDismiss,
+  filter,
+  setFilter,
+  activeCount,
+  accounts,
+  categoryIds,
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+  filter: TransactionFilter;
+  setFilter: (update: (current: TransactionFilter) => TransactionFilter) => void;
+  activeCount: number;
+  accounts: readonly AccountRow[];
+  categoryIds: readonly string[];
+}) {
+  const { t } = useTranslation();
   const label = useCategoryLabel();
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const preset = presetOf(filter, today);
 
-  // The four typed bounds keep their own text. A half-typed date is not a
-  // filter yet, and a preset chip has to be able to rewrite what the date
-  // fields show — neither works if the input is driven straight off the filter.
   const [fromText, setFromText] = useState(filter.from ?? '');
   const [toText, setToText] = useState(filter.to ?? '');
   const [minText, setMinText] = useState('');
@@ -213,225 +334,146 @@ function ListHeader({
     setFilter(() => EMPTY_FILTER);
   };
 
-  const inputStyle = [
-    styles.input,
-    { color: theme.text, borderColor: theme.border, backgroundColor: theme.surfaceAlt },
-  ];
-
   return (
-    <View style={styles.header}>
-      <View style={styles.searchRow}>
-        <View
-          style={[styles.search, { borderColor: theme.border, backgroundColor: theme.surfaceAlt }]}
-        >
-          <Feather name="search" size={16} color={theme.textMuted} />
-          <TextInput
-            value={filter.text}
-            onChangeText={(text) => setFilter((current) => ({ ...current, text }))}
-            placeholder={t('transactions.searchPlaceholder')}
-            placeholderTextColor={theme.textMuted}
-            accessibilityLabel={t('transactions.search')}
+    <Sheet visible={visible} onDismiss={onDismiss} title={t('transactions.filters.show')}>
+      <Section label={t('transactions.filters.period')}>
+        {DATE_RANGE_PRESETS.map((option) => (
+          <Chip
+            key={option}
+            label={t(`transactions.filters.preset.${option}`)}
+            selected={preset === option}
+            onPress={() => applyPreset(option)}
+          />
+        ))}
+      </Section>
+
+      <View style={styles.pair}>
+        <View style={styles.half}>
+          <Field
+            label={t('transactions.filters.from')}
+            value={fromText}
+            onChangeText={(value) => {
+              setFromText(value);
+              if (isValidISODate(value) || value === '') {
+                setFilter((current) => ({ ...current, from: value === '' ? null : value }));
+              }
+            }}
+            placeholder={t('transactions.filters.datePlaceholder')}
             autoCapitalize="none"
             autoCorrect={false}
-            returnKeyType="search"
-            style={[styles.searchInput, { color: theme.text }]}
           />
-          {filter.text !== '' ? (
-            <Pressable
-              onPress={() => setFilter((current) => ({ ...current, text: '' }))}
-              accessibilityRole="button"
-              accessibilityLabel={t('common.cancel')}
-            >
-              <Feather name="x" size={16} color={theme.textMuted} />
-            </Pressable>
-          ) : null}
         </View>
-        <Pressable
-          onPress={() => setPanelOpen(!panelOpen)}
-          accessibilityRole="button"
-          accessibilityState={{ expanded: panelOpen }}
-          style={[
-            styles.filterButton,
-            {
-              borderColor: activeCount > 0 ? theme.accent : theme.border,
-              backgroundColor: panelOpen ? theme.surfaceAlt : 'transparent',
-            },
-          ]}
-        >
-          <Feather name="sliders" size={16} color={activeCount > 0 ? theme.accent : theme.text} />
-          <Text style={{ color: activeCount > 0 ? theme.accent : theme.text, fontSize: 13 }}>
-            {activeCount > 0
-              ? `${t('transactions.filters.show')} ${activeCount}`
-              : t('transactions.filters.show')}
-          </Text>
-        </Pressable>
+        <View style={styles.half}>
+          <Field
+            label={t('transactions.filters.to')}
+            value={toText}
+            onChangeText={(value) => {
+              setToText(value);
+              if (isValidISODate(value) || value === '') {
+                setFilter((current) => ({ ...current, to: value === '' ? null : value }));
+              }
+            }}
+            placeholder={t('transactions.filters.datePlaceholder')}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </View>
       </View>
 
-      {panelOpen ? (
-        <View style={[styles.panel, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-          <Section label={t('transactions.filters.period')}>
-            {DATE_RANGE_PRESETS.map((option) => (
-              <Chip
-                key={option}
-                label={t(`transactions.filters.preset.${option}`)}
-                selected={preset === option}
-                onPress={() => applyPreset(option)}
-              />
-            ))}
-          </Section>
-          <View style={styles.pair}>
-            <TextInput
-              value={fromText}
-              onChangeText={(value) => {
-                setFromText(value);
-                if (isValidISODate(value) || value === '') {
-                  setFilter((current) => ({ ...current, from: value === '' ? null : value }));
-                }
-              }}
-              placeholder={t('transactions.filters.datePlaceholder')}
-              placeholderTextColor={theme.textMuted}
-              accessibilityLabel={t('transactions.filters.from')}
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={[...inputStyle, styles.half]}
-            />
-            <TextInput
-              value={toText}
-              onChangeText={(value) => {
-                setToText(value);
-                if (isValidISODate(value) || value === '') {
-                  setFilter((current) => ({ ...current, to: value === '' ? null : value }));
-                }
-              }}
-              placeholder={t('transactions.filters.datePlaceholder')}
-              placeholderTextColor={theme.textMuted}
-              accessibilityLabel={t('transactions.filters.to')}
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={[...inputStyle, styles.half]}
-            />
-          </View>
+      <Section label={t('transactions.filters.direction')}>
+        {SIDES.map((side) => (
+          <Chip
+            key={side}
+            label={t(`transactions.filters.side.${side}`)}
+            selected={filter.side === side}
+            onPress={() => setFilter((current) => ({ ...current, side }))}
+          />
+        ))}
+      </Section>
 
-          <Section label={t('transactions.filters.direction')}>
-            {SIDES.map((side) => (
-              <Chip
-                key={side}
-                label={t(`transactions.filters.side.${side}`)}
-                selected={filter.side === side}
-                onPress={() => setFilter((current) => ({ ...current, side }))}
-              />
-            ))}
-          </Section>
-
-          {accounts.length > 1 ? (
-            <Section label={t('transactions.filters.account')}>
-              {accounts.map((account) => (
-                <Chip
-                  key={account.id}
-                  label={account.name}
-                  selected={filter.accountIds.includes(account.id)}
-                  onPress={() =>
-                    setFilter((current) => ({
-                      ...current,
-                      accountIds: toggle(current.accountIds, account.id),
-                    }))
-                  }
-                />
-              ))}
-            </Section>
-          ) : null}
-
-          {categoryIds.length > 0 ? (
-            <Section label={t('transactions.filters.category')}>
-              {categoryIds.map((id) => (
-                <Chip
-                  key={id}
-                  label={label(id === UNCATEGORISED_ID ? null : id)}
-                  selected={filter.categoryIds.includes(id)}
-                  onPress={() =>
-                    setFilter((current) => ({
-                      ...current,
-                      categoryIds: toggle(current.categoryIds, id),
-                    }))
-                  }
-                />
-              ))}
-            </Section>
-          ) : null}
-
-          <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>
-            {t('transactions.filters.amount')}
-          </Text>
-          <View style={styles.pair}>
-            <TextInput
-              value={minText}
-              onChangeText={(value) => {
-                setMinText(value);
+      {accounts.length > 1 ? (
+        <Section label={t('transactions.filters.account')}>
+          {accounts.map((account) => (
+            <Chip
+              key={account.id}
+              label={account.name}
+              selected={filter.accountIds.includes(account.id)}
+              onPress={() =>
                 setFilter((current) => ({
                   ...current,
-                  minMinor: parseAmount(value, 'EUR', 'auto')?.minor ?? null,
-                }));
-              }}
-              placeholder={t('transactions.filters.amountPlaceholder')}
-              placeholderTextColor={theme.textMuted}
-              accessibilityLabel={t('transactions.filters.from')}
-              inputMode="decimal"
-              style={[...inputStyle, styles.half]}
+                  accountIds: toggle(current.accountIds, account.id),
+                }))
+              }
             />
-            <TextInput
-              value={maxText}
-              onChangeText={(value) => {
-                setMaxText(value);
+          ))}
+        </Section>
+      ) : null}
+
+      {categoryIds.length > 0 ? (
+        <Section label={t('transactions.filters.category')}>
+          {categoryIds.map((id) => (
+            <Chip
+              key={id}
+              label={label(id === UNCATEGORISED_ID ? null : id)}
+              selected={filter.categoryIds.includes(id)}
+              onPress={() =>
                 setFilter((current) => ({
                   ...current,
-                  maxMinor: parseAmount(value, 'EUR', 'auto')?.minor ?? null,
-                }));
-              }}
-              placeholder={t('transactions.filters.amountPlaceholder')}
-              placeholderTextColor={theme.textMuted}
-              accessibilityLabel={t('transactions.filters.to')}
-              inputMode="decimal"
-              style={[...inputStyle, styles.half]}
+                  categoryIds: toggle(current.categoryIds, id),
+                }))
+              }
             />
-          </View>
+          ))}
+        </Section>
+      ) : null}
 
-          {activeCount > 0 ? (
-            <Pressable onPress={clearAll} accessibilityRole="button" style={styles.clear}>
-              <Text style={{ color: theme.accent, fontWeight: '600' }}>
-                {t('transactions.filters.clear')}
-              </Text>
-            </Pressable>
-          ) : null}
+      <View style={styles.pair}>
+        <View style={styles.half}>
+          <Field
+            label={t('transactions.filters.amount')}
+            value={minText}
+            onChangeText={(value) => {
+              setMinText(value);
+              setFilter((current) => ({
+                ...current,
+                minMinor: parseAmount(value, 'EUR', 'auto')?.minor ?? null,
+              }));
+            }}
+            placeholder={t('transactions.filters.amountPlaceholder')}
+            inputMode="decimal"
+          />
         </View>
-      ) : null}
+        <View style={styles.half}>
+          <Field
+            label={t('transactions.filters.to')}
+            value={maxText}
+            onChangeText={(value) => {
+              setMaxText(value);
+              setFilter((current) => ({
+                ...current,
+                maxMinor: parseAmount(value, 'EUR', 'auto')?.minor ?? null,
+              }));
+            }}
+            placeholder={t('transactions.filters.amountPlaceholder')}
+            inputMode="decimal"
+          />
+        </View>
+      </View>
 
-      {uncategorisedCount > 0 && !filter.categoryIds.includes(UNCATEGORISED_ID) ? (
-        <Pressable
-          onPress={onShowUncategorised}
-          accessibilityRole="button"
-          style={[styles.banner, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}
-        >
-          <Text style={{ color: theme.text }}>
-            {t('transactions.uncategorisedBanner', { count: uncategorisedCount })}
-          </Text>
-        </Pressable>
-      ) : null}
-
-      <Text style={[styles.summary, { color: theme.textMuted }]}>
-        {t('transactions.filters.results', { count: resultCount })}
-        {net
-          ? ` · ${t('transactions.filters.net', { amount: formatMoney(net, intlLocale()) })}`
-          : ''}
-      </Text>
-    </View>
+      <View style={styles.sheetActions}>
+        {activeCount > 0 ? (
+          <Button label={t('transactions.filters.clear')} variant="secondary" onPress={clearAll} />
+        ) : null}
+        <Button label={t('common.done')} onPress={onDismiss} />
+      </View>
+    </Sheet>
   );
 }
 
 function Section({ label, children }: { label: string; children: ReactNode }) {
-  const theme = useTheme();
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>{label}</Text>
+      <SectionHeader label={label} />
       <View style={styles.chips}>{children}</View>
     </View>
   );
@@ -441,14 +483,15 @@ function Row({
   transaction,
   accountName,
   category,
+  divider,
 }: {
   transaction: Transaction;
   accountName: string | null;
   /** Passed in rather than looked up per row: the list renders hundreds of
    * these and they all read the same category set. */
   category: Category | null;
+  divider: boolean;
 }) {
-  const theme = useTheme();
   const { t } = useTranslation();
   const router = useRouter();
   const label = useCategoryLabel();
@@ -461,27 +504,38 @@ function Row({
   if (accountName) meta.push(accountName);
 
   return (
-    <Pressable
-      onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: transaction.id } })}
-      accessibilityRole="button"
-      style={[styles.row, { borderBottomColor: theme.border, opacity: counted ? 1 : 0.55 }]}
-    >
-      <View style={[styles.dot, { backgroundColor: category?.color ?? theme.textMuted }]} />
-      <View style={styles.rowText}>
-        <Text style={[styles.description, { color: theme.text }]} numberOfLines={1}>
-          {transaction.counterparty ?? transaction.description}
-        </Text>
-        <Text style={[styles.meta, { color: theme.textMuted }]} numberOfLines={1}>
-          {meta.join(' · ')}
-        </Text>
-      </View>
-      <Amount value={transaction.amount} style={styles.amount} />
-    </Pressable>
+    <View style={{ opacity: counted ? 1 : 0.55 }}>
+      <ListRow
+        title={transaction.counterparty ?? transaction.description}
+        subtitle={meta.join(' · ')}
+        leading={
+          <View
+            style={[
+              styles.dot,
+              { backgroundColor: category?.color ?? rampColorFor(transaction.categoryId ?? '') },
+            ]}
+          />
+        }
+        trailing={<Amount value={transaction.amount} />}
+        divider={divider}
+        onPress={() =>
+          router.push({ pathname: '/transaction/[id]', params: { id: transaction.id } })
+        }
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { gap: spacing.sm, marginBottom: spacing.sm },
+  header: { gap: spacing.md, marginBottom: spacing.sm },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  add: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   searchRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   search: {
     flex: 1,
@@ -489,56 +543,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.pill,
   },
-  searchInput: { flex: 1, paddingVertical: spacing.md, fontSize: 15 },
+  searchInput: { flex: 1, paddingVertical: spacing.md },
   filterButton: {
-    flexDirection: 'row',
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
     alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
   },
-  panel: {
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: spacing.md,
-    gap: spacing.sm,
+  badge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   section: { gap: spacing.xs },
-  sectionLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   pair: { flexDirection: 'row', gap: spacing.sm },
   half: { flex: 1 },
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: 14,
-  },
-  clear: { alignItems: 'center', paddingVertical: spacing.sm },
-  banner: {
-    padding: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  summary: { fontSize: 12 },
-  list: { padding: spacing.lg },
-  row: {
+  sheetActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
+  banner: { padding: spacing.md, borderRadius: radius.md },
+  list: { padding: spacing.lg },
   dot: { width: 10, height: 10, borderRadius: radius.pill },
-  rowText: { flex: 1, gap: 2 },
-  description: { fontSize: 15, fontWeight: '500' },
-  meta: { fontSize: 12 },
-  amount: { fontSize: 15, fontWeight: '600' },
   empty: { textAlign: 'center', marginTop: spacing.xxl },
 });

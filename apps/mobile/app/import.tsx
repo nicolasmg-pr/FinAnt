@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Feather from '@expo/vector-icons/Feather';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { useRouter } from 'expo-router';
@@ -20,6 +21,10 @@ import {
   type StatementAccount,
 } from '@finant/importers';
 import { AccountPicker } from '../src/components/AccountPicker';
+import { Button } from '../src/components/ui/Button';
+import { ListRow } from '../src/components/ui/ListRow';
+import { StatTile } from '../src/components/ui/StatTile';
+import { Touchable } from '../src/components/ui/Touchable';
 import { Amount } from '../src/components/Amount';
 import { Card } from '../src/components/Card';
 import {
@@ -36,7 +41,7 @@ import {
 } from '../src/db/institutions-repo';
 import { readSetting, SETTING_LAST_IMPORT_ACCOUNT, writeSetting } from '../src/db/settings-repo';
 import { ingest, type IngestResult } from '../src/services/ingest';
-import { radius, spacing, useTheme } from '../src/theme';
+import { radius, spacing, type, useTheme } from '../src/design';
 
 /**
  * A picked file once its format is known, but before its rows are final. The
@@ -282,44 +287,45 @@ export default function ImportScreen() {
       contentContainerStyle={{ padding: spacing.lg }}
       keyboardShouldPersistTaps="handled"
     >
-      <Card title={t('import.title')}>
-        <Pressable
-          onPress={() => void pick()}
-          disabled={busy}
-          style={[styles.button, { backgroundColor: theme.accent }]}
-        >
-          <Text style={styles.buttonText}>{t('import.pickFile')}</Text>
-        </Pressable>
-        <Text style={{ color: theme.textMuted, fontSize: 12 }}>{t('import.supportedFormats')}</Text>
-        {error ? <Text style={{ color: theme.expense }}>{error}</Text> : null}
-      </Card>
+      {/* A drop zone rather than a button: picking the file is the whole
+          point of this screen, so it gets the space to say so. */}
+      <Touchable
+        onPress={() => void pick()}
+        disabled={busy}
+        accessibilityRole="button"
+        style={[styles.dropZone, { borderColor: theme.border, backgroundColor: theme.surface }]}
+      >
+        <Feather name="upload-cloud" size={32} color={theme.accent} />
+        <Text style={[type.heading, { color: theme.text }]}>{t('import.pickFile')}</Text>
+        <Text style={[type.caption, styles.centred, { color: theme.textMuted }]}>
+          {t('import.supportedFormats')}
+        </Text>
+      </Touchable>
+      {error ? (
+        <Text style={[type.body, styles.error, { color: theme.expense }]}>{error}</Text>
+      ) : null}
 
       {result ? (
         <Card title={t('import.result')}>
-          <Text style={{ color: theme.text }}>
+          <Text style={[type.body, { color: theme.text }]}>
             {t('import.imported', { count: result.inserted })}
           </Text>
           {result.duplicates > 0 ? (
-            <Text style={{ color: theme.textMuted }}>
+            <Text style={[type.label, { color: theme.textMuted }]}>
               {t('import.duplicatesSkipped', { count: result.duplicates })}
             </Text>
           ) : null}
           {result.transfersMatched > 0 ? (
-            <Text style={{ color: theme.textMuted }}>
+            <Text style={[type.label, { color: theme.textMuted }]}>
               {t('import.transfersMatched', { count: result.transfersMatched })}
             </Text>
           ) : null}
           {result.autoExcluded > 0 ? (
-            <Text style={{ color: theme.textMuted }}>
+            <Text style={[type.label, { color: theme.textMuted }]}>
               {t('import.autoExcluded', { count: result.autoExcluded })}
             </Text>
           ) : null}
-          <Pressable
-            onPress={() => router.back()}
-            style={[styles.button, { backgroundColor: theme.accent }]}
-          >
-            <Text style={styles.buttonText}>{t('common.done')}</Text>
-          </Pressable>
+          <Button label={t('common.done')} onPress={() => router.back()} />
         </Card>
       ) : null}
 
@@ -340,43 +346,52 @@ export default function ImportScreen() {
             title={t('import.preview')}
             subtitle={t('import.detectedProfile', { profile: file.formatLabel })}
           >
-            <Text style={{ color: theme.text }}>
+            <View style={styles.tiles}>
+              <StatTile label={t('import.preview')} tone="neutral">
+                <Text style={[type.heading, { color: theme.text }]}>
+                  {staged.transactions.length}
+                </Text>
+              </StatTile>
+              {staged.issues.length > 0 ? (
+                <StatTile
+                  label={t('import.issues', { count: staged.issues.length })}
+                  tone="expense"
+                >
+                  <Text style={[type.heading, { color: theme.warning }]}>
+                    {staged.issues.length}
+                  </Text>
+                </StatTile>
+              ) : null}
+            </View>
+            <Text style={[type.label, { color: theme.textMuted }]}>
               {t('import.rowsReady', { count: staged.transactions.length })}
             </Text>
-            {staged.issues.length > 0 ? (
-              <Text style={{ color: theme.warning }}>
-                {t('import.issues', { count: staged.issues.length })}
-              </Text>
-            ) : null}
 
-            {staged.transactions.slice(0, 8).map((draft) => (
-              <View
+            {staged.transactions.slice(0, 8).map((draft, index) => (
+              <ListRow
                 key={draft.importHash}
-                style={[styles.row, { borderBottomColor: theme.border }]}
-              >
-                <Text style={{ color: theme.text, flex: 1 }} numberOfLines={1}>
-                  {draft.bookingDate} · {draft.description}
-                </Text>
-                <Amount value={draft.amount} />
-              </View>
+                title={draft.description}
+                subtitle={draft.bookingDate}
+                trailing={<Amount value={draft.amount} />}
+                divider={index < Math.min(staged.transactions.length, 8) - 1}
+              />
             ))}
 
-            <Pressable
+            <Button
+              label={t('import.confirm')}
+              loading={busy}
+              disabled={needsName || staged.transactions.length === 0}
               onPress={() => void confirm()}
-              disabled={busy || needsName || staged.transactions.length === 0}
-              style={[
-                styles.button,
-                { backgroundColor: theme.accent, opacity: busy || needsName ? 0.6 : 1 },
-              ]}
-            >
-              <Text style={styles.buttonText}>{t('import.confirm')}</Text>
-            </Pressable>
+            />
           </Card>
 
           {staged.issues.length > 0 ? (
             <Card title={t('import.issues', { count: staged.issues.length })}>
+              {/* Rendered exactly as the parser reported them. A parser keeps
+                  going past a bad row and says so here; nothing about the row
+                  itself is added to the message. */}
               {staged.issues.slice(0, 10).map((issue) => (
-                <Text key={`${issue.row}`} style={{ color: theme.textMuted, fontSize: 12 }}>
+                <Text key={`${issue.row}`} style={[type.caption, { color: theme.textMuted }]}>
                   {issue.row}: {issue.message}
                 </Text>
               ))}
@@ -389,17 +404,18 @@ export default function ImportScreen() {
 }
 
 const styles = StyleSheet.create({
-  button: {
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
+  dropZone: {
     alignItems: 'center',
-    marginTop: spacing.sm,
-  },
-  buttonText: { color: '#FFFFFF', fontWeight: '600' },
-  row: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: spacing.xxl,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    marginBottom: spacing.lg,
   },
+  centred: { textAlign: 'center' },
+  error: { marginBottom: spacing.lg },
+  tiles: { flexDirection: 'row', gap: spacing.sm },
 });
