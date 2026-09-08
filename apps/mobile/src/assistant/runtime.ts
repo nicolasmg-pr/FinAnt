@@ -14,6 +14,9 @@ import { modelFile, type ModelSpec } from './model-file';
  * One context, module-scoped, because two would be two copies of the weights.
  */
 
+/** Offload everything to the GPU where one is usable. See `loadModel`. */
+const GPU_LAYERS = 99;
+
 let context: LlamaContext | null = null;
 let loadingFor: string | null = null;
 
@@ -31,18 +34,29 @@ export async function loadModel(
   await unloadModel();
   loadingFor = spec.id;
 
-  try {
-    context = await initLlama(
+  const open = (gpuLayers: number): Promise<LlamaContext> =>
+    initLlama(
       {
         model: modelFile(spec).uri,
         n_ctx: spec.contextTokens,
-        // Everything on the GPU where there is one: Metal on iOS, and llama.rn
-        // falls back to CPU on its own where there is not.
-        n_gpu_layers: 99,
+        n_gpu_layers: gpuLayers,
         use_mlock: false,
       },
       (progress) => onProgress?.(progress / 100),
     );
+
+  try {
+    try {
+      context = await open(GPU_LAYERS);
+    } catch {
+      // Metal is not available everywhere, and this is not an edge case: the
+      // iOS simulator cannot run it at all (llama.cpp uses more than the 14
+      // constant buffers the simulator allows), and a device with a GPU older
+      // than Apple7 cannot either. Both fail at init, and both work on the CPU,
+      // so a second attempt is worth more than a diagnosis the owner cannot act
+      // on. Only if that also fails is the load genuinely a failure.
+      context = await open(0);
+    }
   } catch (error) {
     loadingFor = null;
     context = null;

@@ -11,6 +11,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.finant.app",
+      "entitlements": {
+        "com.apple.developer.kernel.increased-memory-limit": true,
+        "com.apple.developer.kernel.extended-virtual-addressing": true
+      },
       "infoPlist": {
         "NSFaceIDUsageDescription": "FinAnt uses Face ID to unlock your financial data on this device."
       }

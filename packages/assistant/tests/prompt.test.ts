@@ -103,7 +103,6 @@ describe('buildOutputSchema', () => {
       'maxEuros',
       'minEuros',
       'range',
-      'reset',
       'side',
       'text',
     ]);

@@ -19,7 +19,8 @@
     "lint:fix": "eslint . --fix && prettier --write \"**/*.{ts,tsx,json,md}\"",
     "typecheck": "tsc -b packages/core packages/importers packages/i18n packages/assistant --pretty && npm run typecheck --workspace=@finant/mobile",
     "inspect:csv": "tsx scripts/inspect-csv.ts",
-    "verify:workbook": "tsx scripts/verify-workbook.ts"
+    "verify:workbook": "tsx scripts/verify-workbook.ts",
+    "eval:assistant": "tsx scripts/eval-assistant.ts"
   },
   "//overrides": "expo-router declares react-native-reanimated as a `*` peer, so npm resolves the newest publish (4.6.0 / worklets 0.12.x) instead of what the SDK ships. worklets 0.12 dropped WorkletRuntime::executeSync, which expo-modules-core still calls, and the iOS build fails to compile. Pinned to Expo SDK 57's bundledNativeModules.json. Re-check these on every SDK upgrade. react-native-gesture-handler arrives the same way and for the same reason: expo-router peers it as `*`, npm hoists the newest major (3.x) to the root while the workspace holds SDK 57's 2.32, and two copies of one native module is an autolinking coin toss.",
   "overrides": {

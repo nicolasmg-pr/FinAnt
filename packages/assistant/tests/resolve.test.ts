@@ -220,3 +220,34 @@ describe('parsePatch', () => {
     expect(patch).toEqual({ aggregate: 'count' });
   });
 });
+
+describe('applyPatch — "last month" has its own intent', () => {
+  it('resolves the single month before this one', () => {
+    const { state: next } = applyPatch(state(), { range: { kind: 'monthAgo', months: 1 } }, ctx);
+
+    expect(next.filter.from).toBe('2026-08-01');
+    expect(next.filter.to).toBe('2026-08-31');
+  });
+
+  it('crosses a year boundary', () => {
+    const january = { ...ctx, today: '2026-01-20' as ISODate };
+    const { state: next } = applyPatch(
+      state(),
+      { range: { kind: 'monthAgo', months: 1 } },
+      january,
+    );
+
+    expect(next.filter.from).toBe('2025-12-01');
+    expect(next.filter.to).toBe('2025-12-31');
+  });
+
+  it('is not the same window as monthsBack, which is a span', () => {
+    const single = applyPatch(state(), { range: { kind: 'monthAgo', months: 1 } }, ctx);
+    const span = applyPatch(state(), { range: { kind: 'monthsBack', months: 2 } }, ctx);
+
+    expect(single.state.filter.from).toBe('2026-08-01');
+    expect(span.state.filter.from).toBe('2026-08-01');
+    expect(single.state.filter.to).toBe('2026-08-31');
+    expect(span.state.filter.to).toBe('2026-09-31');
+  });
+});
