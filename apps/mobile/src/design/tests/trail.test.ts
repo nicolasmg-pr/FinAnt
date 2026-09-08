@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { grainSpacing, segmentsFor } from '../trail';
+import { grainsAlong, grainStack, grainSpacing, segmentsFor } from '../trail';
 
 describe('segmentsFor', () => {
   it('splits a wide track into grains no thinner than 4px', () => {
@@ -68,5 +68,70 @@ describe('grainSpacing', () => {
   it('spaces grains further apart the less history there is', () => {
     expect(grainSpacing('high')).toBeLessThan(grainSpacing('medium'));
     expect(grainSpacing('medium')).toBeLessThan(grainSpacing('low'));
+  });
+});
+
+describe('grainStack', () => {
+  it('stacks grains upward from the baseline', () => {
+    const grains = grainStack(100, 20, 6, 4);
+    expect(grains).toEqual([
+      { y: 96, height: 4 },
+      { y: 86, height: 4 },
+    ]);
+  });
+
+  it('draws nothing for a bar shorter than one grain', () => {
+    expect(grainStack(100, 3, 6, 4)).toEqual([]);
+    expect(grainStack(100, 0, 6, 4)).toEqual([]);
+  });
+
+  it('draws fewer grains as the spacing widens', () => {
+    expect(grainStack(100, 60, 3, 4).length).toBeGreaterThan(grainStack(100, 60, 10, 4).length);
+  });
+});
+
+describe('grainsAlong', () => {
+  it('starts one spacing in, so a grain never sits on the last booked point', () => {
+    expect(
+      grainsAlong(
+        [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+        ],
+        5,
+      ),
+    ).toEqual([
+      { x: 5, y: 0 },
+      { x: 10, y: 0 },
+    ]);
+  });
+
+  it('keeps the spacing even across a corner', () => {
+    const grains = grainsAlong(
+      [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 20, y: 0 },
+      ],
+      6,
+    );
+    expect(grains).toEqual([
+      { x: 6, y: 0 },
+      { x: 12, y: 0 },
+      { x: 18, y: 0 },
+    ]);
+  });
+
+  it('needs two points and a positive spacing', () => {
+    expect(grainsAlong([{ x: 0, y: 0 }], 5)).toEqual([]);
+    expect(
+      grainsAlong(
+        [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+        ],
+        0,
+      ),
+    ).toEqual([]);
   });
 });

@@ -89,3 +89,67 @@ export function grainSpacing(confidence: Confidence): number {
   if (confidence === 'medium') return 6;
   return 10;
 }
+
+export interface Grain {
+  readonly y: number;
+  readonly height: number;
+}
+
+export interface Point {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * A projected bar as a column of grains standing on `baseline`, in SVG
+ * coordinates. A partial grain at the top is dropped rather than clipped: the
+ * column counts, and half a grain counts as nothing.
+ */
+export function grainStack(
+  baseline: number,
+  full: number,
+  spacing: number,
+  size = 4,
+): readonly Grain[] {
+  const height = Number.isFinite(full) ? Math.max(0, full) : 0;
+  const step = size + Math.max(0, spacing);
+  const grains: Grain[] = [];
+  for (let offset = 0; offset + size <= height; offset += step) {
+    grains.push({ y: baseline - offset - size, height: size });
+  }
+  return grains;
+}
+
+/**
+ * Points spaced evenly along a polyline, for a projected run drawn as a trail
+ * of grains rather than as a line. The first grain sits one full spacing in, so
+ * the projection starts *after* the last booked point instead of on top of it.
+ */
+export function grainsAlong(points: readonly Point[], spacing: number): readonly Point[] {
+  if (points.length < 2 || !Number.isFinite(spacing) || spacing <= 0) return [];
+
+  const out: Point[] = [];
+  // Distance still owed from the previous segment, so the spacing does not
+  // reset at every corner.
+  let carried = spacing;
+
+  for (let i = 1; i < points.length; i += 1) {
+    const from = points[i - 1];
+    const to = points[i];
+    if (!from || !to) continue;
+
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy);
+    if (length === 0) continue;
+
+    let travelled = carried;
+    while (travelled <= length) {
+      out.push({ x: from.x + (dx * travelled) / length, y: from.y + (dy * travelled) / length });
+      travelled += spacing;
+    }
+    carried = travelled - length;
+  }
+
+  return out;
+}
