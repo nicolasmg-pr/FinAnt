@@ -172,12 +172,20 @@ but from this point the edit happens in `mascot.ts`.
 
 ## Surfaces
 
-**Empty states.** `Empty` is currently defined four times, separately, in
-`app/(tabs)/index.tsx`, `app/(tabs)/transactions.tsx`, `app/(tabs)/settings.tsx`
-and `app/categories.tsx`, each a Feather `inbox` glyph over muted text. It is
-lifted into `src/components/ui/Empty.tsx` and the four copies deleted. The glyph
-becomes the ant in `searching`. Copy is untouched: `dashboard.noData`,
-`transactions.empty`, `banks.empty` already exist in en, es and de.
+**Empty states.** There is one `Empty` component, defined locally in
+`app/(tabs)/index.tsx` — a Feather `inbox` glyph over muted text, used twice on
+the dashboard. `app/(tabs)/transactions.tsx` and `app/(tabs)/banks.tsx` render
+their empty states as a bare `<Text>` with no icon at all.
+
+`Empty` is lifted into `src/components/ui/Empty.tsx`, the local copy deleted, and
+the two bare-text cases adopt it. The glyph becomes the ant in `searching`. Copy
+is untouched: `dashboard.noData`, `transactions.empty`,
+`transactions.filters.noMatch` and `banks.empty` already exist in en, es and de.
+
+`settings.autoExclusionsEmpty` and `categories.hiddenEmpty` are **out of scope**.
+They are one-line captions inside a section of an otherwise full screen, not
+screen-level empty states; a mascot beside them would be decoration on a page
+that is not empty.
 
 **Import.** `import.tsx` tracks a single `busy` boolean, not a progress
 fraction, so the ant walks as a loop for as long as `busy` holds rather than
@@ -185,7 +193,12 @@ stepping along a percentage. It settles into `carrying` when the import returns.
 If granular progress ever arrives, the walk can be driven by it without the
 component changing.
 
-**Assistant.** `AskBubble` takes the `face` pose.
+**Assistant.** `AskBubble` takes the `face` pose. The bubble is a 56px circle
+filled with `theme.accent`, so an ant whose `body` role also resolves to `accent`
+would be invisible on it. `Ant` therefore takes a `variant` prop: `'theme'`
+(default) resolves roles against the palette as above, and `'onAccent'` maps
+`ink` to `onAccent` and leaves the fills as `accent`, giving an outlined ant that
+reads on the filled bubble. The face lines are `ink`, so they survive.
 
 **Dashboard header.** `face` at around 24px beside the `nav.dashboard` title.
 
