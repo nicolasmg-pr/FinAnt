@@ -5,6 +5,7 @@ import {
   PanResponder,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -36,11 +37,15 @@ export function Sheet({
   visible,
   onDismiss,
   title,
+  scroll = false,
   children,
 }: {
   visible: boolean;
   onDismiss: () => void;
   title?: string;
+  /** For a form taller than the screen. The panel caps at 85% of the viewport
+   * and its body scrolls, rather than the sheet growing past the top edge. */
+  scroll?: boolean;
   children: ReactNode;
 }) {
   const theme = useTheme();
@@ -123,6 +128,7 @@ export function Sheet({
             }}
             style={[
               styles.panel,
+              scroll ? styles.capped : null,
               { backgroundColor: theme.surface, paddingBottom: insets.bottom + spacing.lg },
               elevation,
               panel,
@@ -136,7 +142,17 @@ export function Sheet({
                 {title}
               </Text>
             ) : null}
-            {children}
+            {scroll ? (
+              <ScrollView
+                contentContainerStyle={styles.scrollBody}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {children}
+              </ScrollView>
+            ) : (
+              children
+            )}
           </Animated.View>
         </KeyboardAvoidingView>
       </View>
@@ -154,6 +170,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     gap: spacing.md,
   },
+  capped: { maxHeight: '85%' },
+  scrollBody: { gap: spacing.md, paddingBottom: spacing.sm },
   grip: { alignItems: 'center', paddingVertical: spacing.sm },
   handle: { width: 36, height: 4, borderRadius: radius.pill },
 });
