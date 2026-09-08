@@ -74,6 +74,11 @@ function readRange(value: unknown, issues: AskIssue[]): RangeIntent | undefined 
         return { kind: 'monthsBack', months: range.months };
       }
       break;
+    case 'monthAgo':
+      if (typeof range.months === 'number' && Number.isFinite(range.months)) {
+        return { kind: 'monthAgo', months: range.months };
+      }
+      break;
     case 'explicit': {
       const from = range.from;
       const to = range.to;
@@ -190,6 +195,11 @@ function resolveRange(
       const months = Math.max(1, Math.round(intent.months));
       const current = yearMonthOf(today);
       return { from: `${addMonths(current, -(months - 1))}-01`, to: `${current}-31` };
+    }
+
+    case 'monthAgo': {
+      const ym = addMonths(yearMonthOf(today), -Math.max(0, Math.round(intent.months)));
+      return { from: `${ym}-01`, to: lastOfMonth(ym) };
     }
 
     case 'explicit': {

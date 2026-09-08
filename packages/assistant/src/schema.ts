@@ -35,6 +35,13 @@ export type RangeIntent =
   | { readonly kind: 'month'; readonly yearMonth: YearMonth }
   /** The last N months, this one included. */
   | { readonly kind: 'monthsBack'; readonly months: number }
+  /**
+   * The single month N months before this one. "Last month" is the most asked
+   * window in a finance app and had no form the model could say: without this
+   * it answered with `this-month`, which is a wrong figure rather than a
+   * missing one.
+   */
+  | { readonly kind: 'monthAgo'; readonly months: number }
   | { readonly kind: 'explicit'; readonly from: ISODate | null; readonly to: ISODate | null };
 
 /**
