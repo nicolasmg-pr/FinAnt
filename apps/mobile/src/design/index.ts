@@ -6,6 +6,15 @@ export { radius, spacing } from './spacing';
 export { MAX_FONT_SCALE, type, typeMoney, type TypeRole } from './type';
 export { useElevation, type ElevationLevel } from './elevation';
 export { useMotion, type Motion } from './motion';
+export {
+  grainSpacing,
+  grainsAlong,
+  grainStack,
+  segmentsFor,
+  type Grain,
+  type Point,
+  type TrailGeometry,
+} from './trail';
 
 export function useTheme(): Palette {
   return useColorScheme() === 'dark' ? darkPalette : lightPalette;

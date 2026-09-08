@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import Svg, { Line, Path, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { G, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 import Animated, {
   useAnimatedProps,
   useSharedValue,
@@ -9,7 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { formatAxisAmount, money, niceTicks, type MonthForecast } from '@finant/core';
 import { intlLocale } from '../i18n';
-import { type as typeScale, useMotion, useTheme } from '../design';
+import { grainSpacing, grainStack, type as typeScale, useMotion, useTheme } from '../design';
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
@@ -23,8 +23,10 @@ const AXIS = 16;
 
 /**
  * Twelve months of income and expense as paired bars, with the cumulative net
- * drawn over them. Projected months are faded against booked ones — a forecast
- * that looks identical to recorded fact invites the wrong decision.
+ * drawn over them. Projected months are drawn as grains rather than as solid
+ * bars, spaced by the confidence of the month they describe — a forecast that
+ * looks identical to recorded fact invites the wrong decision, and one that
+ * looks identical whatever its history behind it invites it twice.
  *
  * Bars and the net line share one vertical scale. They used to have two, which
  * fit each of them to its own extreme and made the chart denser; the moment the
@@ -103,30 +105,52 @@ export function ForecastChart({
           </SvgText>
         ))}
 
-        {months.map((month, i) => (
-          <Bar
-            key={`${month.month}-income`}
-            x={GUTTER + slot * i}
-            width={barWidth}
-            baseline={baseline}
-            full={baseline - y(month.income.minor)}
-            fill={theme.income}
-            opacity={month.kind === 'projected' ? 0.45 : 1}
-            grow={grow}
-          />
-        ))}
-        {months.map((month, i) => (
-          <Bar
-            key={`${month.month}-expense`}
-            x={GUTTER + slot * i + barWidth + 2}
-            width={barWidth}
-            baseline={baseline}
-            full={baseline - y(month.expenses.minor)}
-            fill={theme.expense}
-            opacity={month.kind === 'projected' ? 0.45 : 1}
-            grow={grow}
-          />
-        ))}
+        {months.map((month, i) =>
+          month.kind === 'projected' ? (
+            <GrainBar
+              key={`${month.month}-income`}
+              x={GUTTER + slot * i}
+              width={barWidth}
+              baseline={baseline}
+              full={baseline - y(month.income.minor)}
+              fill={theme.income}
+              spacing={grainSpacing(month.confidence)}
+            />
+          ) : (
+            <Bar
+              key={`${month.month}-income`}
+              x={GUTTER + slot * i}
+              width={barWidth}
+              baseline={baseline}
+              full={baseline - y(month.income.minor)}
+              fill={theme.income}
+              grow={grow}
+            />
+          ),
+        )}
+        {months.map((month, i) =>
+          month.kind === 'projected' ? (
+            <GrainBar
+              key={`${month.month}-expense`}
+              x={GUTTER + slot * i + barWidth + 2}
+              width={barWidth}
+              baseline={baseline}
+              full={baseline - y(month.expenses.minor)}
+              fill={theme.expense}
+              spacing={grainSpacing(month.confidence)}
+            />
+          ) : (
+            <Bar
+              key={`${month.month}-expense`}
+              x={GUTTER + slot * i + barWidth + 2}
+              width={barWidth}
+              baseline={baseline}
+              full={baseline - y(month.expenses.minor)}
+              fill={theme.expense}
+              grow={grow}
+            />
+          ),
+        )}
 
         {/* The halo first, then the line. Without it the net line disappears
             wherever it crosses a bar of similar lightness — which is why it
@@ -169,7 +193,6 @@ function Bar({
   baseline,
   full,
   fill,
-  opacity,
   grow,
 }: {
   x: number;
@@ -177,7 +200,6 @@ function Bar({
   baseline: number;
   full: number;
   fill: string;
-  opacity: number;
   grow: SharedValue<number>;
 }) {
   const animated = useAnimatedProps(() => ({
@@ -185,14 +207,46 @@ function Bar({
     y: baseline - Math.max(0, full * grow.value),
   }));
 
+  return <AnimatedRect x={x} width={width} fill={fill} rx={4} animatedProps={animated} />;
+}
+
+/**
+ * A projected month: the same bar, drawn as a column of grains. The grains are
+ * spaced by the month's own confidence, so a projection built on two months of
+ * history looks thinner than one built on twelve.
+ *
+ * It does not animate, while a booked bar does. A projection that grows into
+ * place with the same gesture as a recorded fact is exactly the equivalence
+ * the forecast rules exist to prevent.
+ */
+function GrainBar({
+  x,
+  width,
+  baseline,
+  full,
+  fill,
+  spacing,
+}: {
+  x: number;
+  width: number;
+  baseline: number;
+  full: number;
+  fill: string;
+  spacing: number;
+}) {
   return (
-    <AnimatedRect
-      x={x}
-      width={width}
-      fill={fill}
-      opacity={opacity}
-      rx={4}
-      animatedProps={animated}
-    />
+    <G>
+      {grainStack(baseline, full, spacing).map((grain) => (
+        <Rect
+          key={`${x}-${grain.y}`}
+          x={x}
+          y={grain.y}
+          width={width}
+          height={grain.height}
+          rx={grain.height / 2}
+          fill={fill}
+        />
+      ))}
+    </G>
   );
 }

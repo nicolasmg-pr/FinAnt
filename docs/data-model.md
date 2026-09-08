@@ -237,8 +237,9 @@ money the owner has now.
 The projected tail is not computed here. The dashboard passes the whole future
 months of `forecastYear()` in as `projected`, and this module runs their net
 forward from the total held today, marking those points `projected`; the chart
-draws them dashed. The current month is never passed in — its remainder is
-already inside the balance held today, and adding it again would count it twice.
+draws them as a run of grains rather than a solid line. The current month is
+never passed in — its remainder is already inside the balance held today, and
+adding it again would count it twice.
 
 ## How a rule matches
 

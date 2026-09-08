@@ -2,8 +2,9 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { CategoryTotal } from '@finant/core';
 import { Amount } from './Amount';
+import { Trail } from './trail/Trail';
 import { useCategories } from '../hooks/use-categories';
-import { radius, rampColorFor, spacing, type, useTheme } from '../design';
+import { rampColorFor, spacing, type, useTheme } from '../design';
 
 /**
  * Ranked spending per category as proportional bars. A pie chart of 20 slices
@@ -40,14 +41,7 @@ export function CategoryBreakdown({
               </Text>
               <Amount value={entry.total} tone="neutral" size="label" />
             </View>
-            <View style={[styles.track, { backgroundColor: theme.surfaceSunken }]}>
-              <View
-                style={[
-                  styles.fill,
-                  { backgroundColor: color, width: `${Math.max(2, entry.share * 100)}%` },
-                ]}
-              />
-            </View>
+            <Trail parts={[{ ratio: entry.share, tone: 'accent', color }]} />
           </View>
         );
       })}
@@ -58,6 +52,4 @@ export function CategoryBreakdown({
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
   label: { flexShrink: 1 },
-  track: { height: 8, borderRadius: radius.pill, overflow: 'hidden' },
-  fill: { height: 8, borderRadius: radius.pill },
 });
