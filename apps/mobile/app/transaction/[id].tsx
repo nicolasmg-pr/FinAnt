@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -26,6 +25,8 @@ import {
 import { Amount } from '../../src/components/Amount';
 import { Card } from '../../src/components/Card';
 import { CategoryChip } from '../../src/components/CategoryChip';
+import { Button } from '../../src/components/ui/Button';
+import { ListRow } from '../../src/components/ui/ListRow';
 import { listAccounts } from '../../src/db/accounts-repo';
 import {
   deleteExclusionRule,
@@ -45,7 +46,7 @@ import {
 import { useCategories } from '../../src/hooks/use-categories';
 import { useCategoryLabel } from '../../src/hooks/use-category-label';
 import { formatBookingDate, intlLocale } from '../../src/i18n';
-import { radius, spacing, useTheme } from '../../src/theme';
+import { radius, spacing, type, useTheme } from '../../src/design';
 
 /**
  * Every category the owner may pick, grouped so the row's own side of the
@@ -266,50 +267,56 @@ export default function TransactionDetailScreen() {
     <ScrollView style={{ backgroundColor: theme.background }} contentContainerStyle={styles.screen}>
       <Stack.Screen options={{ title: t('transactions.detailTitle') }} />
 
-      <Card>
+      {/* The amount is the page. No card behind it. */}
+      <View style={styles.hero}>
         <Amount value={tx.amount} size="display" />
-        <Text style={[styles.headline, { color: theme.text }]}>
+        <Text style={[type.title, { color: theme.text }]}>
           {tx.counterparty ?? tx.description}
         </Text>
-        {tx.counterparty ? <Text style={{ color: theme.textMuted }}>{tx.description}</Text> : null}
+        {tx.counterparty ? (
+          <Text style={[type.body, { color: theme.textMuted }]}>{tx.description}</Text>
+        ) : null}
         {excludedFromTotals ? (
-          <Text style={[styles.tag, { color: theme.textMuted, borderColor: theme.border }]}>
+          <Text
+            style={[type.label, styles.tag, { color: theme.textMuted, backgroundColor: theme.surfaceAlt }]}
+          >
             {tx.excludedFromStats ? t('transactions.excludedTag') : label(tx.categoryId)}
           </Text>
         ) : null}
         {peer ? (
-          <Pressable
+          <Button
+            label={t('transactions.transferMatched', {
+              amount: formatMoney(peer.tx.amount, intlLocale()),
+              account: peer.accountName ?? '',
+              date: formatBookingDate(peer.tx.bookingDate, { day: 'numeric', month: 'short' }),
+            })}
+            variant="secondary"
             onPress={() =>
               router.push({ pathname: '/transaction/[id]', params: { id: peer.tx.id } })
             }
-            accessibilityRole="link"
-          >
-            <Text style={[styles.peer, { color: theme.accent }]}>
-              {t('transactions.transferMatched', {
-                amount: formatMoney(peer.tx.amount, intlLocale()),
-                account: peer.accountName ?? '',
-                date: formatBookingDate(peer.tx.bookingDate, { day: 'numeric', month: 'short' }),
-              })}
-            </Text>
-          </Pressable>
+          />
         ) : null}
-      </Card>
+      </View>
 
       <Card>
-        <Field
+        <DetailRow
           label={t('transactions.bookingDate')}
           value={formatBookingDate(tx.bookingDate, { dateStyle: 'long' })}
         />
         {tx.valueDate ? (
-          <Field
+          <DetailRow
             label={t('transactions.valueDate')}
             value={formatBookingDate(tx.valueDate, { dateStyle: 'long' })}
           />
         ) : null}
-        {accountName ? <Field label={t('transactions.account')} value={accountName} /> : null}
-        {tx.reference ? <Field label={t('transactions.reference')} value={tx.reference} /> : null}
-        {tx.notes ? <Field label={t('transactions.notes')} value={tx.notes} /> : null}
-        <Field
+        {accountName ? (
+          <DetailRow label={t('transactions.account')} value={accountName} />
+        ) : null}
+        {tx.reference ? (
+          <DetailRow label={t('transactions.reference')} value={tx.reference} />
+        ) : null}
+        {tx.notes ? <DetailRow label={t('transactions.notes')} value={tx.notes} /> : null}
+        <DetailRow
           label={t('transactions.category')}
           value={`${label(tx.categoryId)} · ${t(`transactions.categorySource.${tx.categorySource}`)}`}
         />
@@ -332,7 +339,7 @@ export default function TransactionDetailScreen() {
           ) : null,
         )}
         {selected === PAYROLL_CATEGORY_ID ? (
-          <Text style={[styles.hint, { color: theme.textMuted }]}>
+          <Text style={[type.label, { color: theme.textMuted }]}>
             {t('transactions.salaryHint')}
           </Text>
         ) : null}
@@ -343,20 +350,12 @@ export default function TransactionDetailScreen() {
             onValueChange={setLearn}
           />
         ) : null}
-        <Pressable
+        <Button
+          label={t('common.save')}
+          disabled={!categoryChanged}
+          loading={busy}
           onPress={() => void save()}
-          disabled={!categoryChanged || busy}
-          style={[
-            styles.button,
-            { backgroundColor: categoryChanged ? theme.accent : theme.surfaceAlt },
-          ]}
-        >
-          <Text
-            style={[styles.buttonText, { color: categoryChanged ? '#FFFFFF' : theme.textMuted }]}
-          >
-            {t('common.save')}
-          </Text>
-        </Pressable>
+        />
       </Card>
 
       <Card>
@@ -375,24 +374,32 @@ export default function TransactionDetailScreen() {
           />
         ) : null}
         {exclusionNote ? (
-          <Text style={[styles.hint, { color: theme.textMuted }]}>{exclusionNote}</Text>
+          <Text style={[type.label, { color: theme.textMuted }]}>{exclusionNote}</Text>
         ) : null}
-        <Pressable onPress={confirmDelete} disabled={busy} style={styles.deleteButton}>
-          <Text style={{ color: theme.expense, fontWeight: '600' }}>{t('common.delete')}</Text>
-        </Pressable>
+        <Button
+          label={t('common.delete')}
+          variant="danger"
+          disabled={busy}
+          onPress={confirmDelete}
+        />
       </Card>
 
-      {error ? <Text style={{ color: theme.expense }}>{error}</Text> : null}
+      {error ? <Text style={[type.body, { color: theme.expense }]}>{error}</Text> : null}
     </ScrollView>
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+/**
+ * A read-only label and value. Not a ListRow: a reference or a note can be
+ * longer than one line and truncating it would hide the only copy of it the
+ * owner has on screen.
+ */
+function DetailRow({ label, value }: { label: string; value: string }) {
   const theme = useTheme();
   return (
     <View style={styles.field}>
-      <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>{label}</Text>
-      <Text style={[styles.fieldValue, { color: theme.text }]} selectable>
+      <Text style={[type.label, { color: theme.textMuted }]}>{label}</Text>
+      <Text style={[type.label, styles.fieldValue, { color: theme.text }]} selectable>
         {value}
       </Text>
     </View>
@@ -415,53 +422,33 @@ function SwitchRow({
 }) {
   const theme = useTheme();
   return (
-    <View style={styles.switchRow}>
-      <View style={styles.switchText}>
-        <Text style={[styles.switchLabel, { color: theme.text }]}>{label}</Text>
-        {hint ? <Text style={[styles.hint, { color: theme.textMuted }]}>{hint}</Text> : null}
-      </View>
-      <Switch
-        value={value}
-        disabled={disabled}
-        onValueChange={onValueChange}
-        trackColor={{ true: theme.accent }}
-      />
-    </View>
+    <ListRow
+      title={label}
+      subtitle={hint}
+      trailing={
+        <Switch
+          value={value}
+          disabled={disabled}
+          onValueChange={onValueChange}
+          trackColor={{ true: theme.accent }}
+        />
+      }
+    />
   );
 }
 
 const styles = StyleSheet.create({
   screen: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  hint: { fontSize: 13 },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  headline: { fontSize: 17, fontWeight: '600' },
+  hero: { gap: spacing.sm, marginBottom: spacing.lg },
   tag: {
     alignSelf: 'flex-start',
-    fontSize: 12,
     paddingVertical: 2,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.md,
     borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
   },
-  peer: { fontSize: 13, marginTop: spacing.xs },
   field: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
-  fieldLabel: { fontSize: 13 },
-  fieldValue: { fontSize: 13, flexShrink: 1, textAlign: 'right' },
+  fieldValue: { flexShrink: 1, textAlign: 'right' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  switchText: { flexShrink: 1, gap: 2 },
-  switchLabel: { fontSize: 14, flexShrink: 1 },
-  button: {
-    marginTop: spacing.sm,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    alignItems: 'center',
-  },
-  buttonText: { fontSize: 15, fontWeight: '600' },
-  deleteButton: { alignItems: 'center', paddingVertical: spacing.sm },
 });
