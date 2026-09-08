@@ -7,7 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getDatabase } from '../src/db/database';
 import { initI18n } from '../src/i18n';
 import { detectTransfers } from '../src/services/transfers';
-import { spacing, useTheme } from '../src/theme';
+import { spacing, type, useTheme } from '../src/design';
 
 /**
  * Startup order matters: the encrypted database must be open before i18n, which
@@ -43,8 +43,10 @@ export default function RootLayout() {
   if (error) {
     return (
       <View style={[styles.centre, { backgroundColor: theme.background }]}>
-        <Text style={[styles.errorTitle, { color: theme.text }]}>FinAnt could not start</Text>
-        <Text style={[styles.errorBody, { color: theme.textMuted }]}>{error.message}</Text>
+        <Text style={[type.title, { color: theme.text }]}>FinAnt could not start</Text>
+        <Text style={[type.body, styles.centreText, { color: theme.textMuted }]}>
+          {error.message}
+        </Text>
       </View>
     );
   }
@@ -100,6 +102,5 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     gap: spacing.sm,
   },
-  errorTitle: { fontSize: 18, fontWeight: '600' },
-  errorBody: { fontSize: 14, textAlign: 'center' },
+  centreText: { textAlign: 'center' },
 });
