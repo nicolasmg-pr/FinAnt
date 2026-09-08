@@ -15,7 +15,6 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const brand = join(root, 'apps/mobile/assets/brand');
 const assets = join(root, 'apps/mobile/assets');
 
-const TEAL = '#06695F';
 const CREAM = '#F2F6F5';
 
 function pngChunk(type: string, data: Buffer): Buffer {
@@ -119,7 +118,7 @@ render(mark, 1024, 'splash-icon.png');
 render(insetForAdaptive(mark), 1024, 'android-icon-foreground.png');
 render(insetForAdaptive(mono), 1024, 'android-icon-monochrome.png');
 render(
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024"><rect width="1024" height="1024" fill="${TEAL}"/></svg>`,
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024"><rect width="1024" height="1024" fill="${CREAM}"/></svg>`,
   1024,
   'android-icon-background.png',
 );
