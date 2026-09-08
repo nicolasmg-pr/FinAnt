@@ -23,7 +23,7 @@ function contrast(a: string, b: string): number {
  * all of them rather than allowing large text 3:1, because amounts render at
  * both sizes and a token cannot know which one a caller will use.
  */
-const PAIRS: ReadonlyArray<readonly [keyof Palette, keyof Palette]> = [
+const PAIRS: readonly (readonly [keyof Palette, keyof Palette])[] = [
   ['text', 'background'],
   ['text', 'surface'],
   ['text', 'surfaceSunken'],
@@ -43,6 +43,9 @@ const PAIRS: ReadonlyArray<readonly [keyof Palette, keyof Palette]> = [
   ['expense', 'expenseSoft'],
   ['warning', 'surface'],
   ['warning', 'warningSoft'],
+  ['grain', 'surface'],
+  ['grain', 'background'],
+  ['grain', 'grainSoft'],
 ];
 
 describe('palette', () => {

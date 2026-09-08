@@ -9,6 +9,12 @@
  * income, expense, warning and textMuted were all taken down until every pair
  * in palette.test.ts cleared 4.5:1. Do not lighten one without re-running it.
  *
+ * `grain` is the one role added after that pass. It means value accumulated
+ * over time and nothing else — not income, which is money that arrived, and
+ * not warning, which is a brown of a similar family and is never placed beside
+ * it. If a screen is ever found comparing the two, `warning` moves toward red;
+ * `grain` does not move, because its meaning depends on being warm.
+ *
  * No react-native import lives in this file. It is a plain data module so the
  * contrast test can run under node.
  */
@@ -32,6 +38,8 @@ export const lightPalette = {
   expenseSoft: '#FADFE2',
   warning: '#8A5411',
   warningSoft: '#F8E8D2',
+  grain: '#875C06',
+  grainSoft: '#F6E7C6',
 } as const;
 
 /** Both palettes share the same keys; values are plain strings so the dark
@@ -62,6 +70,8 @@ export const darkPalette: Palette = {
   expenseSoft: '#33191C',
   warning: '#E9A84C',
   warningSoft: '#33260F',
+  grain: '#D9A441',
+  grainSoft: '#33280F',
 };
 
 /**
