@@ -40,7 +40,8 @@ export function parseDecimal(input: string, currency: CurrencyCode): Money {
   const match = /^([+-]?)(\d*)(?:[.,](\d+))?$/.exec(cleaned);
   if (!match) throw new SyntaxError(`Cannot parse amount: ${JSON.stringify(input)}`);
   const [, sign, whole = '', frac = ''] = match;
-  if (whole === '' && frac === '') throw new SyntaxError(`Cannot parse amount: ${JSON.stringify(input)}`);
+  if (whole === '' && frac === '')
+    throw new SyntaxError(`Cannot parse amount: ${JSON.stringify(input)}`);
   const exp = exponentOf(currency);
   const fracPadded = frac.padEnd(exp, '0');
   if (fracPadded.length > exp) {
@@ -94,9 +95,30 @@ export function isExpense(a: Money): boolean {
 export function toDecimalString(a: Money): string {
   const exp = exponentOf(a.currency);
   const sign = a.minor < 0 ? '-' : '';
-  const digits = Math.abs(a.minor).toString().padStart(exp + 1, '0');
+  const digits = Math.abs(a.minor)
+    .toString()
+    .padStart(exp + 1, '0');
   if (exp === 0) return `${sign}${digits}`;
   return `${sign}${digits.slice(0, -exp)}.${digits.slice(-exp)}`;
+}
+
+/**
+ * Short form for a chart's axis tick, without the currency symbol: an axis
+ * repeats its label every gridline, and repeating "€" four times says nothing
+ * the figures on the same screen have not already said.
+ *
+ * Compact notation is locale-driven, so a German axis reads 10.845,9 where an
+ * English one reads 10.8K — CLDR has no short form for German thousands. Note
+ * that Hermes ships its own Intl on iOS and appears to ignore `notation`, so
+ * on device the figure comes back grouped in full ("20,000"). Both are
+ * readable; nothing depends on which one arrives.
+ */
+export function formatAxisAmount(a: Money, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    notation: 'compact',
+    compactDisplay: 'short',
+    maximumFractionDigits: 1,
+  }).format(a.minor / 10 ** exponentOf(a.currency));
 }
 
 /** Locale-aware display string. `locale` is a BCP 47 tag: en-GB, es-ES, de-DE. */
