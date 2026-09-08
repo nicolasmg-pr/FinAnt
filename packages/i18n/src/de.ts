@@ -41,7 +41,7 @@ export const de: Translations = {
     balanceMissing_other: '{{count}} Konten haben keinen Saldo und werden nicht gezählt',
     byMonth: 'Monate',
     byYear: 'Jahre',
-    projectedTail: 'Gestrichelt: Prognose bis Jahresende.',
+    projectedTail: 'Körner voraus: bis Jahresende projiziert, nicht gebucht.',
     topCategories: 'Wofür das Geld ausgegeben wurde',
     yearForecast: 'Jahresprognose',
     yearBooked: 'Dieses Jahr bisher',

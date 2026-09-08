@@ -41,7 +41,7 @@ export const es: Translations = {
     balanceMissing_other: '{{count}} cuentas no tienen saldo y no se cuentan',
     byMonth: 'Meses',
     byYear: 'Años',
-    projectedTail: 'Discontinuo: proyección hasta fin de año.',
+    projectedTail: 'Granos por delante: proyección hasta fin de año, no contabilizado.',
     topCategories: 'En qué se fue el dinero',
     yearForecast: 'Previsión anual',
     yearBooked: 'Este año hasta ahora',

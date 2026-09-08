@@ -225,7 +225,11 @@ export default function DashboardScreen() {
             {/* One point is a dot, not a line. */}
             {netWorth.points.length > 1 ? (
               <View style={styles.bleed}>
-                <BalanceChart points={netWorth.points} labels={netWorthLabels} />
+                <BalanceChart
+                  points={netWorth.points}
+                  labels={netWorthLabels}
+                  confidence={forecast.confidence}
+                />
               </View>
             ) : null}
 

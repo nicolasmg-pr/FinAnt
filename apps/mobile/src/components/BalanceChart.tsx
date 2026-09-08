@@ -10,9 +10,15 @@ import Svg, {
   Text as SvgText,
 } from 'react-native-svg';
 import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
-import { formatAxisAmount, money, niceTicks, type NetWorthPoint } from '@finant/core';
+import {
+  formatAxisAmount,
+  money,
+  niceTicks,
+  type Confidence,
+  type NetWorthPoint,
+} from '@finant/core';
 import { intlLocale } from '../i18n';
-import { type as typeScale, useMotion, useTheme } from '../design';
+import { grainSpacing, grainsAlong, type as typeScale, useMotion, useTheme } from '../design';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
@@ -31,8 +37,8 @@ const DASH_SPAN = 4000;
  * 9.200 € should read as level, and a chart fitted to its own two extremes
  * would draw that as a cliff.
  *
- * The projected tail is dashed, stroked separately, and — unlike the booked
- * run — carries no gradient underneath it. It is a projection, and a
+ * The projected tail is a run of grains rather than a line, carries no gradient
+ * underneath it, and is spaced by the confidence the forecast reported. A
  * projection drawn in the same ink as recorded fact is a lie by styling; a
  * filled area reads as more solid still, so the fill stops where fact stops.
  *
@@ -42,9 +48,11 @@ const DASH_SPAN = 4000;
 export function BalanceChart({
   points,
   labels,
+  confidence = 'medium',
 }: {
   points: readonly NetWorthPoint[];
   labels: readonly string[];
+  confidence?: Confidence;
 }) {
   const theme = useTheme();
   const motion = useMotion();
@@ -87,9 +95,17 @@ export function BalanceChart({
   const firstProjected = points.findIndex((point) => point.kind === 'projected');
   const lastActual = firstProjected === -1 ? points.length - 1 : firstProjected - 1;
   const booked = path(0, lastActual + 1);
-  // The dashed run starts on the last booked point, so the two meet instead of
-  // leaving a gap where the projection takes over.
-  const projected = firstProjected === -1 ? '' : path(Math.max(0, lastActual), points.length);
+  // The projected run as points, then as grains along it. It starts on the last
+  // booked point so the two meet, and `grainsAlong` puts the first grain one
+  // spacing further on so no grain sits on top of a booked figure.
+  const projectedPoints =
+    firstProjected === -1
+      ? []
+      : points.slice(Math.max(0, lastActual)).map((point, i) => ({
+          x: x(Math.max(0, lastActual) + i),
+          y: y(point.total.minor),
+        }));
+  const grains = grainsAlong(projectedPoints, grainSpacing(confidence) + 5);
 
   // The booked line closed down to the zero baseline, so the gradient has an
   // area to fill.
@@ -156,16 +172,15 @@ export function BalanceChart({
           animatedProps={revealProps}
         />
       ) : null}
-      {projected ? (
-        <Path
-          d={projected}
-          stroke={theme.accent}
-          strokeWidth={2}
-          strokeDasharray="5 4"
-          opacity={0.6}
-          fill="none"
+      {grains.map((grain) => (
+        <Circle
+          key={`grain-${grain.x.toFixed(1)}-${grain.y.toFixed(1)}`}
+          cx={grain.x}
+          cy={grain.y}
+          r={2.5}
+          fill={theme.grain}
         />
-      ) : null}
+      ))}
       {lastActual >= 0 ? (
         <Circle
           cx={x(lastActual)}

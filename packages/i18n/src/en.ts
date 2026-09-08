@@ -40,7 +40,7 @@ export const en = {
     balanceMissing_other: '{{count}} accounts have no balance and are not counted',
     byMonth: 'Months',
     byYear: 'Years',
-    projectedTail: 'Dashed: projected to the end of the year.',
+    projectedTail: 'Grains ahead: projected to the end of the year, not booked.',
     topCategories: 'Where the money went',
     yearForecast: 'Year forecast',
     yearBooked: 'This year so far',
