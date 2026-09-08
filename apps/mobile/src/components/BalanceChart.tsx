@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import Svg, {
   Circle,
   Defs,
@@ -10,7 +10,8 @@ import Svg, {
   Text as SvgText,
 } from 'react-native-svg';
 import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
-import type { NetWorthPoint } from '@finant/core';
+import { formatAxisAmount, money, niceTicks, type NetWorthPoint } from '@finant/core';
+import { intlLocale } from '../i18n';
 import { type as typeScale, useMotion, useTheme } from '../design';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -71,6 +72,9 @@ export function BalanceChart({
   const x = (i: number) => PADDING + slot * i + slot / 2;
   const y = (minor: number) => PADDING + plotHeight - ((minor - min) / span) * plotHeight;
 
+  const currency = points[0]?.total.currency ?? 'EUR';
+  const ticks = niceTicks(min, max, 3);
+
   const path = (from: number, to: number) =>
     points
       .slice(from, to)
@@ -96,6 +100,41 @@ export function BalanceChart({
 
   const revealProps = useAnimatedProps(() => ({ strokeDashoffset: reveal.value }));
 
+  /**
+   * Gridlines and their values, in their own SVG behind the line and pinned to
+   * the viewport. They belong to the vertical scale, which does not move when
+   * the chart is panned sideways — and this chart opens scrolled to its newest
+   * end, so a value drawn inside the scrolling content would start off screen.
+   */
+  const guides = (
+    <Svg width={width} height={HEIGHT} style={StyleSheet.absoluteFill}>
+      {ticks.map((tick) => (
+        <Line
+          key={`grid-${tick}`}
+          x1={0}
+          y1={y(tick)}
+          x2={width}
+          y2={y(tick)}
+          stroke={theme.border}
+          strokeWidth={1}
+          // Zero is the one line worth stating plainly; the rest only orient.
+          strokeDasharray={tick === 0 ? undefined : '3 5'}
+        />
+      ))}
+      {ticks.map((tick) => (
+        <SvgText
+          key={`tick-${tick}`}
+          x={PADDING}
+          y={y(tick) - 3}
+          fill={theme.textMuted}
+          fontSize={typeScale.caption.fontSize}
+        >
+          {formatAxisAmount(money(tick, currency), intlLocale())}
+        </SvgText>
+      ))}
+    </Svg>
+  );
+
   const chart = (
     <Svg width={chartWidth} height={HEIGHT}>
       <Defs>
@@ -105,14 +144,6 @@ export function BalanceChart({
         </LinearGradient>
       </Defs>
       {bookedArea ? <Path d={bookedArea} fill="url(#balanceFill)" /> : null}
-      <Line
-        x1={PADDING}
-        y1={y(0)}
-        x2={chartWidth - PADDING}
-        y2={y(0)}
-        stroke={theme.border}
-        strokeWidth={1}
-      />
       {booked ? (
         <AnimatedPath
           d={booked}
@@ -164,7 +195,8 @@ export function BalanceChart({
   );
 
   return (
-    <View onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+    <View style={{ height: HEIGHT }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+      {guides}
       {chartWidth > width ? (
         <ScrollView
           ref={scroller}

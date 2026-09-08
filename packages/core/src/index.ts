@@ -1,4 +1,5 @@
 export * from './money';
+export * from './axis';
 export * from './types';
 export * from './dates';
 export * from './side';

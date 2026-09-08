@@ -120,19 +120,27 @@ export default function DashboardScreen() {
     [netWorthAccounts, today, granularity, projected],
   );
 
+  // Read on every render and passed in, rather than called inside the memos:
+  // the labels are built with Intl from the active locale, and a language
+  // change re-renders this screen without changing `netWorth` or `year`. As a
+  // dependency the memos could not see, it left the axis in the language the
+  // owner had just left.
+  const locale = intlLocale();
+
   const netWorthLabels = useMemo(
     () =>
       periodLabels(
         netWorth.points.map((point) => point.period),
         granularity,
+        locale,
       ),
-    [netWorth, granularity],
+    [netWorth, granularity, locale],
   );
 
-  const monthLabels = useMemo(() => {
-    const formatter = new Intl.DateTimeFormat(intlLocale(), { month: 'narrow' });
-    return monthsOfYear(year).map((m) => formatter.format(new Date(`${m}-01T00:00:00Z`)));
-  }, [year]);
+  const monthLabels = useMemo(
+    () => monthsOfYear(year).map((m) => monthLabel(m, locale)),
+    [year, locale],
+  );
 
   // Whichever of the two the card is showing; both carry the same three totals.
   const yearTotals = yearView === 'projected' ? forecast : booked;
@@ -327,18 +335,38 @@ export default function DashboardScreen() {
 }
 
 /**
- * Axis labels for the balance chart, thinned to at most eight so they stay
- * legible: a year label at every year, and a month narrow otherwise.
+ * A month as three letters — "ene", "Sep", "sept" trimmed to fit an axis.
+ *
+ * Not `month: 'narrow'`, which is defined as a single letter and therefore
+ * ambiguous in every language the app speaks: Spanish has marzo and mayo both
+ * as M, junio and julio both as J. An axis reading "D M O D" tells the owner
+ * nothing.
  */
-function periodLabels(periods: readonly string[], granularity: Granularity): string[] {
+function monthLabel(period: string, locale: string): string {
+  const short = new Intl.DateTimeFormat(locale, { month: 'short', timeZone: 'UTC' }).format(
+    new Date(`${period}-01T00:00:00Z`),
+  );
+  // Some locales already give three letters, some four ("sept"); trimming to
+  // three keeps twelve of them inside a phone's width.
+  return short.replace('.', '').slice(0, 3);
+}
+
+/**
+ * Axis labels for the balance chart, thinned to at most six so they stay
+ * legible: a year label at every year, and a short month otherwise.
+ */
+function periodLabels(
+  periods: readonly string[],
+  granularity: Granularity,
+  locale: string,
+): string[] {
   if (granularity === 'year') return [...periods];
-  const formatter = new Intl.DateTimeFormat(intlLocale(), { month: 'narrow' });
-  const step = Math.ceil(periods.length / 8);
+  const step = Math.ceil(periods.length / 6);
   return periods.map((period, i) => {
     if (i % step !== 0 && i !== periods.length - 1) return '';
-    const narrow = formatter.format(new Date(`${period}-01T00:00:00Z`));
+    const short = monthLabel(period, locale);
     // January carries the year, so a line spanning several years says which.
-    return period.endsWith('-01') ? `${narrow} ${period.slice(2, 4)}` : narrow;
+    return period.endsWith('-01') ? `${short} ${period.slice(2, 4)}` : short;
   });
 }
 
