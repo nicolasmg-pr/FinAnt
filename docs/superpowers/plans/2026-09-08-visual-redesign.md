@@ -30,11 +30,13 @@
 ### Task 1: Palette tokens with an asserted contrast floor
 
 **Files:**
+
 - Create: `apps/mobile/src/design/palette.ts`
 - Create: `apps/mobile/src/design/tests/palette.test.ts`
 - Modify: `vitest.config.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `type Palette` (a `Record` of the 19 role keys to `string`), `const lightPalette: Palette`, `const darkPalette: Palette`. `palette.ts` imports nothing from `react-native` so it runs under node.
 
@@ -67,9 +69,7 @@ function luminance(hex: string): number {
     return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
   };
   return (
-    0.2126 * channel((n >> 16) & 255) +
-    0.7152 * channel((n >> 8) & 255) +
-    0.0722 * channel(n & 255)
+    0.2126 * channel((n >> 16) & 255) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255)
   );
 }
 
@@ -255,10 +255,12 @@ git commit -m "feat(design): palette roles with an asserted contrast floor"
 ### Task 2: The rest of the token layer, and the theme shim
 
 **Files:**
+
 - Create: `apps/mobile/src/design/spacing.ts`, `apps/mobile/src/design/type.ts`, `apps/mobile/src/design/elevation.ts`, `apps/mobile/src/design/motion.ts`, `apps/mobile/src/design/index.ts`
 - Modify: `apps/mobile/src/theme.ts` (becomes a shim)
 
 **Interfaces:**
+
 - Consumes: `Palette`, `lightPalette`, `darkPalette` from Task 1.
 - Produces:
   - `spacing`, `radius` (same names as today, `radius` values changed)
@@ -497,10 +499,12 @@ git commit -m "feat(design): type, elevation and motion tokens behind a theme sh
 ### Task 3: Touchable, and the Card / Chip restyle
 
 **Files:**
+
 - Create: `apps/mobile/src/components/ui/Touchable.tsx`
 - Modify: `apps/mobile/src/components/Card.tsx`, `apps/mobile/src/components/Chip.tsx`, `apps/mobile/src/components/CategoryChip.tsx`
 
 **Interfaces:**
+
 - Consumes: `useTheme`, `useElevation`, `useMotion`, `radius`, `spacing`, `type` from `../design`.
 - Produces:
   - `<Touchable onPress accessibilityRole accessibilityLabel accessibilityState accessibilityHint disabled hitSlop style children />` — a pressable that dips to `pressScale`.
@@ -513,11 +517,7 @@ git commit -m "feat(design): type, elevation and motion tokens behind a theme sh
 // apps/mobile/src/components/ui/Touchable.tsx
 import type { ReactNode } from 'react';
 import { Pressable, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useMotion } from '../../design';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -656,10 +656,7 @@ export function Chip({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      style={[
-        styles.chip,
-        { backgroundColor: selected ? theme.accentSoft : theme.surfaceAlt },
-      ]}
+      style={[styles.chip, { backgroundColor: selected ? theme.accentSoft : theme.surfaceAlt }]}
     >
       <Text style={[type.label, { color: selected ? theme.accent : theme.text }]}>{label}</Text>
     </Touchable>
@@ -694,9 +691,11 @@ git commit -m "feat(ui): one press-feedback wrapper, and cards that cast a shado
 ### Task 4: Button and Field
 
 **Files:**
+
 - Create: `apps/mobile/src/components/ui/Button.tsx`, `apps/mobile/src/components/ui/Field.tsx`
 
 **Interfaces:**
+
 - Consumes: `Touchable`, tokens.
 - Produces:
   - `<Button label variant? size? icon? loading? disabled? onPress />`, `variant: 'primary' | 'secondary' | 'danger'` (default `primary`), `size: 'md' | 'lg'` (default `md`), `icon?: keyof typeof Feather.glyphMap`
@@ -738,7 +737,11 @@ export function Button({
   const theme = useTheme();
 
   const background =
-    variant === 'primary' ? theme.accent : variant === 'secondary' ? theme.accentSoft : 'transparent';
+    variant === 'primary'
+      ? theme.accent
+      : variant === 'secondary'
+        ? theme.accentSoft
+        : 'transparent';
   const foreground =
     variant === 'primary' ? theme.onAccent : variant === 'danger' ? theme.expense : theme.accent;
 
@@ -861,10 +864,12 @@ git commit -m "feat(ui): Button and Field primitives"
 ### Task 5: Sheet, and FormSheet on top of it
 
 **Files:**
+
 - Create: `apps/mobile/src/components/ui/Sheet.tsx`
 - Modify: `apps/mobile/src/components/FormSheet.tsx`
 
 **Interfaces:**
+
 - Consumes: `Button`, `Field`, tokens, `useMotion`.
 - Produces: `<Sheet visible onDismiss title? children />` — backdrop fade, spring slide-up, drag handle, drag-to-dismiss past 25% of its height, safe-area bottom padding, `KeyboardAvoidingView` on iOS.
 
@@ -901,9 +906,11 @@ git commit -m "feat(ui): one bottom sheet, with FormSheet built on it"
 ### Task 6: ListRow, StatTile, SegmentedControl, SectionHeader
 
 **Files:**
+
 - Create: `apps/mobile/src/components/ui/ListRow.tsx`, `apps/mobile/src/components/ui/StatTile.tsx`, `apps/mobile/src/components/ui/SegmentedControl.tsx`, `apps/mobile/src/components/ui/SectionHeader.tsx`
 
 **Interfaces:**
+
 - Produces:
   - `<ListRow title subtitle? leading? trailing? onPress? divider? />` — `leading`/`trailing` are `ReactNode`. Never carries its own elevation.
   - `<StatTile label tone children />`, `tone: 'income' | 'expense' | 'neutral'`
@@ -946,7 +953,9 @@ export function ListRow({
     <View
       style={[
         styles.row,
-        divider ? { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border } : null,
+        divider
+          ? { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }
+          : null,
       ]}
     >
       {leading ? <View style={styles.leading}>{leading}</View> : null}
@@ -1023,9 +1032,11 @@ git commit -m "feat(ui): row, stat tile, segmented control and section header"
 ### Task 7: Amount, BudgetBar and CategoryBreakdown on the new tokens
 
 **Files:**
+
 - Modify: `apps/mobile/src/components/Amount.tsx`, `apps/mobile/src/components/BudgetBar.tsx`, `apps/mobile/src/components/CategoryBreakdown.tsx`
 
 **Interfaces:**
+
 - Produces: `<Amount value tone? size? style? />` where `size?: TypeRole` defaults to `'body'`. The `style` prop stays, for colour-neutral overrides, but no caller passes a `fontSize` through it any more.
 
 - [ ] **Step 1: Give Amount a size role**
@@ -1098,6 +1109,7 @@ git commit -m "feat(ui): amounts, budget bars and category bars on the type scal
 ### Task 8: Charts — gradient, halo and draw-in
 
 **Files:**
+
 - Modify: `apps/mobile/src/components/BalanceChart.tsx`, `apps/mobile/src/components/ForecastChart.tsx`
 
 - [ ] **Step 1: Give BalanceChart a gradient fill under the booked line**
@@ -1134,9 +1146,11 @@ git commit -m "feat(ui): chart gradient, net-line halo and a single draw-in"
 ### Task 9: Dashboard — the approval checkpoint
 
 **Files:**
+
 - Modify: `apps/mobile/app/(tabs)/index.tsx`
 
 **Interfaces:**
+
 - Consumes: every primitive from Tasks 3–8.
 
 - [ ] **Step 1: Replace the first card with a chrome-free hero**
@@ -1205,6 +1219,7 @@ git commit -m "feat(dashboard): chrome-free hero, stat tiles and a discoverable 
 ### Task 10: Transactions
 
 **Files:**
+
 - Modify: `apps/mobile/app/(tabs)/transactions.tsx`
 
 - [ ] **Step 1: Rebuild the search row**
@@ -1240,6 +1255,7 @@ git commit -m "feat(transactions): search field, badged filter chip and a filter
 ### Task 11: Banks
 
 **Files:**
+
 - Modify: `apps/mobile/app/(tabs)/banks.tsx`
 
 - [ ] **Step 1: One Card per institution**
@@ -1273,6 +1289,7 @@ git commit -m "feat(banks): institution cards with account rows"
 ### Task 12: Budgets
 
 **Files:**
+
 - Modify: `apps/mobile/app/(tabs)/budgets.tsx`
 
 - [ ] **Step 1: Each budget becomes a pressable Card**
@@ -1296,6 +1313,7 @@ git commit -m "feat(budgets): edge-to-edge limit bars and a shared sheet"
 ### Task 13: Settings
 
 **Files:**
+
 - Modify: `apps/mobile/app/(tabs)/settings.tsx`
 
 - [ ] **Step 1: Language becomes a SegmentedControl** over the existing locale codes.
@@ -1315,6 +1333,7 @@ git commit -m "feat(settings): grouped rows and a language segmented control"
 ### Task 14: Import
 
 **Files:**
+
 - Modify: `apps/mobile/app/import.tsx`
 
 - [ ] **Step 1: The file picker becomes a drop zone**
@@ -1340,6 +1359,7 @@ git commit -m "feat(import): a drop zone, stat tiles and a pinned confirm"
 ### Task 15: Categories
 
 **Files:**
+
 - Modify: `apps/mobile/app/categories.tsx`
 
 - [ ] **Step 1: A Card per kind, categories as ListRows** with an 8px colour dot leading and a chevron trailing.
@@ -1359,6 +1379,7 @@ git commit -m "feat(categories): category rows and the pastel swatch ramp"
 ### Task 16: Transaction detail
 
 **Files:**
+
 - Modify: `apps/mobile/app/transaction/[id].tsx`
 
 - [ ] **Step 1: Headline block** — `<Amount size="display" />` at the top, counterparty in `title`, description in `body` `textMuted`.
@@ -1379,6 +1400,7 @@ git commit -m "feat(transaction): headline amount and row-based toggles"
 ### Task 17: Manual movement
 
 **Files:**
+
 - Modify: `apps/mobile/app/movement/new.tsx`
 
 - [ ] **Step 1: Every input becomes a `Field`,** including the date field, which keeps its `manual.dateInvalid` warning — now passed as `Field`'s `error` prop.
@@ -1400,6 +1422,7 @@ git commit -m "feat(manual): fields, a side segmented control and a pinned save"
 ### Task 18: Chrome — tab bar and headers
 
 **Files:**
+
 - Modify: `apps/mobile/app/(tabs)/_layout.tsx`, `apps/mobile/app/_layout.tsx`
 
 - [ ] **Step 1: Transparent tab-screen headers**
@@ -1430,6 +1453,7 @@ git commit -m "feat(chrome): scrolling titles and a pill-marked tab bar"
 ### Task 19: Cleanup and full verification
 
 **Files:**
+
 - Delete: `apps/mobile/src/theme.ts`
 - Modify: any file still importing from it
 

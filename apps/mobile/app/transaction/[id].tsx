@@ -1,13 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
@@ -270,15 +262,17 @@ export default function TransactionDetailScreen() {
       {/* The amount is the page. No card behind it. */}
       <View style={styles.hero}>
         <Amount value={tx.amount} size="display" />
-        <Text style={[type.title, { color: theme.text }]}>
-          {tx.counterparty ?? tx.description}
-        </Text>
+        <Text style={[type.title, { color: theme.text }]}>{tx.counterparty ?? tx.description}</Text>
         {tx.counterparty ? (
           <Text style={[type.body, { color: theme.textMuted }]}>{tx.description}</Text>
         ) : null}
         {excludedFromTotals ? (
           <Text
-            style={[type.label, styles.tag, { color: theme.textMuted, backgroundColor: theme.surfaceAlt }]}
+            style={[
+              type.label,
+              styles.tag,
+              { color: theme.textMuted, backgroundColor: theme.surfaceAlt },
+            ]}
           >
             {tx.excludedFromStats ? t('transactions.excludedTag') : label(tx.categoryId)}
           </Text>
@@ -309,9 +303,7 @@ export default function TransactionDetailScreen() {
             value={formatBookingDate(tx.valueDate, { dateStyle: 'long' })}
           />
         ) : null}
-        {accountName ? (
-          <DetailRow label={t('transactions.account')} value={accountName} />
-        ) : null}
+        {accountName ? <DetailRow label={t('transactions.account')} value={accountName} /> : null}
         {tx.reference ? (
           <DetailRow label={t('transactions.reference')} value={tx.reference} />
         ) : null}

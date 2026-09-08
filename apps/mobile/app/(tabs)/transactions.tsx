@@ -462,11 +462,7 @@ function FilterSheet({
 
       <View style={styles.sheetActions}>
         {activeCount > 0 ? (
-          <Button
-            label={t('transactions.filters.clear')}
-            variant="secondary"
-            onPress={clearAll}
-          />
+          <Button label={t('transactions.filters.clear')} variant="secondary" onPress={clearAll} />
         ) : null}
         <Button label={t('common.done')} onPress={onDismiss} />
       </View>

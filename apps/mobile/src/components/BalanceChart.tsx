@@ -9,11 +9,7 @@ import Svg, {
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
-import Animated, {
-  useAnimatedProps,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
 import type { NetWorthPoint } from '@finant/core';
 import { type as typeScale, useMotion, useTheme } from '../design';
 

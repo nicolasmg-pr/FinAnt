@@ -69,59 +69,59 @@ remains as a re-export shim until the last screen is migrated, then is deleted.
 
 ### Colour
 
-Two roles the current palette lacks: a *tinted* background so white cards read
+Two roles the current palette lacks: a _tinted_ background so white cards read
 as floating rather than as the page itself, and a raised/sunken surface pair so
 a card can sit inside a card without a border.
 
 Light:
 
-| Role | Value | Use |
-|---|---|---|
-| `background` | `#F2F6F5` | page behind everything |
-| `surface` | `#FFFFFF` | cards, sheets |
-| `surfaceRaised` | `#FFFFFF` | card inside a card (separated by shadow) |
-| `surfaceSunken` | `#E8EEED` | inputs, progress tracks, inset wells |
-| `surfaceAlt` | `#E6EDEB` | segmented-control trough, unselected chip |
-| `border` | `#DDE5E3` | hairlines, kept for dividers only |
-| `text` | `#0F1D1B` | primary text |
-| `textMuted` | `#556A66` | captions, labels, subtitles |
-| `accent` | `#06695F` | interactive, balance line |
-| `accentPressed` | `#044F47` | pressed fill |
-| `accentSoft` | `#D3EEE9` | tinted button, selected chip, active tab pill |
-| `accentInk` | `#063F3A` | chart strokes drawn over other fills |
-| `onAccent` | `#FFFFFF` | text on an accent fill |
-| `income` | `#26703C` | income figures, income bars |
-| `incomeSoft` | `#DBF0E0` | income stat tile background |
-| `expense` | `#B32E3C` | expense figures, expense bars, danger |
-| `expenseSoft` | `#FADFE2` | expense stat tile background |
-| `warning` | `#8A5411` | missing balance, invalid date |
-| `warningSoft` | `#F8E8D2` | warning banner background |
+| Role            | Value     | Use                                           |
+| --------------- | --------- | --------------------------------------------- |
+| `background`    | `#F2F6F5` | page behind everything                        |
+| `surface`       | `#FFFFFF` | cards, sheets                                 |
+| `surfaceRaised` | `#FFFFFF` | card inside a card (separated by shadow)      |
+| `surfaceSunken` | `#E8EEED` | inputs, progress tracks, inset wells          |
+| `surfaceAlt`    | `#E6EDEB` | segmented-control trough, unselected chip     |
+| `border`        | `#DDE5E3` | hairlines, kept for dividers only             |
+| `text`          | `#0F1D1B` | primary text                                  |
+| `textMuted`     | `#556A66` | captions, labels, subtitles                   |
+| `accent`        | `#06695F` | interactive, balance line                     |
+| `accentPressed` | `#044F47` | pressed fill                                  |
+| `accentSoft`    | `#D3EEE9` | tinted button, selected chip, active tab pill |
+| `accentInk`     | `#063F3A` | chart strokes drawn over other fills          |
+| `onAccent`      | `#FFFFFF` | text on an accent fill                        |
+| `income`        | `#26703C` | income figures, income bars                   |
+| `incomeSoft`    | `#DBF0E0` | income stat tile background                   |
+| `expense`       | `#B32E3C` | expense figures, expense bars, danger         |
+| `expenseSoft`   | `#FADFE2` | expense stat tile background                  |
+| `warning`       | `#8A5411` | missing balance, invalid date                 |
+| `warningSoft`   | `#F8E8D2` | warning banner background                     |
 
 Dark, derived from the same hue anchors. Soft depth in the dark theme comes
 from lifting surface lightness, not from shadows — a shadow does not read on a
 near-black ground:
 
-| Role | Value |
-|---|---|
-| `background` | `#0B1413` |
-| `surface` | `#131F1E` |
+| Role            | Value     |
+| --------------- | --------- |
+| `background`    | `#0B1413` |
+| `surface`       | `#131F1E` |
 | `surfaceRaised` | `#1A2726` |
 | `surfaceSunken` | `#0E1817` |
-| `surfaceAlt` | `#1E2E2C` |
-| `border` | `#263634` |
-| `text` | `#E9F1EF` |
-| `textMuted` | `#93A8A4` |
-| `accent` | `#3FD0BE` |
+| `surfaceAlt`    | `#1E2E2C` |
+| `border`        | `#263634` |
+| `text`          | `#E9F1EF` |
+| `textMuted`     | `#93A8A4` |
+| `accent`        | `#3FD0BE` |
 | `accentPressed` | `#2FB4A4` |
-| `accentSoft` | `#12332F` |
-| `accentInk` | `#9BF7E9` |
-| `onAccent` | `#04231F` |
-| `income` | `#6FD37A` |
-| `incomeSoft` | `#16301C` |
-| `expense` | `#F2777F` |
-| `expenseSoft` | `#33191C` |
-| `warning` | `#E9A84C` |
-| `warningSoft` | `#33260F` |
+| `accentSoft`    | `#12332F` |
+| `accentInk`     | `#9BF7E9` |
+| `onAccent`      | `#04231F` |
+| `income`        | `#6FD37A` |
+| `incomeSoft`    | `#16301C` |
+| `expense`       | `#F2777F` |
+| `expenseSoft`   | `#33191C` |
+| `warning`       | `#E9A84C` |
+| `warningSoft`   | `#33260F` |
 
 Both palettes share the same keys, as today, so the dark palette stays
 assignable to the light one's type.
@@ -134,7 +134,7 @@ use `accent` at all — it uses `accentInk`, which is deliberately off the
 lightness of both bar colours (light theme 1.95:1 against income, 1.89:1
 against expense; dark theme 1.50:1 and 2.19:1) — and it carries a 1px
 `background`-coloured halo, which is what actually guarantees separation where
-it crosses a bar. No chart may place `accent` and `income` as adjacent *fills*.
+it crosses a bar. No chart may place `accent` and `income` as adjacent _fills_.
 
 **Contrast.** Every text-on-surface pair must reach WCAG AA 4.5:1 — the body
 threshold, applied to all of them rather than allowing large text 3:1, because
@@ -158,14 +158,14 @@ Six roles. System face (SF Pro on iOS, Roboto on Android) — no bundled font.
 Every role fixes size, weight, line height and letter spacing, so no screen
 writes a `fontSize` literal again.
 
-| Role | Size / line | Weight | Tracking | Use |
-|---|---|---|---|---|
-| `display` | 34 / 40 | 700 | −0.6 | the balance, transaction-detail headline |
-| `title` | 24 / 30 | 700 | −0.3 | large scrolling screen title |
-| `heading` | 17 / 22 | 600 | −0.1 | card titles, institution names |
-| `body` | 15 / 21 | 400 | 0 | rows, descriptions, paragraphs |
-| `label` | 13 / 18 | 500 | 0 | field labels, chips, stat-tile labels |
-| `caption` | 11 / 15 | 500 | +0.3 | axis labels, hints, section headers (uppercased) |
+| Role      | Size / line | Weight | Tracking | Use                                              |
+| --------- | ----------- | ------ | -------- | ------------------------------------------------ |
+| `display` | 34 / 40     | 700    | −0.6     | the balance, transaction-detail headline         |
+| `title`   | 24 / 30     | 700    | −0.3     | large scrolling screen title                     |
+| `heading` | 17 / 22     | 600    | −0.1     | card titles, institution names                   |
+| `body`    | 15 / 21     | 400    | 0        | rows, descriptions, paragraphs                   |
+| `label`   | 13 / 18     | 500    | 0        | field labels, chips, stat-tile labels            |
+| `caption` | 11 / 15     | 500    | +0.3     | axis labels, hints, section headers (uppercased) |
 
 Every role has a `…Money` variant that adds `fontVariant: ['tabular-nums']`.
 `Amount` picks its role by a `size` prop instead of accepting a raw style with
@@ -180,11 +180,11 @@ cannot absorb it cap at `maxFontSizeMultiplier` rather than clipping.
 Three levels, each a ready-made style object carrying iOS `shadowColor` /
 `shadowOpacity` / `shadowRadius` / `shadowOffset` **and** Android `elevation`.
 
-| Level | iOS | Android | Use |
-|---|---|---|---|
-| 1 | `#0F1D1B` @ 0.06, r12, y+4 | 2 | cards |
-| 2 | `#0F1D1B` @ 0.09, r20, y+8 | 6 | pressed card, floating action, tab bar |
-| 3 | `#0F1D1B` @ 0.16, r32, y−4 | 16 | sheets |
+| Level | iOS                        | Android | Use                                    |
+| ----- | -------------------------- | ------- | -------------------------------------- |
+| 1     | `#0F1D1B` @ 0.06, r12, y+4 | 2       | cards                                  |
+| 2     | `#0F1D1B` @ 0.09, r20, y+8 | 6       | pressed card, floating action, tab bar |
+| 3     | `#0F1D1B` @ 0.16, r32, y−4 | 16      | sheets                                 |
 
 In dark theme the shadow values collapse to none and the level maps to a
 surface step instead (`surface` → `surfaceRaised`), so `elevation(2)` means the
@@ -198,12 +198,12 @@ Radius grows for the softer silhouette: `sm` 10, `md` 14, `lg` 20, `xl` 28,
 
 Minimal, and every piece of it gated on reduce-motion.
 
-| Token | Value | Use |
-|---|---|---|
-| `instant` | 120 ms, ease-out | press dip |
-| `quick` | 200 ms, ease-in-out | cross-fade between toggled views |
-| `settle` | 320 ms, ease-out | chart draw-in, content fade on load |
-| `sheetSpring` | damping 22, stiffness 260, mass 0.9 | sheet slide, sheet dismiss |
+| Token         | Value                               | Use                                 |
+| ------------- | ----------------------------------- | ----------------------------------- |
+| `instant`     | 120 ms, ease-out                    | press dip                           |
+| `quick`       | 200 ms, ease-in-out                 | cross-fade between toggled views    |
+| `settle`      | 320 ms, ease-out                    | chart draw-in, content fade on load |
+| `sheetSpring` | damping 22, stiffness 260, mass 0.9 | sheet slide, sheet dismiss          |
 
 Press feedback is a scale to 0.97 plus no opacity change. Charts draw once on
 mount (line stroke reveal, bars growing from the axis) and do not re-animate on
@@ -398,7 +398,7 @@ Each phase must leave the tree compiling and the app launchable.
 ## Verification
 
 The mobile app has no test runner and this work adds none: a test asserting a
-shadow radius is a tautology. One part of the token layer *is* worth testing,
+shadow radius is a tautology. One part of the token layer _is_ worth testing,
 because it has an objective right answer — `palette.ts` is a pure module with
 no React Native import, so its light/dark key parity and all 19 contrast pairs
 per theme are asserted in node. `vitest.config.ts`'s `include` gains

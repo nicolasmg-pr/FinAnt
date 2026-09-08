@@ -353,7 +353,10 @@ export default function ImportScreen() {
                 </Text>
               </StatTile>
               {staged.issues.length > 0 ? (
-                <StatTile label={t('import.issues', { count: staged.issues.length })} tone="expense">
+                <StatTile
+                  label={t('import.issues', { count: staged.issues.length })}
+                  tone="expense"
+                >
                   <Text style={[type.heading, { color: theme.warning }]}>
                     {staged.issues.length}
                   </Text>

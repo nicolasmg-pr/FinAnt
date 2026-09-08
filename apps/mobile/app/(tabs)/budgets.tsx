@@ -151,7 +151,10 @@ export default function BudgetsScreen() {
               <Remainder amount={progress.totalRemaining} />
               {progress.unbudgetedSpent.minor !== 0 ? (
                 <View style={styles.row}>
-                  <Text style={[type.body, styles.grow, { color: theme.textMuted }]} numberOfLines={1}>
+                  <Text
+                    style={[type.body, styles.grow, { color: theme.textMuted }]}
+                    numberOfLines={1}
+                  >
                     {t('budgets.unbudgeted')}
                   </Text>
                   <Amount value={progress.unbudgetedSpent} tone="neutral" size="label" />
@@ -163,7 +166,10 @@ export default function BudgetsScreen() {
               <Card key={entry.categoryId} padded={false} onPress={() => openExisting(entry)}>
                 <View style={styles.budgetBody}>
                   <View style={styles.row}>
-                    <Text style={[type.heading, styles.grow, { color: theme.text }]} numberOfLines={1}>
+                    <Text
+                      style={[type.heading, styles.grow, { color: theme.text }]}
+                      numberOfLines={1}
+                    >
                       {label(entry.categoryId)}
                     </Text>
                     <Text style={[typeMoney.label, { color: theme.textMuted }]}>
@@ -257,7 +263,6 @@ export default function BudgetsScreen() {
           />
         </View>
       </Sheet>
-
     </View>
   );
 }
@@ -282,7 +287,11 @@ const styles = StyleSheet.create({
   grow: { flexShrink: 1 },
   budgetBody: { padding: spacing.lg, gap: spacing.sm },
   // The track's own corners are square; the card clips them to its radius.
-  budgetBar: { borderBottomLeftRadius: radius.xl, borderBottomRightRadius: radius.xl, overflow: 'hidden' },
+  budgetBar: {
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
+    overflow: 'hidden',
+  },
   hint: { textAlign: 'center', marginTop: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   sheetActions: {

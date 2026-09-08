@@ -27,7 +27,9 @@ export function BudgetBar({
 
   return (
     <View style={[styles.track, { backgroundColor: theme.surfaceSunken }]}>
-      <View style={[styles.fill, { backgroundColor: fill, width: `${Math.max(2, width * 100)}%` }]} />
+      <View
+        style={[styles.fill, { backgroundColor: fill, width: `${Math.max(2, width * 100)}%` }]}
+      />
       {state === 'over' ? (
         <View style={[styles.overflow, { backgroundColor: theme.expenseSoft }]} />
       ) : null}

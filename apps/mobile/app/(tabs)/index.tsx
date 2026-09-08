@@ -177,9 +177,7 @@ export default function DashboardScreen() {
 
         {netWorth.accountsCounted === 0 ? (
           <Touchable onPress={() => router.push('/banks')} accessibilityRole="button">
-            <Text style={[type.body, { color: theme.textMuted }]}>
-              {t('dashboard.noBalances')}
-            </Text>
+            <Text style={[type.body, { color: theme.textMuted }]}>{t('dashboard.noBalances')}</Text>
             <Text style={[type.body, { color: theme.accent }]}>{t('dashboard.setBalances')}</Text>
           </Touchable>
         ) : (

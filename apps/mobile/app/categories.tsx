@@ -356,9 +356,7 @@ export default function CategoriesScreen() {
           })}
         </View>
         {draft?.builtIn ? (
-          <Text style={[type.label, { color: theme.textMuted }]}>
-            {t('categories.kindLocked')}
-          </Text>
+          <Text style={[type.label, { color: theme.textMuted }]}>{t('categories.kindLocked')}</Text>
         ) : null}
 
         <SectionHeader label={t('categories.colour')} />
@@ -404,9 +402,7 @@ export default function CategoriesScreen() {
           ))}
         </View>
 
-        {formError ? (
-          <Text style={[type.label, { color: theme.expense }]}>{formError}</Text>
-        ) : null}
+        {formError ? <Text style={[type.label, { color: theme.expense }]}>{formError}</Text> : null}
 
         {draft?.id !== null && draft !== null ? (
           <View style={styles.dangerZone}>
@@ -484,9 +480,7 @@ export default function CategoriesScreen() {
           </>
         ) : null}
 
-        {formError ? (
-          <Text style={[type.label, { color: theme.expense }]}>{formError}</Text>
-        ) : null}
+        {formError ? <Text style={[type.label, { color: theme.expense }]}>{formError}</Text> : null}
 
         <View style={styles.sheetActions}>
           <Button
@@ -506,7 +500,6 @@ export default function CategoriesScreen() {
           />
         </View>
       </Sheet>
-
     </View>
   );
 }

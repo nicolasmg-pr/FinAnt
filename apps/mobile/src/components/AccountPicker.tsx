@@ -1,4 +1,4 @@
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import {
   accountsInBank,
@@ -11,7 +11,9 @@ import { newId } from '../db/transactions-repo';
 import type { AccountRow } from '../db/accounts-repo';
 import type { InstitutionRow } from '../db/institutions-repo';
 import { Chip } from './Chip';
-import { radius, spacing, useTheme } from '../theme';
+import { Field } from './ui/Field';
+import { SectionHeader } from './ui/SectionHeader';
+import { spacing } from '../design';
 
 /**
  * Bank first, then the account inside it.
@@ -40,7 +42,6 @@ export function AccountPicker({
   value: AccountChoice;
   onChange: (choice: AccountChoice) => void;
 }) {
-  const theme = useTheme();
   const { t } = useTranslation();
 
   // `institution_id` is a plain column: an account can still point at a bank
@@ -56,14 +57,10 @@ export function AccountPicker({
         : null,
   }));
   const inBank = accountsInBank(choosable, value);
-  const inputStyle = [
-    styles.input,
-    { color: theme.text, borderColor: theme.border, backgroundColor: theme.surfaceAlt },
-  ];
 
   return (
     <View style={styles.picker}>
-      <Text style={{ color: theme.textMuted, fontSize: 13 }}>{t('import.bank')}</Text>
+      <SectionHeader label={t('import.bank')} />
       <View style={styles.chips}>
         {institutions.map((institution) => (
           <Chip
@@ -99,23 +96,18 @@ export function AccountPicker({
       </View>
 
       {value.newInstitution ? (
-        <>
-          <TextInput
-            value={value.institutionName}
-            onChangeText={(name) => onChange({ ...value, institutionName: name })}
-            placeholder={t('banks.name')}
-            placeholderTextColor={theme.textMuted}
-            autoCapitalize="words"
-            autoCorrect={false}
-            style={inputStyle}
-          />
-          {value.institutionName.trim() === '' ? (
-            <Text style={{ color: theme.textMuted, fontSize: 12 }}>{t('banks.nameRequired')}</Text>
-          ) : null}
-        </>
+        <Field
+          label={t('banks.name')}
+          value={value.institutionName}
+          onChangeText={(name) => onChange({ ...value, institutionName: name })}
+          placeholder={t('banks.name')}
+          autoCapitalize="words"
+          autoCorrect={false}
+          hint={value.institutionName.trim() === '' ? t('banks.nameRequired') : undefined}
+        />
       ) : null}
 
-      <Text style={{ color: theme.textMuted, fontSize: 13 }}>{t('import.account')}</Text>
+      <SectionHeader label={t('import.account')} />
       <View style={styles.chips}>
         {inBank.map((account) => (
           <Chip
@@ -133,34 +125,21 @@ export function AccountPicker({
       </View>
 
       {value.newAccount ? (
-        <>
-          <TextInput
-            value={value.accountName}
-            onChangeText={(name) => onChange({ ...value, accountName: name })}
-            placeholder={t('import.accountName')}
-            placeholderTextColor={theme.textMuted}
-            autoCapitalize="words"
-            autoCorrect={false}
-            style={inputStyle}
-          />
-          {value.accountName.trim() === '' ? (
-            <Text style={{ color: theme.textMuted, fontSize: 12 }}>
-              {t('import.accountRequired')}
-            </Text>
-          ) : null}
-        </>
+        <Field
+          label={t('import.accountName')}
+          value={value.accountName}
+          onChangeText={(name) => onChange({ ...value, accountName: name })}
+          placeholder={t('import.accountName')}
+          autoCapitalize="words"
+          autoCorrect={false}
+          hint={value.accountName.trim() === '' ? t('import.accountRequired') : undefined}
+        />
       ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  picker: { gap: spacing.xs },
+  picker: { gap: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    fontSize: 15,
-  },
 });
