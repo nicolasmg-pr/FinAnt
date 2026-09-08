@@ -52,3 +52,53 @@ describe('mascot', () => {
     }
   });
 });
+
+describe('poses', () => {
+  const ids = (pose: Parameters<typeof mascot>[0], frame?: number) =>
+    mascot(pose, frame).parts.map((p) => p.id);
+
+  it('searching is carrying without the coin', () => {
+    const searching = ids('searching');
+    expect(searching).not.toContain('coin');
+    expect(searching).not.toContain('coin-ring');
+    expect(searching).not.toContain('coin-glint');
+    expect(searching).toContain('gaster');
+    expect(searching).toContain('eye');
+  });
+
+  it('every pose is a subset of carrying, so they stay one character', () => {
+    const carrying = new Set(ids('carrying'));
+    for (const pose of ['searching', 'face', 'walk'] as const) {
+      for (const id of ids(pose)) expect(carrying.has(id)).toBe(true);
+    }
+  });
+
+  it('face keeps the head and drops the body, on a tight viewBox', () => {
+    const drawing = mascot('face');
+    const faceIds = drawing.parts.map((p) => p.id);
+    expect(faceIds).toContain('head');
+    expect(faceIds).toContain('eye');
+    expect(faceIds).not.toContain('gaster');
+    expect(faceIds).not.toContain('leg-mid-1');
+    expect(drawing.viewBox).not.toBe('0 0 1024 1024');
+  });
+
+  it('walk frames differ only in leg geometry', () => {
+    const a = mascot('walk', 0).parts;
+    const b = mascot('walk', 1).parts;
+    expect(a.length).toBe(b.length);
+    for (let i = 0; i < a.length; i++) {
+      const left = a[i]!;
+      const right = b[i]!;
+      expect(left.id).toBe(right.id);
+      if (!left.id.startsWith('leg-')) expect(right).toEqual(left);
+    }
+    const legsA = a.filter((p) => p.id.startsWith('leg-'));
+    const legsB = b.filter((p) => p.id.startsWith('leg-'));
+    expect(legsA).not.toEqual(legsB);
+  });
+
+  it('walk wraps around its frame count', () => {
+    expect(mascot('walk', 0)).toEqual(mascot('walk', 4));
+  });
+});

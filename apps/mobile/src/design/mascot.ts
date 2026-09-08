@@ -277,8 +277,22 @@ const legsOnTop: readonly Part[] = [
  * face missing an eye.
  */
 const face: readonly Part[] = [
-  { id: 'eye', kind: 'path', d: 'M760 594 Q786 556 812 594', stroke: 'ink', width: FACE_STROKE },
-  { id: 'smile', kind: 'path', d: 'M742 674 Q808 740 868 670', stroke: 'ink', width: FACE_STROKE },
+  {
+    id: 'eye',
+    kind: 'path',
+    d: 'M760 594 Q786 556 812 594',
+    stroke: 'ink',
+    width: FACE_STROKE,
+    monoSolid: false,
+  },
+  {
+    id: 'smile',
+    kind: 'path',
+    d: 'M742 674 Q808 740 868 670',
+    stroke: 'ink',
+    width: FACE_STROKE,
+    monoSolid: false,
+  },
 ];
 
 /**
@@ -306,12 +320,70 @@ export const MONO_CUTS = {
   legGroove: 38,
 } as const;
 
+/**
+ * The head's bounding box plus room for the antennae, so the face pose crops to
+ * the character rather than to a canvas mostly full of body. Computed from the
+ * head ellipse, both antennae and the face parts, not eyeballed: a hand-picked
+ * box here clipped the bottom of the head instead of centring it.
+ */
+const FACE_VIEWBOX = '501 295 542 542';
+
+/** Four frames is enough to read as walking and few enough to hand-tune. */
+const WALK_FRAMES = 4;
+
+/**
+ * A leg's lower two points swing along x; the attachment point never moves,
+ * because a leg that slides out of its socket reads as a broken drawing rather
+ * than as a step.
+ */
+const WALK_SWING: readonly number[] = [0, 18, 0, -18];
+
+function swing(part: Part, dx: number): Part {
+  if (part.kind !== 'path' || dx === 0) return part;
+  const points = part.d.split(/(?<=\d)\s+(?=[A-Z])/);
+  const shifted = points.map((segment, index) => {
+    if (index === 0) return segment;
+    return segment.replace(
+      /(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/,
+      (_all, x: string, y: string) => `${Number(x) + dx} ${y}`,
+    );
+  });
+  return { ...part, d: shifted.join(' ') };
+}
+
 export function mascot(pose: Pose, frame = 0): Drawing {
-  void frame;
-  if (pose !== 'carrying') throw new Error(`pose not implemented: ${pose}`);
-  return {
-    parts: [...behind, ...coin, ...bodyParts, ...legsOnTop, ...face],
-    viewBox: '0 0 1024 1024',
-    transform: OFFSET,
-  };
+  switch (pose) {
+    case 'carrying':
+      return {
+        parts: [...behind, ...coin, ...bodyParts, ...legsOnTop, ...face],
+        viewBox: '0 0 1024 1024',
+        transform: OFFSET,
+      };
+    case 'searching':
+      return {
+        parts: [...behind, ...bodyParts, ...legsOnTop, ...face],
+        viewBox: '0 0 1024 1024',
+        transform: OFFSET,
+      };
+    case 'face':
+      return {
+        parts: [
+          ...behind.filter((part) => part.id.startsWith('antenna-')),
+          ...bodyParts.filter((part) => part.id === 'head'),
+          ...face,
+        ],
+        viewBox: FACE_VIEWBOX,
+        transform: OFFSET,
+      };
+    case 'walk': {
+      const dx = WALK_SWING[((frame % WALK_FRAMES) + WALK_FRAMES) % WALK_FRAMES] ?? 0;
+      const step = (parts: readonly Part[]): Part[] =>
+        parts.map((part) => (part.id.startsWith('leg-') ? swing(part, dx) : part));
+      return {
+        parts: [...step(behind), ...coin, ...bodyParts, ...step(legsOnTop), ...face],
+        viewBox: '0 0 1024 1024',
+        transform: OFFSET,
+      };
+    }
+  }
 }

@@ -24,8 +24,6 @@
         <path d="M352 772 L332 892 L262 892" fill="none" stroke-width="38"/>
         <path d="M452 668 L446 884 L376 884" fill="none" stroke-width="38"/>
         <path d="M570 640 L584 872 L514 872" fill="none" stroke-width="38"/>
-        <path d="M760 594 Q786 556 812 594" fill="none"/>
-        <path d="M742 674 Q808 740 868 670" fill="none"/>
       </g>
       <g fill="none" stroke="#000000" stroke-linecap="round" stroke-linejoin="round">
         <g transform="translate(14 34) translate(470 430) scale(0.84) translate(-470 -430)">
