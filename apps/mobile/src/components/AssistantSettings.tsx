@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
 import type { DownloadTask } from 'expo-file-system';
@@ -12,7 +12,7 @@ import {
   verify,
   type ModelSpec,
 } from '../assistant/model-file';
-import { SETTING_ASSISTANT_ENABLED, readSetting, writeSetting } from '../db/settings-repo';
+import { setAssistantEnabled, useAssistantEnabled } from '../assistant/enabled-store';
 import { Card } from './Card';
 import { Button } from './ui/Button';
 
@@ -56,18 +56,10 @@ export function AssistantSettings({ locale }: { locale: string }) {
   const [phase, setPhase] = useState<Phase>(() =>
     isDownloaded(spec) ? { kind: 'installed' } : { kind: 'absent' },
   );
-  const [enabled, setEnabled] = useState(false);
+  // The same store the bubble reads, so the switch and the bubble cannot
+  // disagree about whether the assistant is on.
+  const enabled = useAssistantEnabled();
   const task = useRef<DownloadTask | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    void readSetting(SETTING_ASSISTANT_ENABLED).then((value) => {
-      if (alive) setEnabled(value === 'true');
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const runVerify = useCallback(async () => {
     setPhase({ kind: 'verifying', fraction: 0 });
@@ -76,8 +68,7 @@ export function AssistantSettings({ locale }: { locale: string }) {
     if (result === 'ok') {
       setPhase({ kind: 'installed' });
       // Installing it is consent to use it; the switch is there to turn it off.
-      await writeSetting(SETTING_ASSISTANT_ENABLED, 'true');
-      setEnabled(true);
+      await setAssistantEnabled(true);
       return;
     }
 
@@ -158,8 +149,7 @@ export function AssistantSettings({ locale }: { locale: string }) {
         style: 'destructive',
         onPress: () => {
           removeModel(spec);
-          void writeSetting(SETTING_ASSISTANT_ENABLED, 'false');
-          setEnabled(false);
+          void setAssistantEnabled(false);
           setPhase({ kind: 'absent' });
         },
       },
@@ -167,8 +157,7 @@ export function AssistantSettings({ locale }: { locale: string }) {
   }, [spec, t]);
 
   const toggle = useCallback((next: boolean) => {
-    setEnabled(next);
-    void writeSetting(SETTING_ASSISTANT_ENABLED, next ? 'true' : 'false');
+    void setAssistantEnabled(next);
   }, []);
 
   return (

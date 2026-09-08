@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { INTL_LOCALE, isLocale } from '@finant/i18n';
-import { QWEN3_1_7B, isDownloaded } from '../assistant/model-file';
+import { useAssistantEnabled } from '../assistant/enabled-store';
 import { useAsk } from '../assistant/use-ask';
 import { useAppData } from '../hooks/use-app-data';
 import { useCategories } from '../hooks/use-categories';
 import { useCategoryLabel } from '../hooks/use-category-label';
-import { SETTING_ASSISTANT_ENABLED, SETTING_CURRENCY, readSetting } from '../db/settings-repo';
+import { SETTING_CURRENCY, readSetting } from '../db/settings-repo';
 import { AskBubble } from './AskBubble';
 import { AskSheet } from './AskSheet';
 
@@ -24,19 +24,17 @@ export function AskOverlay() {
   const { list: categories } = useCategories();
   const labelFor = useCategoryLabel();
 
-  const [enabled, setEnabled] = useState(false);
+  // Subscribed, not read once: this component mounts with the tab navigator at
+  // launch, and the switch that turns it on is flipped long afterwards.
+  const enabled = useAssistantEnabled();
   const [currency, setCurrency] = useState('EUR');
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    void Promise.all([readSetting(SETTING_ASSISTANT_ENABLED), readSetting(SETTING_CURRENCY)]).then(
-      ([on, stored]) => {
-        if (!alive) return;
-        setEnabled(on === 'true' && isDownloaded(QWEN3_1_7B));
-        if (stored) setCurrency(stored);
-      },
-    );
+    void readSetting(SETTING_CURRENCY).then((stored) => {
+      if (alive && stored) setCurrency(stored);
+    });
     return () => {
       alive = false;
     };
