@@ -101,7 +101,7 @@ describe('mascot', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run apps/mobile/src/design/tests/mascot.test.ts`
-Expected: FAIL — `Failed to resolve import "../mascot"`.
+Expected: FAIL — vitest cannot resolve `../mascot`. The exact wording varies by version; any resolution failure is the expected result.
 
 - [ ] **Step 3: Write the module**
 
@@ -430,7 +430,7 @@ export function mascot(pose: Pose, frame = 0): Drawing {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run apps/mobile/src/design/tests/mascot.test.ts`
-Expected: PASS, 4 tests.
+Expected: PASS, 6 tests.
 
 - [ ] **Step 5: Export from the design barrel**
 
