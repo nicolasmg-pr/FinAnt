@@ -5,7 +5,8 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { exclusionKeyOf, recategorise, type ExclusionRule } from '@finant/core';
-import { SUPPORTED_LOCALES, type Locale } from '@finant/i18n';
+import { INTL_LOCALE, SUPPORTED_LOCALES, type Locale } from '@finant/i18n';
+import { AssistantSettings } from '../../src/components/AssistantSettings';
 import { Card } from '../../src/components/Card';
 import { Button } from '../../src/components/ui/Button';
 import { ListRow } from '../../src/components/ui/ListRow';
@@ -134,6 +135,8 @@ export default function SettingsScreen() {
           onPress={() => router.push('/import')}
         />
       </Card>
+
+      <AssistantSettings locale={INTL_LOCALE[locale]} />
 
       <Card title={t('categories.title')}>
         <Text style={[type.body, { color: theme.textMuted }]}>{t('categories.body')}</Text>

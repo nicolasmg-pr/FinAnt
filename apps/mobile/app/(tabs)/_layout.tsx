@@ -2,6 +2,7 @@ import Feather from '@expo/vector-icons/Feather';
 import { Tabs } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View, type ColorValue } from 'react-native';
+import { AskOverlay } from '../../src/components/AskOverlay';
 import { radius, spacing, type, useElevation, useTheme } from '../../src/design';
 
 /** The active tab's icon sits in a filled pill, so the current tab reads from
@@ -37,58 +38,64 @@ export default function TabsLayout() {
   const elevation = useElevation(2);
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        sceneStyle: { backgroundColor: theme.background },
-        tabBarActiveTintColor: theme.accent,
-        tabBarInactiveTintColor: theme.textMuted,
-        // The caption role's tracking is too wide for a fifth of the bar:
-        // it truncated "Movimientos" and "Presupuestos".
-        tabBarLabelStyle: { ...type.caption, fontSize: 10, letterSpacing: 0 },
-        tabBarStyle: [styles.bar, { backgroundColor: theme.surface }, elevation],
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: t('nav.dashboard'),
-          tabBarIcon: (props) => <TabIcon name="pie-chart" {...props} />,
+    <View style={styles.root}>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          sceneStyle: { backgroundColor: theme.background },
+          tabBarActiveTintColor: theme.accent,
+          tabBarInactiveTintColor: theme.textMuted,
+          // The caption role's tracking is too wide for a fifth of the bar:
+          // it truncated "Movimientos" and "Presupuestos".
+          tabBarLabelStyle: { ...type.caption, fontSize: 10, letterSpacing: 0 },
+          tabBarStyle: [styles.bar, { backgroundColor: theme.surface }, elevation],
         }}
-      />
-      <Tabs.Screen
-        name="transactions"
-        options={{
-          title: t('nav.transactions'),
-          tabBarIcon: (props) => <TabIcon name="list" {...props} />,
-        }}
-      />
-      <Tabs.Screen
-        name="banks"
-        options={{
-          title: t('nav.banks'),
-          tabBarIcon: (props) => <TabIcon name="home" {...props} />,
-        }}
-      />
-      <Tabs.Screen
-        name="budgets"
-        options={{
-          title: t('nav.budgets'),
-          tabBarIcon: (props) => <TabIcon name="target" {...props} />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: t('nav.settings'),
-          tabBarIcon: (props) => <TabIcon name="settings" {...props} />,
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: t('nav.dashboard'),
+            tabBarIcon: (props) => <TabIcon name="pie-chart" {...props} />,
+          }}
+        />
+        <Tabs.Screen
+          name="transactions"
+          options={{
+            title: t('nav.transactions'),
+            tabBarIcon: (props) => <TabIcon name="list" {...props} />,
+          }}
+        />
+        <Tabs.Screen
+          name="banks"
+          options={{
+            title: t('nav.banks'),
+            tabBarIcon: (props) => <TabIcon name="home" {...props} />,
+          }}
+        />
+        <Tabs.Screen
+          name="budgets"
+          options={{
+            title: t('nav.budgets'),
+            tabBarIcon: (props) => <TabIcon name="target" {...props} />,
+          }}
+        />
+        <Tabs.Screen
+          name="settings"
+          options={{
+            title: t('nav.settings'),
+            tabBarIcon: (props) => <TabIcon name="settings" {...props} />,
+          }}
+        />
+      </Tabs>
+      {/* Above the navigator, so the bubble survives a tab change rather than
+          remounting halfway through a drag. */}
+      <AskOverlay />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   bar: { borderTopWidth: 0 },
   icon: {
     minWidth: 40,
