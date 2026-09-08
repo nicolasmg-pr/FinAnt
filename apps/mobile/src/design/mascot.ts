@@ -322,11 +322,17 @@ export const MONO_CUTS = {
 
 /**
  * The head's bounding box plus room for the antennae, so the face pose crops to
- * the character rather than to a canvas mostly full of body. Computed from the
- * head ellipse, both antennae and the face parts, not eyeballed: a hand-picked
- * box here clipped the bottom of the head instead of centring it.
+ * the character rather than to a canvas mostly full of body. Two prior values
+ * here each clipped something (the head's bottom, then the upper antenna's
+ * round cap): hand arithmetic on the part coordinates keeps missing stroke
+ * caps and the pose's own `OFFSET` transform. This value was instead measured
+ * by rasterising `mascot('face')` and scanning the rendered alpha channel for
+ * its bounding box in offset-canvas coordinates (content x 571..941, y
+ * 280..744), then centring a square box around that with even margins.
+ * Re-derive it the same way — by rendering and measuring, not by reading
+ * coordinates off the part data — if the face pose's geometry ever changes.
  */
-const FACE_VIEWBOX = '501 295 542 542';
+const FACE_VIEWBOX = '500 257 510 510';
 
 /** Four frames is enough to read as walking and few enough to hand-tune. */
 const WALK_FRAMES = 4;
@@ -338,6 +344,16 @@ const WALK_FRAMES = 4;
  */
 const WALK_SWING: readonly number[] = [0, 18, 0, -18];
 
+/**
+ * Assumes every leg's `d` is `M x y L x y L x y ...`: absolute, upper-case
+ * commands, one plain integer coordinate pair per segment, single spaces. On
+ * that shape, shifting the first coordinate pair matched in each non-`M`
+ * segment shifts the whole segment, because there is only one pair to match.
+ * A curved leg (`C`/`Q`, which carry two or three coordinate pairs per
+ * segment) or a lowercase relative command would only get its first pair
+ * shifted, silently corrupting the rest of the segment's geometry — so a leg
+ * added in either form needs its own swing logic, not this one.
+ */
 function swing(part: Part, dx: number): Part {
   if (part.kind !== 'path' || dx === 0) return part;
   const points = part.d.split(/(?<=\d)\s+(?=[A-Z])/);
