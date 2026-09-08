@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crc32, deflateSync } from 'node:zlib';
 import { Resvg } from '@resvg/resvg-js';
-import { markSvg } from './mascot-svg';
+import { markSvg, monoSvg } from './mascot-svg';
 
 /**
  * `icon-mark.svg` is the only place the full ant-and-grain mark is drawn, and
@@ -110,6 +110,7 @@ function withBackground(svg: string, colour: string): string {
 }
 
 writeFileSync(join(brand, 'icon-mark.svg'), markSvg());
+writeFileSync(join(brand, 'icon-mono.svg'), monoSvg());
 
 const mark = read('icon-mark.svg');
 const mono = read('icon-mono.svg');
