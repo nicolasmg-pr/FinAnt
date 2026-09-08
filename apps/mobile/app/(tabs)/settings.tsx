@@ -1,22 +1,30 @@
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Link, useFocusEffect } from 'expo-router';
+import Feather from '@expo/vector-icons/Feather';
+import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { exclusionKeyOf, recategorise, type ExclusionRule } from '@finant/core';
 import { SUPPORTED_LOCALES, type Locale } from '@finant/i18n';
 import { Card } from '../../src/components/Card';
+import { Button } from '../../src/components/ui/Button';
+import { ListRow } from '../../src/components/ui/ListRow';
+import { SegmentedControl } from '../../src/components/ui/SegmentedControl';
+import { Touchable } from '../../src/components/ui/Touchable';
 import { eraseEverything } from '../../src/db/database';
 import { deleteExclusionRule, listExclusionRules } from '../../src/db/exclusion-rules-repo';
 import { listRules } from '../../src/db/rules-repo';
 import { applyRecategorisations, listAllTransactions } from '../../src/db/transactions-repo';
 import { currentLocale, setLocale } from '../../src/i18n';
-import { radius, spacing, useTheme } from '../../src/theme';
+import { spacing, type, useTheme } from '../../src/design';
 
 const LOCALE_NAMES: Record<Locale, string> = { en: 'English', es: 'Español', de: 'Deutsch' };
 
 export default function SettingsScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [locale, setActiveLocale] = useState<Locale>(currentLocale());
   const [exclusions, setExclusions] = useState<readonly ExclusionRule[]>([]);
   const [reapplying, setReapplying] = useState(false);
@@ -102,102 +110,92 @@ export default function SettingsScreen() {
   return (
     <ScrollView
       style={{ backgroundColor: theme.background }}
-      contentContainerStyle={{ padding: spacing.lg }}
+      contentContainerStyle={{ padding: spacing.lg, paddingTop: insets.top + spacing.lg }}
     >
+      <Text style={[type.title, styles.screenTitle, { color: theme.text }]}>
+        {t('nav.settings')}
+      </Text>
+
       <Card title={t('settings.language')}>
-        <View style={styles.chips}>
-          {SUPPORTED_LOCALES.map((code) => (
-            <Pressable
-              key={code}
-              onPress={() => void chooseLocale(code)}
-              style={[
-                styles.chip,
-                {
-                  borderColor: locale === code ? theme.accent : theme.border,
-                  backgroundColor: locale === code ? theme.surfaceAlt : 'transparent',
-                },
-              ]}
-            >
-              <Text style={{ color: locale === code ? theme.accent : theme.text }}>
-                {LOCALE_NAMES[code]}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <SegmentedControl
+          options={SUPPORTED_LOCALES.map((code) => ({ value: code, label: LOCALE_NAMES[code] }))}
+          value={locale}
+          onChange={(code) => void chooseLocale(code)}
+        />
       </Card>
 
       <Card title={t('settings.dataLocationTitle')}>
-        <Text style={{ color: theme.textMuted }}>{t('settings.dataLocationBody')}</Text>
-        <Link href="/import" style={[styles.link, { color: theme.accent }]}>
-          {t('import.title')}
-        </Link>
+        <Text style={[type.body, { color: theme.textMuted }]}>
+          {t('settings.dataLocationBody')}
+        </Text>
+        <ListRow
+          title={t('import.title')}
+          trailing={<Feather name="chevron-right" size={18} color={theme.textMuted} />}
+          onPress={() => router.push('/import')}
+        />
       </Card>
 
       <Card title={t('categories.title')}>
-        <Text style={{ color: theme.textMuted }}>{t('categories.body')}</Text>
-        <Link href="/categories" style={[styles.link, { color: theme.accent }]}>
-          {t('categories.manage')}
-        </Link>
+        <Text style={[type.body, { color: theme.textMuted }]}>{t('categories.body')}</Text>
+        <ListRow
+          title={t('categories.manage')}
+          trailing={<Feather name="chevron-right" size={18} color={theme.textMuted} />}
+          onPress={() => router.push('/categories')}
+        />
       </Card>
 
       <Card title={t('settings.autoExclusions')}>
-        <Text style={{ color: theme.textMuted }}>{t('settings.autoExclusionsBody')}</Text>
+        <Text style={[type.body, { color: theme.textMuted }]}>
+          {t('settings.autoExclusionsBody')}
+        </Text>
         {exclusions.length === 0 ? (
-          <Text style={{ color: theme.textMuted }}>{t('settings.autoExclusionsEmpty')}</Text>
+          <Text style={[type.label, { color: theme.textMuted }]}>
+            {t('settings.autoExclusionsEmpty')}
+          </Text>
         ) : (
-          exclusions.map((rule) => (
-            <View key={rule.id} style={[styles.ruleRow, { borderBottomColor: theme.border }]}>
-              <Text style={{ color: theme.text, flexShrink: 1 }} numberOfLines={2}>
-                {t('settings.autoExclusionsMatch', { key: exclusionKeyOf(rule) ?? rule.id })}
-              </Text>
-              <Pressable onPress={() => confirmDeleteExclusion(rule)} accessibilityRole="button">
-                <Text style={{ color: theme.expense, fontWeight: '600' }}>
-                  {t('common.delete')}
-                </Text>
-              </Pressable>
-            </View>
+          exclusions.map((rule, index) => (
+            <ListRow
+              key={rule.id}
+              title={t('settings.autoExclusionsMatch', { key: exclusionKeyOf(rule) ?? rule.id })}
+              divider={index < exclusions.length - 1}
+              trailing={
+                <Touchable
+                  onPress={() => confirmDeleteExclusion(rule)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.delete')}
+                >
+                  <Feather name="trash-2" size={18} color={theme.expense} />
+                </Touchable>
+              }
+            />
           ))
         )}
       </Card>
 
       <Card title={t('settings.rulesTitle')}>
-        <Text style={{ color: theme.textMuted }}>{t('settings.rulesBody')}</Text>
-        <Pressable onPress={() => void reapplyRules()} disabled={reapplying}>
-          <Text style={{ color: theme.accent, fontWeight: '600' }}>
-            {reapplying ? t('common.loading') : t('settings.reapplyRules')}
-          </Text>
-        </Pressable>
+        <Text style={[type.body, { color: theme.textMuted }]}>{t('settings.rulesBody')}</Text>
+        <Button
+          label={reapplying ? t('common.loading') : t('settings.reapplyRules')}
+          variant="secondary"
+          loading={reapplying}
+          onPress={() => void reapplyRules()}
+        />
         {reapplied !== null ? (
-          <Text style={{ color: theme.textMuted, fontSize: 13 }}>
+          <Text style={[type.label, { color: theme.textMuted }]}>
             {t('settings.reapplyRulesDone', { count: reapplied })}
           </Text>
         ) : null}
       </Card>
 
       <Card title={t('settings.data')}>
-        <Pressable onPress={confirmErase}>
-          <Text style={{ color: theme.expense }}>{t('settings.eraseAll')}</Text>
-        </Pressable>
+        {/* The one destructive action in the app. Its confirmation is
+            unchanged; only the control around it is. */}
+        <Button label={t('settings.eraseAll')} variant="danger" onPress={confirmErase} />
       </Card>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  chips: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  chip: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-  },
-  link: { marginTop: spacing.sm, fontWeight: '600' },
-  ruleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
+  screenTitle: { marginBottom: spacing.lg },
 });
