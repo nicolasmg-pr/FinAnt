@@ -112,7 +112,8 @@ export function grainStack(
   size = 4,
 ): readonly Grain[] {
   const height = Number.isFinite(full) ? Math.max(0, full) : 0;
-  const step = size + Math.max(0, spacing);
+  // A size of 0 with no spacing would make the loop step 0 and never terminate.
+  const step = Math.max(1, size + Math.max(0, spacing));
   const grains: Grain[] = [];
   for (let offset = 0; offset + size <= height; offset += step) {
     grains.push({ y: baseline - offset - size, height: size });

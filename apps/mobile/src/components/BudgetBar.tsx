@@ -19,13 +19,18 @@ export function BudgetBar({
   state: BudgetState;
   color?: string;
 }) {
+  // An infinite ratio is what core reports for a zero limit, and it means the
+  // limit is entirely spent. segmentsFor treats broken input as nothing carried,
+  // which is right in general and exactly wrong here.
+  const safe = Number.isFinite(ratio) ? ratio : 1;
+
   const part: TrailPart =
     state === 'over'
-      ? { ratio, tone: 'expense' }
+      ? { ratio: safe, tone: 'expense' }
       : state === 'near'
-        ? { ratio, tone: 'warning' }
+        ? { ratio: safe, tone: 'warning' }
         : // The owner's own category colour when they have chosen one.
-          { ratio, tone: 'accent', color };
+          { ratio: safe, tone: 'accent', color };
 
   return <Trail parts={[part]} state={state} />;
 }

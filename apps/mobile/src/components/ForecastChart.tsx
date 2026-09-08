@@ -23,10 +23,10 @@ const AXIS = 16;
 
 /**
  * Twelve months of income and expense as paired bars, with the cumulative net
- * drawn over them. Projected months are drawn as grains rather than as solid bars, spaced by
- * the confidence of the month they describe — a forecast that looks identical
- * to recorded fact invites the wrong decision, and one that looks identical
- * whatever its history behind it invites it twice.
+ * drawn over them. Projected months are drawn as grains rather than as solid
+ * bars, spaced by the confidence of the month they describe — a forecast that
+ * looks identical to recorded fact invites the wrong decision, and one that
+ * looks identical whatever its history behind it invites it twice.
  *
  * Bars and the net line share one vertical scale. They used to have two, which
  * fit each of them to its own extreme and made the chart denser; the moment the
@@ -124,7 +124,6 @@ export function ForecastChart({
               baseline={baseline}
               full={baseline - y(month.income.minor)}
               fill={theme.income}
-              opacity={1}
               grow={grow}
             />
           ),
@@ -148,7 +147,6 @@ export function ForecastChart({
               baseline={baseline}
               full={baseline - y(month.expenses.minor)}
               fill={theme.expense}
-              opacity={1}
               grow={grow}
             />
           ),
@@ -195,7 +193,6 @@ function Bar({
   baseline,
   full,
   fill,
-  opacity,
   grow,
 }: {
   x: number;
@@ -203,7 +200,6 @@ function Bar({
   baseline: number;
   full: number;
   fill: string;
-  opacity: number;
   grow: SharedValue<number>;
 }) {
   const animated = useAnimatedProps(() => ({
@@ -211,16 +207,7 @@ function Bar({
     y: baseline - Math.max(0, full * grow.value),
   }));
 
-  return (
-    <AnimatedRect
-      x={x}
-      width={width}
-      fill={fill}
-      opacity={opacity}
-      rx={4}
-      animatedProps={animated}
-    />
-  );
+  return <AnimatedRect x={x} width={width} fill={fill} rx={4} animatedProps={animated} />;
 }
 
 /**

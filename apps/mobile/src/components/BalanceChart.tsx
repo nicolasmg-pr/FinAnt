@@ -29,6 +29,9 @@ const AXIS = 18;
 const MIN_SLOT = 26;
 /** Long enough to cover any path this chart can draw at phone width. */
 const DASH_SPAN = 4000;
+/** Radius of a projected-tail grain, in SVG px. Drives both its own draw and
+ * the spacing between grains, so the two never drift apart. */
+const GRAIN_RADIUS = 2.5;
 
 /**
  * The money held at the end of every period, as one line.
@@ -38,9 +41,11 @@ const DASH_SPAN = 4000;
  * would draw that as a cliff.
  *
  * The projected tail is a run of grains rather than a line, carries no gradient
- * underneath it, and is spaced by the confidence the forecast reported. A
- * projection drawn in the same ink as recorded fact is a lie by styling; a
- * filled area reads as more solid still, so the fill stops where fact stops.
+ * underneath it, and is spaced by the confidence the forecast reported. It
+ * keeps the same accent as the booked line — projected and booked are one
+ * series, not two — and marks the difference by shape alone: discrete grains
+ * instead of a continuous stroke, and no fill underneath, since a filled area
+ * reads as more solid still and the fill stops where fact stops.
  *
  * `labels` is index-aligned with `points`; an empty string leaves a point
  * unlabelled, which is how the caller thins a long axis.
@@ -105,7 +110,7 @@ export function BalanceChart({
           x: x(Math.max(0, lastActual) + i),
           y: y(point.total.minor),
         }));
-  const grains = grainsAlong(projectedPoints, grainSpacing(confidence) + 5);
+  const grains = grainsAlong(projectedPoints, grainSpacing(confidence) + GRAIN_RADIUS * 2);
 
   // The booked line closed down to the zero baseline, so the gradient has an
   // area to fill.
@@ -177,8 +182,8 @@ export function BalanceChart({
           key={`grain-${grain.x.toFixed(1)}-${grain.y.toFixed(1)}`}
           cx={grain.x}
           cy={grain.y}
-          r={2.5}
-          fill={theme.grain}
+          r={GRAIN_RADIUS}
+          fill={theme.accent}
         />
       ))}
       {lastActual >= 0 ? (

@@ -274,7 +274,12 @@ export default function DashboardScreen() {
                 <Amount value={summary.net} size="heading" fit />
               </StatTile>
             </View>
-            {spendRatio !== null ? <Trail parts={[{ ratio: spendRatio, tone: 'accent' }]} /> : null}
+            {spendRatio !== null ? (
+              <Trail
+                parts={[{ ratio: spendRatio, tone: 'accent' }]}
+                state={spendRatio > 1 ? 'over' : 'under'}
+              />
+            ) : null}
             {savingsRate !== null ? (
               <Text style={[type.label, { color: theme.textMuted }]}>
                 {t('dashboard.savingsRate')}: {savingsRate}%
