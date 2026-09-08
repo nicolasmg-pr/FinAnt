@@ -1533,6 +1533,7 @@ Open `apps/mobile/assets/icon.png` and check, in this order:
 2. The mark is centred — the `translate(-39 25)` in the SVG is a calculated guess at the bounding box, not a measurement. If the mark sits high, low, or off to one side, adjust that translate in **both** `icon.svg` and `icon-mark.svg` and re-run.
 3. At 48px (`favicon.png`) the silhouette still reads. Legs will be nearly gone; the body and grain must not be.
 4. `android-icon-monochrome.png` reads as a single shape with the grain separate from the head, with nothing touching the edges of the central circle.
+5. Decode `android-icon-foreground.png` and composite it over `android-icon-background.png` — the actual launcher composite, not either PNG alone. Write the result out and look at it: an adaptive icon is the two layers stacked, and a foreground that reads fine against a checkerboard can still disappear against the wrong background colour.
 
 - [ ] **Step 8: Point `app.json` at the right background**
 

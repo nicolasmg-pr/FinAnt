@@ -13,8 +13,10 @@ own beyond "a tidy finance app".
 
 This adds the metaphor in the two places it can carry weight without turning a
 statement viewer into a toy: the icon, which becomes an ant, and the interface,
-which learns one new visual idea — accumulation drawn as a trail of grains
-rather than as a smooth bar.
+which learns one new visual idea — a fill made of discrete, countable units
+rather than a smooth bar. That single visual form carries two distinct
+meanings depending on what it draws, and the two are not interchangeable (see
+"What the forms mean" below).
 
 ## Decisions taken
 
@@ -23,8 +25,9 @@ are not revisited during implementation.
 
 1. **The ant is structural in the interface, never illustrated.** No ant is
    drawn anywhere inside the app. The metaphor lives in the mechanics: a trail
-   that fills, grains that accumulate, a projection that thins out. An
-   illustrated ant next to a real bank balance reads as a toy.
+   that fills segment by segment, a chart that thins its projection into
+   grains, a row that counts months one dot at a time. An illustrated ant next
+   to a real bank balance reads as a toy.
 2. **The icon is literal: an ant carrying a grain.** The icon is the one place
    the ant is drawn, so it is drawn plainly rather than abstracted into a
    monogram.
@@ -66,6 +69,26 @@ Every pair clears 4.5:1 or the values change until it does. The rule from the
 palette's own header comment holds: do not lighten one without re-running the
 test.
 
+## What the forms mean
+
+The branch draws three distinct things with the grain vocabulary, and they are
+not synonyms:
+
+- **The segmented trail form** (`Trail`, and `BudgetBar` on top of it) means *a
+  share of a bounded quantity* — a budget against its limit, a period's spend
+  against its income, a category against the period's expenses, an import's
+  rows against the file's rows. None of these are accumulation; they are all
+  proportions of something with a fixed size.
+- **The `grain` colour** means *value accumulated over time*, and nothing
+  else. Its only user is the dashboard's `GrainRow` of months — a count that
+  only grows, one booked month at a time, and never resets or gets spent
+  against a limit.
+- **Grains inside a chart** (`ForecastChart`, `BalanceChart`) mean *projected,
+  not booked*. This is carried by shape alone — discrete marks instead of a
+  continuous fill or line — and each chart keeps its own colours (`income`,
+  `expense`, `accent`) so a projection and a booked figure differ in exactly
+  one way, not two.
+
 ## Primitives
 
 The pure geometry lives in `apps/mobile/src/design/trail.ts`, a plain data
@@ -75,23 +98,26 @@ is already inside the vitest include globs, so the maths is testable under
 plain node.
 
 ```
-src/design/trail.ts                  segmentsFor(), grainSpacing()
+src/design/trail.ts                  segmentsFor(), grainSpacing(), grainStack(), grainsAlong()
 src/design/tests/trail.test.ts
 src/components/trail/Trail.tsx       segmented fill bar
 src/components/trail/GrainRow.tsx    discrete dot counter
-src/components/trail/grain-bars.ts   rect geometry for the SVG charts
 ```
 
-### `segmentsFor(width, ratio)`
+### `segmentsFor(width: number, ratios: readonly number[]): TrailGeometry`
 
-Returns `{ total, filled, size, gap }` for a track of the given pixel width.
+Returns a discriminated union: `{ mode: 'continuous', widths }` or
+`{ mode: 'segmented', size, gap, total, filled }`, for a track of the given
+pixel width carrying one or more ratios in order.
 
 - Gaps are 2px. Segments are sized so no segment falls below 4px.
-- Below six segments the function returns `total: 1` — a continuous fill. Three
-  fat blocks read as a broken bar, not as a trail.
+- Below six segments the track is too narrow for a trail to read as one:
+  three fat blocks look like a broken bar, so the function returns
+  `mode: 'continuous'` instead of a segment count.
 - `filled` rounds **down**. A trail shows what has been carried, never what has
-  nearly been carried.
-- A non-finite or out-of-range `ratio` clamps to `[0, 1]`, matching the
+  nearly been carried. A part that carried anything at all still gets at least
+  one grain.
+- A non-finite or out-of-range ratio clamps to `[0, 1]`, matching the
   defensive clamp `BudgetBar` already performs.
 
 ### `grainSpacing(confidence)`
@@ -156,10 +182,11 @@ Two additions, both to existing cards. The hero is untouched.
 - A `Trail` inside the period card, below the three `StatTile`s: the period's
   expenses as a share of its income, in `accent`. The savings-rate caption
   already present states the figure.
-- A `GrainRow` of twelve inside the year card: one grain per month of the
-  current year, filled where that month's net is at or above zero. Data comes
-  from `booked.months`, which the screen already computes — no new query, and
-  no projected month is ever counted as a filled grain.
+- A `GrainRow` inside the year card, under the booked view only: one grain per
+  month already booked this year (`booked.months`, which the screen already
+  computes — no new query), filled where that month's net is at or above zero.
+  Never twelve until December: a month that has not happened yet is not a
+  month that failed, so it is not counted at all, filled or hollow.
 
 ### Budgets — `src/components/BudgetBar.tsx`
 
@@ -174,17 +201,29 @@ otherwise.
 
 ### Charts — `src/components/ForecastChart.tsx`, `src/components/BalanceChart.tsx`
 
-Projected regions are drawn as grains rather than as faded solids.
+Projected regions are drawn as grains rather than as faded solids. In both
+charts the projected mark keeps the same colour as the booked one next to it —
+`income`/`expense` in `ForecastChart`, `accent` in `BalanceChart` — and the
+grains change only the shape. `grain` itself does not appear in either chart:
+it names a colour, not a shape, and both charts already have colours that mean
+something (see "What the forms mean").
 
-- `ForecastChart`: a projected month's bars become a vertical stack of grain
-  segments in `grain`, spaced by `grainSpacing(forecast.confidence)`. Booked
-  months keep their solid bars and their existing colours.
+- `ForecastChart`: a projected month's income and expense bars become a
+  vertical stack of grain segments, in `theme.income` and `theme.expense`
+  respectively, spaced by `grainSpacing(month.confidence)`. Deliberately not
+  `grain`: two grain-coloured bars side by side, one for income and one for
+  expense, would be indistinguishable. Booked months keep their solid bars and
+  the same colours.
 - `BalanceChart`: the projected tail of the net-worth line becomes a run of
-  grains rather than a dashed, faded line.
+  grains in `theme.accent` — the same colour as the booked line — rather than
+  a dashed, faded line.
 
-The geometry is generated by `grain-bars.ts` as plain rect arrays. It does not
-use `react-native-svg`'s `Pattern` element: an array of rects behaves
-identically on both platforms and needs no feature check.
+The geometry lives in `src/design/trail.ts`, alongside `segmentsFor`:
+`grainStack()` returns the rects for `ForecastChart`'s vertical bars, and
+`grainsAlong()` returns the points `BalanceChart` draws as circles along its
+polyline. Neither chart uses `react-native-svg`'s `Pattern` element: plain
+rects and circles behave identically on both platforms and need no feature
+check.
 
 `dashboard.projectedTail` currently reads "Dashed: projected to the end of the
 year." That sentence describes a dashed line that will no longer exist, so it
@@ -230,8 +269,10 @@ segments, antennae, six legs. Teal `#06695F` on cream `#F2F6F5`.
 Legs are the first detail to disappear at small sizes, so `icon-mono.svg` drops
 them entirely, thickens the body segments, and keeps the grain — the grain is
 what makes the silhouette an ant _saving_ rather than an ant. The simplified
-mark is what the Android monochrome layer uses, and it is drawn inside the
-central 66% of the canvas so the adaptive mask cannot crop it.
+mark is what the Android monochrome layer uses. It is drawn full-canvas, like
+`icon-mark.svg`; `insetForAdaptive` in `render-icons.ts` scales both marks down
+to 0.62 at render time so the content sits inside the central 66% Android's
+adaptive mask can crop to, rather than the SVG being authored inset itself.
 
 ### Rendering
 
@@ -243,16 +284,17 @@ project's no-network-at-runtime rule is untouched.
 
 | Output                               | Size | Notes                                   |
 | ------------------------------------ | ---- | --------------------------------------- |
-| `assets/icon.png`                    | 1024 | Opaque. Apple rejects an alpha channel. |
-| `assets/android-icon-foreground.png` | 1024 | Alpha, inside the 66% circle            |
-| `assets/android-icon-background.png` | 1024 | Flat `#06695F`                          |
-| `assets/android-icon-monochrome.png` | 1024 | Alpha silhouette, simplified mark       |
-| `assets/splash-icon.png`             | 1024 |                                         |
-| `assets/favicon.png`                 | 48   | Simplified mark                         |
+| `assets/icon.png`                    | 1024 | Opaque. Apple rejects an alpha channel.         |
+| `assets/android-icon-foreground.png` | 1024 | Alpha, inset to 0.62 by `insetForAdaptive`      |
+| `assets/android-icon-background.png` | 1024 | Flat cream `#F2F6F5`                            |
+| `assets/android-icon-monochrome.png` | 1024 | Alpha silhouette, simplified mark, same inset   |
+| `assets/splash-icon.png`             | 1024 |                                                  |
+| `assets/favicon.png`                 | 48   | Full mark on cream, same as `icon.png`, smaller |
 
-`app.json` moves `android.adaptiveIcon.backgroundColor` from `#0F172A` to
-`#06695F`, so it agrees with the background image instead of holding a leftover
-slate default from the template.
+`app.json` sets `android.adaptiveIcon.backgroundColor` to the same cream the
+app icon uses, `#F2F6F5`, so the composited adaptive icon reads as the mark on
+its own ground rather than as a solid colour with one shape floating in it — a
+teal-on-teal composite made the mark unreadable.
 
 ## Translations
 
@@ -260,8 +302,9 @@ New and changed keys go into `packages/i18n/src/en.ts` first, then `es.ts` and
 `de.ts`. Every leaf is typed against `Resources`, so a missing key in Spanish
 or German is a compile error rather than a blank label.
 
-- `dashboard.monthsOnTrack` — the caption under the grain row, with a `{{count}}`
-  of twelve.
+- `dashboard.monthsInBlack` — the caption under the grain row, with a
+  `{{count}}` and a `{{total}}`. Not twelve: it counts `booked.months.length`
+  only, because a month that has not happened yet is not a month that failed.
 - `dashboard.projectedTail` — rewritten; no longer describes a dashed line.
 - `import.setAside` — the parser-set-aside portion of the result trail.
 
