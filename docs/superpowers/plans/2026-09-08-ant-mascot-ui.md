@@ -17,7 +17,7 @@
 - No network calls, no analytics, no telemetry. Nothing in this plan adds any.
 - Never log a movement, narrative, IBAN or any part of a statement. No task here touches transaction data.
 - Colour in `mascot.ts` is a `Role` name. A hex literal in that file is a review failure.
-- The six PNGs under `apps/mobile/assets/` must be **byte-identical** before and after Tasks 2 and 3. The geometry is being moved, not redesigned.
+- The six PNGs under `apps/mobile/assets/` must be a **visual match** before and after Tasks 2 and 3, proven by `scripts/compare-pngs.ts` (built in Task 2, Step 1). Byte-identical is the expected outcome and the best one; the accepted tolerance is **no pixel differing by more than 2/255 on any channel, and fewer than 0.05% of pixels differing at all**. Anything beyond that is a geometry change, not a serialisation difference, and must be found rather than waved through. The geometry is being moved, not redesigned.
 - Tests live in `apps/mobile/src/design/tests/` and run under `npx vitest run` from the repo root — `vitest.config.ts` already includes that glob.
 - Run `npm run typecheck` before every commit. Scope prettier to changed paths; `npm run lint:fix` reformats the whole repo.
 - The mark's fixed icon palette is exactly: ink `#08302C`, body `#3FD0BE`, grain `#A8720E`, grainSoft `#F6E7C6`.
@@ -407,17 +407,144 @@ git commit -m "feat(design): the ant's geometry becomes data, so four poses need
 - Consumes: `mascot`, `ICON_PALETTE`, `type Part`, `type Role` from `apps/mobile/src/design/mascot`.
 - Produces: `function markSvg(): string` from `scripts/mascot-svg.ts` — the full `<svg>` document for the colour mark.
 
-- [ ] **Step 1: Record the baseline the move must not break**
+- [ ] **Step 1: Build the comparator and record the baseline**
 
-Run:
+The serialiser may order attributes differently from the hand-written SVG, which
+can shift anti-aliasing by a bit or two without moving any geometry. So the
+guard compares pixels, not bytes.
+
+Create `scripts/compare-pngs.ts`:
+
+```ts
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { inflateSync } from 'node:zlib';
+
+/**
+ * Compares two directories of PNGs pixel by pixel.
+ *
+ * Used to prove that moving the mark's geometry into `src/design/mascot.ts` did
+ * not move the mark. Byte comparison is too strict — attribute order out of the
+ * serialiser can shift anti-aliasing by a bit without moving anything — and
+ * eyeballing is too loose, because the failure this guards against looks fine at
+ * 1024 and wrong at 48.
+ */
+const MAX_CHANNEL_DELTA = 2;
+const MAX_DIFFERING_FRACTION = 0.0005;
+
+interface Image {
+  width: number;
+  height: number;
+  pixels: Uint8Array;
+}
+
+function decode(path: string): Image {
+  const file = readFileSync(path);
+  let pos = 8;
+  let width = 0;
+  let height = 0;
+  let colourType = 0;
+  const chunks: Buffer[] = [];
+  while (pos < file.length) {
+    const length = file.readUInt32BE(pos);
+    const type = file.subarray(pos + 4, pos + 8).toString('ascii');
+    if (type === 'IHDR') {
+      width = file.readUInt32BE(pos + 8);
+      height = file.readUInt32BE(pos + 12);
+      colourType = file[pos + 17]!;
+    } else if (type === 'IDAT') {
+      chunks.push(file.subarray(pos + 8, pos + 8 + length));
+    }
+    pos += 12 + length;
+  }
+  const channels = colourType === 6 ? 4 : 3;
+  const raw = inflateSync(Buffer.concat(chunks));
+  const stride = width * channels;
+  const pixels = new Uint8Array(width * height * 4);
+  let offset = 0;
+  let previous = Buffer.alloc(stride);
+  for (let y = 0; y < height; y++) {
+    const filter = raw[offset++]!;
+    const line = Buffer.from(raw.subarray(offset, offset + stride));
+    offset += stride;
+    for (let x = 0; x < stride; x++) {
+      const a = x >= channels ? line[x - channels]! : 0;
+      const b = previous[x]!;
+      const c = x >= channels ? previous[x - channels]! : 0;
+      if (filter === 1) line[x] = (line[x]! + a) & 255;
+      else if (filter === 2) line[x] = (line[x]! + b) & 255;
+      else if (filter === 3) line[x] = (line[x]! + ((a + b) >> 1)) & 255;
+      else if (filter === 4) {
+        const p = a + b - c;
+        const pa = Math.abs(p - a);
+        const pb = Math.abs(p - b);
+        const pc = Math.abs(p - c);
+        line[x] = (line[x]! + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 255;
+      }
+    }
+    for (let x = 0; x < width; x++) {
+      const from = x * channels;
+      const to = (y * width + x) * 4;
+      pixels[to] = line[from]!;
+      pixels[to + 1] = line[from + 1]!;
+      pixels[to + 2] = line[from + 2]!;
+      pixels[to + 3] = channels === 4 ? line[from + 3]! : 255;
+    }
+    previous = line;
+  }
+  return { width, height, pixels };
+}
+
+const [baseline, current] = process.argv.slice(2);
+if (!baseline || !current) {
+  console.error('usage: tsx scripts/compare-pngs.ts <baseline-dir> <current-dir>');
+  process.exit(2);
+}
+
+let failed = 0;
+for (const name of readdirSync(baseline)
+  .filter((f) => f.endsWith('.png'))
+  .sort()) {
+  const before = decode(join(baseline, name));
+  const after = decode(join(current, name));
+  if (before.width !== after.width || before.height !== after.height) {
+    console.log(
+      `${name}: SIZE CHANGED ${before.width}x${before.height} -> ${after.width}x${after.height}`,
+    );
+    failed++;
+    continue;
+  }
+  let differing = 0;
+  let worst = 0;
+  for (let i = 0; i < before.pixels.length; i++) {
+    const delta = Math.abs(before.pixels[i]! - after.pixels[i]!);
+    if (delta > 0) {
+      if (i % 4 === 0) differing++;
+      if (delta > worst) worst = delta;
+    }
+  }
+  const total = before.width * before.height;
+  const fraction = differing / total;
+  const ok = worst <= MAX_CHANNEL_DELTA && fraction <= MAX_DIFFERING_FRACTION;
+  if (!ok) failed++;
+  console.log(
+    `${name.padEnd(30)} worst delta ${String(worst).padStart(3)}  differing ${(fraction * 100).toFixed(4)}%  ${ok ? 'ok' : 'FAIL'}`,
+  );
+}
+console.log(failed === 0 ? '\nall six match' : `\n${failed} image(s) moved`);
+process.exit(failed === 0 ? 0 : 1);
+```
+
+Then take the baseline:
 
 ```bash
 mkdir -p /tmp/icon-baseline
 cp apps/mobile/assets/*.png /tmp/icon-baseline/
-shasum -a 256 /tmp/icon-baseline/*.png | tee /tmp/icon-baseline/SUMS
+npx tsx scripts/compare-pngs.ts /tmp/icon-baseline apps/mobile/assets
 ```
 
-Expected: six lines of hashes. These are the acceptance criterion for Tasks 2 and 3.
+Expected: six `ok` lines and `all six match` — it is comparing the baseline with
+itself, so this also proves the comparator works before anything depends on it.
 
 - [ ] **Step 2: Write the serialiser**
 
@@ -503,11 +630,10 @@ Run:
 
 ```bash
 npm run icons
-shasum -a 256 apps/mobile/assets/*.png > /tmp/icon-new.SUMS
-diff <(sed 's|/tmp/icon-baseline/||' /tmp/icon-baseline/SUMS) <(sed 's|apps/mobile/assets/||' /tmp/icon-new.SUMS)
+npx tsx scripts/compare-pngs.ts /tmp/icon-baseline apps/mobile/assets
 ```
 
-Expected: **no output.** `diff` printing anything means the geometry moved wrong.
+Expected: `all six match`, exit 0. A `FAIL` line names the image that moved.
 
 If they differ, do not adjust the PNGs. Render both SVGs and compare visually to find which part moved:
 
@@ -524,7 +650,7 @@ Expected: no type errors; all tests pass.
 
 ```bash
 npx prettier --write scripts/mascot-svg.ts scripts/render-icons.ts
-git add scripts/mascot-svg.ts scripts/render-icons.ts apps/mobile/assets/brand/icon-mark.svg
+git add scripts/compare-pngs.ts scripts/mascot-svg.ts scripts/render-icons.ts apps/mobile/assets/brand/icon-mark.svg
 git commit -m "feat(brand): the colour mark is generated now, not hand-drawn"
 ```
 
@@ -663,11 +789,10 @@ The mono SVG's element order will differ from the hand-written file, so compare 
 
 ```bash
 npm run icons
-shasum -a 256 apps/mobile/assets/*.png > /tmp/icon-new.SUMS
-diff <(sed 's|/tmp/icon-baseline/||' /tmp/icon-baseline/SUMS) <(sed 's|apps/mobile/assets/||' /tmp/icon-new.SUMS)
+npx tsx scripts/compare-pngs.ts /tmp/icon-baseline apps/mobile/assets
 ```
 
-Expected: **no output.**
+Expected: `all six match`, exit 0.
 
 - [ ] **Step 4: Verify the cuts independently**
 
@@ -883,10 +1008,10 @@ Adding poses must not change `carrying`. Run:
 
 ```bash
 npm run icons
-diff <(sed 's|/tmp/icon-baseline/||' /tmp/icon-baseline/SUMS) <(shasum -a 256 apps/mobile/assets/*.png | sed 's|apps/mobile/assets/||')
+npx tsx scripts/compare-pngs.ts /tmp/icon-baseline apps/mobile/assets
 ```
 
-Expected: no output.
+Expected: `all six match`.
 
 - [ ] **Step 6: Commit**
 
@@ -1348,10 +1473,11 @@ Run:
 npm run typecheck
 npx vitest run
 npm run icons
-diff <(sed 's|/tmp/icon-baseline/||' /tmp/icon-baseline/SUMS) <(shasum -a 256 apps/mobile/assets/*.png | sed 's|apps/mobile/assets/||')
+npx tsx scripts/compare-pngs.ts /tmp/icon-baseline apps/mobile/assets
 ```
 
-Expected: no type errors; all tests pass; `diff` silent. The last one matters most — it proves the whole feature landed without moving the shipped icon by a pixel.
+Expected: no type errors; all tests pass; `all six match`. The last one matters
+most — it proves the whole feature landed without moving the shipped icon.
 
 - [ ] **Step 2: Update the spec if reality differed**
 
