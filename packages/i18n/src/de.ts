@@ -31,6 +31,8 @@ export const de: Translations = {
     expenses: 'Ausgaben',
     net: 'Saldo',
     savingsRate: 'Sparquote',
+    monthsInBlack_one: '{{count}} von {{total}} Monaten bisher endeten im Plus',
+    monthsInBlack_other: '{{count}} von {{total}} Monaten bisher endeten im Plus',
     total: 'Was du hast',
     asOfToday: 'Über alle Konten, heute',
     noBalances: 'Noch kein Kontosaldo hinterlegt, also gibt es keine Gesamtsumme.',

@@ -23,10 +23,12 @@ import { BalanceChart } from '../../src/components/BalanceChart';
 import { Card } from '../../src/components/Card';
 import { CategoryBreakdown } from '../../src/components/CategoryBreakdown';
 import { ForecastChart } from '../../src/components/ForecastChart';
+import { GrainRow } from '../../src/components/trail/GrainRow';
 import { ListRow } from '../../src/components/ui/ListRow';
 import { SegmentedControl } from '../../src/components/ui/SegmentedControl';
 import { StatTile } from '../../src/components/ui/StatTile';
 import { Touchable } from '../../src/components/ui/Touchable';
+import { Trail } from '../../src/components/trail/Trail';
 import { useAppData } from '../../src/hooks/use-app-data';
 import { usePayPeriod } from '../../src/hooks/use-pay-period';
 import { intlLocale } from '../../src/i18n';
@@ -148,6 +150,18 @@ export default function DashboardScreen() {
   const savingsRate =
     summary.income.minor > 0 ? Math.round((summary.net.minor / summary.income.minor) * 100) : null;
 
+  // Display only. The bar answers "how much of what came in went out", which
+  // the savings-rate caption states as a figure underneath it.
+  const spendRatio =
+    summary.income.minor > 0 ? summary.expenses.minor / summary.income.minor : null;
+
+  // Booked months only. A month that has not happened yet is not a month that
+  // failed, so the row counts what is known and stops there.
+  const monthsInBlack = useMemo(
+    () => booked.months.filter((month) => month.net.minor >= 0).length,
+    [booked],
+  );
+
   // Only when there is nothing at all to say. A balance the owner has
   // asserted is worth showing on its own: it answers "what do I have" without
   // a single movement having been imported.
@@ -256,6 +270,7 @@ export default function DashboardScreen() {
                 <Amount value={summary.net} size="heading" fit />
               </StatTile>
             </View>
+            {spendRatio !== null ? <Trail parts={[{ ratio: spendRatio, tone: 'accent' }]} /> : null}
             {savingsRate !== null ? (
               <Text style={[type.label, { color: theme.textMuted }]}>
                 {t('dashboard.savingsRate')}: {savingsRate}%
@@ -313,6 +328,20 @@ export default function DashboardScreen() {
                   <Amount value={yearTotals.totalNet} size="heading" fit />
                 </StatTile>
               </View>
+              {/* Only under the booked view: the row is a claim about months
+                  that have happened, and next to a projection it would read as
+                  a claim about months that have not. */}
+              {yearView === 'booked' && booked.months.length > 0 ? (
+                <>
+                  <GrainRow total={booked.months.length} filled={monthsInBlack} />
+                  <Text style={[type.label, { color: theme.textMuted }]}>
+                    {t('dashboard.monthsInBlack', {
+                      count: monthsInBlack,
+                      total: booked.months.length,
+                    })}
+                  </Text>
+                </>
+              ) : null}
             </Animated.View>
           </Card>
 

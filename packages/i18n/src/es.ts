@@ -31,6 +31,8 @@ export const es: Translations = {
     expenses: 'Gastos',
     net: 'Balance',
     savingsRate: 'Tasa de ahorro',
+    monthsInBlack_one: '{{count}} de {{total}} meses hasta ahora terminaron en positivo',
+    monthsInBlack_other: '{{count}} de {{total}} meses hasta ahora terminaron en positivo',
     total: 'Lo que tienes',
     asOfToday: 'En todas tus cuentas, hoy',
     noBalances: 'Todavía no hay ningún saldo registrado, así que no hay total que mostrar.',

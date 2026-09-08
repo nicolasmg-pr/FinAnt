@@ -30,6 +30,8 @@ export const en = {
     expenses: 'Expenses',
     net: 'Net',
     savingsRate: 'Savings rate',
+    monthsInBlack_one: '{{count}} of {{total}} months so far ended in the black',
+    monthsInBlack_other: '{{count}} of {{total}} months so far ended in the black',
     total: 'What you have',
     asOfToday: 'Across your accounts, today',
     noBalances: 'No account balance recorded yet, so there is no total to show.',
