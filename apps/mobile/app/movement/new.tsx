@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
@@ -16,9 +16,12 @@ import {
 import { parseAmount } from '@finant/importers';
 import type { DraftTransaction } from '@finant/importers';
 import { AccountPicker } from '../../src/components/AccountPicker';
+import { Button } from '../../src/components/ui/Button';
+import { Field } from '../../src/components/ui/Field';
+import { ListRow } from '../../src/components/ui/ListRow';
+import { SegmentedControl } from '../../src/components/ui/SegmentedControl';
 import { Card } from '../../src/components/Card';
 import { CategoryChip } from '../../src/components/CategoryChip';
-import { Chip } from '../../src/components/Chip';
 import {
   createAccount,
   getOrCreateLocalAccount,
@@ -35,7 +38,7 @@ import { newId } from '../../src/db/transactions-repo';
 import { useCategories } from '../../src/hooks/use-categories';
 import { useCategoryLabel } from '../../src/hooks/use-category-label';
 import { ingest } from '../../src/services/ingest';
-import { radius, spacing, useTheme } from '../../src/theme';
+import { spacing, type, useTheme } from '../../src/design';
 
 const SIDES: readonly TransactionSide[] = ['expense', 'income'];
 
@@ -206,11 +209,6 @@ export default function NewMovementScreen() {
     }
   };
 
-  const inputStyle = [
-    styles.input,
-    { color: theme.text, borderColor: theme.border, backgroundColor: theme.surfaceAlt },
-  ];
-
   return (
     <ScrollView
       style={{ backgroundColor: theme.background }}
@@ -220,89 +218,67 @@ export default function NewMovementScreen() {
       <Stack.Screen options={{ title: t('transactions.addManual') }} />
 
       <Card>
-        <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>
-          {t('transactions.filters.direction')}
-        </Text>
-        <View style={styles.chips}>
-          {SIDES.map((option) => (
-            <Chip
-              key={option}
-              label={t(`transactions.filters.side.${option}`)}
-              selected={side === option}
-              onPress={() => {
-                setSide(option);
-                // A category picked for the other side would sit in the
-                // "everything else" group and read as a mistake.
-                setCategoryId(null);
-              }}
-            />
-          ))}
-        </View>
+        <SegmentedControl
+          options={SIDES.map((option) => ({
+            value: option,
+            label: t(`transactions.filters.side.${option}`),
+          }))}
+          value={side}
+          onChange={(option) => {
+            setSide(option);
+            // A category picked for the other side would sit in the
+            // "everything else" group and read as a mistake.
+            setCategoryId(null);
+          }}
+        />
 
         {/* The one control that makes a positive amount on the expense side
             reachable: a refund reduces the month's spending rather than
             inflating its income. */}
-        <View style={styles.switchRow}>
-          <Text style={[styles.switchLabel, { color: theme.text }]}>
-            {side === 'expense' ? t('manual.isRefund') : t('manual.isClawback')}
-          </Text>
-          <Switch value={reversal} onValueChange={setReversal} trackColor={{ true: theme.accent }} />
-        </View>
+        <ListRow
+          title={side === 'expense' ? t('manual.isRefund') : t('manual.isClawback')}
+          trailing={
+            <Switch
+              value={reversal}
+              onValueChange={setReversal}
+              trackColor={{ true: theme.accent }}
+            />
+          }
+        />
 
-        <Field label={t('transactions.bookingDate')}>
-          <TextInput
-            value={dateText}
-            onChangeText={setDateText}
-            placeholder={t('transactions.filters.datePlaceholder')}
-            placeholderTextColor={theme.textMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={inputStyle}
-          />
-          {dateText !== '' && !dateValid ? (
-            <Text style={{ color: theme.warning, fontSize: 12 }}>{t('manual.dateInvalid')}</Text>
-          ) : null}
-        </Field>
+        <Field
+          label={t('transactions.bookingDate')}
+          value={dateText}
+          onChangeText={setDateText}
+          placeholder={t('transactions.filters.datePlaceholder')}
+          autoCapitalize="none"
+          autoCorrect={false}
+          error={dateText !== '' && !dateValid ? t('manual.dateInvalid') : undefined}
+        />
 
-        <Field label={t('transactions.filters.amount')}>
-          <TextInput
-            value={amountText}
-            onChangeText={setAmountText}
-            placeholder={t('transactions.filters.amountPlaceholder')}
-            placeholderTextColor={theme.textMuted}
-            inputMode="decimal"
-            style={inputStyle}
-          />
-        </Field>
+        <Field
+          label={t('transactions.filters.amount')}
+          value={amountText}
+          onChangeText={setAmountText}
+          placeholder={t('transactions.filters.amountPlaceholder')}
+          inputMode="decimal"
+        />
 
-        <Field label={t('transactions.description')}>
-          <TextInput
-            value={description}
-            onChangeText={setDescription}
-            placeholder={t('manual.descriptionPlaceholder')}
-            placeholderTextColor={theme.textMuted}
-            style={inputStyle}
-          />
-        </Field>
+        <Field
+          label={t('transactions.description')}
+          value={description}
+          onChangeText={setDescription}
+          placeholder={t('manual.descriptionPlaceholder')}
+        />
 
-        <Field label={t('transactions.counterparty')}>
-          <TextInput
-            value={counterparty}
-            onChangeText={setCounterparty}
-            placeholder={t('manual.counterpartyPlaceholder')}
-            placeholderTextColor={theme.textMuted}
-            style={inputStyle}
-          />
-        </Field>
+        <Field
+          label={t('transactions.counterparty')}
+          value={counterparty}
+          onChangeText={setCounterparty}
+          placeholder={t('manual.counterpartyPlaceholder')}
+        />
 
-        <Field label={t('transactions.notes')}>
-          <TextInput
-            value={notes}
-            onChangeText={setNotes}
-            placeholderTextColor={theme.textMuted}
-            style={inputStyle}
-          />
-        </Field>
+        <Field label={t('transactions.notes')} value={notes} onChangeText={setNotes} />
       </Card>
 
       <Card title={t('transactions.account')}>
@@ -317,7 +293,9 @@ export default function NewMovementScreen() {
       </Card>
 
       <Card title={t('transactions.category')}>
-        <Text style={{ color: theme.textMuted, fontSize: 12 }}>{t('manual.categoryOptional')}</Text>
+        <Text style={[type.caption, { color: theme.textMuted }]}>
+          {t('manual.categoryOptional')}
+        </Text>
         {groups.map((group, index) =>
           group.length > 0 ? (
             <View key={index} style={styles.chips}>
@@ -337,61 +315,20 @@ export default function NewMovementScreen() {
         )}
       </Card>
 
-      {error ? <Text style={{ color: theme.expense }}>{error}</Text> : null}
+      {error ? <Text style={[type.body, { color: theme.expense }]}>{error}</Text> : null}
 
-      <Pressable
+      <Button
+        label={t('common.save')}
+        size="lg"
+        disabled={!complete}
+        loading={busy}
         onPress={() => void save()}
-        disabled={!complete || busy}
-        accessibilityRole="button"
-        style={[
-          styles.button,
-          { backgroundColor: complete && !busy ? theme.accent : theme.surfaceAlt },
-        ]}
-      >
-        <Text
-          style={[styles.buttonText, { color: complete && !busy ? '#FFFFFF' : theme.textMuted }]}
-        >
-          {t('common.save')}
-        </Text>
-      </Pressable>
+      />
     </ScrollView>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  const theme = useTheme();
-  return (
-    <View style={styles.field}>
-      <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>{label}</Text>
-      {children}
-    </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  field: { gap: spacing.xs },
-  fieldLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: 15,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  switchLabel: { fontSize: 14, flexShrink: 1 },
-  button: {
-    marginTop: spacing.sm,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    alignItems: 'center',
-  },
-  buttonText: { fontSize: 15, fontWeight: '600' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });
