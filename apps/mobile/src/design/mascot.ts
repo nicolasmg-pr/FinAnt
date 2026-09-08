@@ -1,0 +1,317 @@
+/**
+ * The ant's geometry, as data.
+ *
+ * This is the only place the mark is drawn. `scripts/render-icons.ts`
+ * serialises it to `icon-mark.svg` and `icon-mono.svg` against the fixed icon
+ * palette; `components/mascot/Ant.tsx` renders the same parts against the live
+ * theme. Two copies of an ant drift, so there is one.
+ *
+ * Colour is a role name and never a hex. That is what lets one geometry serve a
+ * launcher icon, which has no theme, and an in-app mascot, which must survive a
+ * near-black background.
+ *
+ * No react-native import lives in this file. It is a plain data module so the
+ * geometry can be tested under node, the same arrangement palette.ts and
+ * trail.ts use.
+ */
+export type Role = 'ink' | 'body' | 'grain' | 'grainSoft';
+
+/** How the monochrome layer cuts a part back out of the silhouette. */
+export type MonoCut = 'ring' | 'arcLeft' | 'clipToBody' | 'none';
+
+interface Common {
+  readonly id: string;
+  readonly fill?: Role;
+  readonly stroke?: Role;
+  readonly width?: number;
+  readonly monoCut?: MonoCut;
+  /**
+   * Stroke width this part takes in the monochrome layer's solid silhouette.
+   * Not derivable from `width`: the mono layer thickens the thin parts so they
+   * survive launcher size, leaves the body outlines alone, and gives the coin no
+   * stroke at all. These are the values the committed mask uses.
+   */
+  readonly monoStroke?: number;
+  /** Radius the coin's solid disc takes in the mono layer, replacing `r`. */
+  readonly monoRadius?: number;
+  /** False for parts that exist only in colour — the coin's ring and glint. */
+  readonly monoSolid?: boolean;
+  /** Applied verbatim as an SVG transform. */
+  readonly transform?: string;
+}
+
+export type Part =
+  | (Common & { readonly kind: 'path'; readonly d: string; readonly closed?: boolean })
+  | (Common & {
+      readonly kind: 'circle';
+      readonly cx: number;
+      readonly cy: number;
+      readonly r: number;
+    })
+  | (Common & {
+      readonly kind: 'ellipse';
+      readonly cx: number;
+      readonly cy: number;
+      readonly rx: number;
+      readonly ry: number;
+    });
+
+export type Pose = 'carrying' | 'searching' | 'face' | 'walk';
+
+export interface Drawing {
+  readonly parts: readonly Part[];
+  readonly viewBox: string;
+  /**
+   * Wraps the whole drawing. The offset lives here rather than being composed
+   * into every part, because the monochrome layer needs the parts' own
+   * transforms un-offset and stripping a prefix back off a string is the kind
+   * of thing that works until it doesn't.
+   */
+  readonly transform: string;
+}
+
+/**
+ * The launcher icon has no theme to follow, so its colours are fixed. These are
+ * the exact values `icon-mark.svg` carried when the geometry moved here.
+ */
+export const ICON_PALETTE: Readonly<Record<Role, string>> = {
+  ink: '#08302C',
+  body: '#3FD0BE',
+  grain: '#A8720E',
+  grainSoft: '#F6E7C6',
+};
+
+/**
+ * The whole mark is authored on the 1024 canvas and offset so it sits on the
+ * optical centre rather than the geometric one.
+ */
+export const OFFSET = 'translate(-16 -54)';
+
+/** The coin is scaled to 0.84 so the ant, not its load, is the subject. */
+export const COIN_TRANSFORM =
+  'translate(14 34) translate(470 430) scale(0.84) translate(-470 -430)';
+
+const STROKE = 26;
+const FACE_STROKE = 22;
+
+/**
+ * Antennae, the rearmost leg and the two front legs. All drawn behind the body,
+ * so each emerges from under a segment whose outline stays unbroken. Drawn on
+ * top, the rear leg's raised knee closes into a triangle that reads as a letter
+ * A, and the front legs cut through the head's bottom edge.
+ */
+const behind: readonly Part[] = [
+  {
+    id: 'antenna-upper',
+    kind: 'path',
+    d: 'M718 518 L706 418 L812 348',
+    stroke: 'ink',
+    width: STROKE,
+    monoStroke: 46,
+  },
+  {
+    id: 'antenna-lower',
+    kind: 'path',
+    d: 'M792 540 L840 476 L944 486',
+    stroke: 'ink',
+    width: STROKE,
+    monoStroke: 46,
+  },
+  {
+    id: 'leg-rear',
+    kind: 'path',
+    d: 'M372 744 L306 602 L220 846 L150 846',
+    stroke: 'ink',
+    width: STROKE,
+    monoStroke: 38,
+  },
+  {
+    id: 'leg-front-1',
+    kind: 'path',
+    d: 'M690 730 L748 880 L818 880',
+    stroke: 'ink',
+    width: STROKE,
+    monoStroke: 38,
+  },
+  {
+    id: 'leg-front-2',
+    kind: 'path',
+    d: 'M796 742 L870 850 L940 850',
+    stroke: 'ink',
+    width: STROKE,
+    monoStroke: 38,
+  },
+];
+
+const coin: readonly Part[] = [
+  {
+    id: 'coin',
+    kind: 'circle',
+    cx: 470,
+    cy: 430,
+    r: 205,
+    fill: 'grain',
+    stroke: 'ink',
+    width: 31,
+    monoStroke: 0,
+    monoRadius: 220,
+    transform: COIN_TRANSFORM,
+    monoCut: 'ring',
+  },
+  {
+    id: 'coin-ring',
+    kind: 'circle',
+    cx: 470,
+    cy: 430,
+    r: 150,
+    stroke: 'grainSoft',
+    width: 24,
+    monoSolid: false,
+    transform: COIN_TRANSFORM,
+    monoCut: 'ring',
+  },
+  {
+    id: 'coin-glint',
+    kind: 'path',
+    d: 'M396 352 L410 316 L424 352 L460 366 L424 380 L410 416 L396 380 L360 366 Z',
+    fill: 'grainSoft',
+    monoSolid: false,
+    transform: COIN_TRANSFORM,
+    closed: true,
+    monoCut: 'none',
+  },
+];
+
+/** Gaster, the two petiole nodes, head. The gaster is a leaf, pointed at the rear. */
+const bodyParts: readonly Part[] = [
+  {
+    id: 'gaster',
+    kind: 'path',
+    d: 'M108 726 C132 626 196 566 292 570 C388 574 452 640 456 712 C460 784 392 836 296 832 C200 828 132 800 108 726 Z',
+    fill: 'body',
+    stroke: 'ink',
+    width: STROKE,
+    monoStroke: 26,
+    closed: true,
+    monoCut: 'none',
+  },
+  {
+    id: 'node1',
+    kind: 'circle',
+    cx: 455,
+    cy: 712,
+    r: 58,
+    fill: 'grain',
+    stroke: 'ink',
+    width: STROKE,
+    monoStroke: 26,
+    monoCut: 'arcLeft',
+  },
+  {
+    id: 'node2',
+    kind: 'circle',
+    cx: 572,
+    cy: 700,
+    r: 72,
+    fill: 'grain',
+    stroke: 'ink',
+    width: STROKE,
+    monoStroke: 26,
+    monoCut: 'arcLeft',
+  },
+  {
+    id: 'head',
+    kind: 'ellipse',
+    cx: 750,
+    cy: 650,
+    rx: 150,
+    ry: 134,
+    fill: 'grain',
+    stroke: 'ink',
+    width: STROKE,
+    monoStroke: 26,
+    transform: 'rotate(-6 750 650)',
+    monoCut: 'arcLeft',
+  },
+];
+
+/**
+ * The three middle legs, drawn on top of the gaster and the nodes so the upper
+ * part of each shows crossing the segment it hangs from — the one place the
+ * reference artwork shows the joint.
+ */
+const legsOnTop: readonly Part[] = [
+  {
+    id: 'leg-mid-1',
+    kind: 'path',
+    d: 'M352 772 L332 892 L262 892',
+    stroke: 'ink',
+    width: STROKE,
+    monoStroke: 38,
+    monoCut: 'clipToBody',
+  },
+  {
+    id: 'leg-mid-2',
+    kind: 'path',
+    d: 'M452 668 L446 884 L376 884',
+    stroke: 'ink',
+    width: STROKE,
+    monoStroke: 38,
+    monoCut: 'clipToBody',
+  },
+  {
+    id: 'leg-mid-3',
+    kind: 'path',
+    d: 'M570 640 L584 872 L514 872',
+    stroke: 'ink',
+    width: STROKE,
+    monoStroke: 38,
+    monoCut: 'clipToBody',
+  },
+];
+
+/**
+ * A closed, happy eye and a wide smile, set well forward on the head: the ant is
+ * in profile and looking where it walks, so it has one eye. Set further back the
+ * same arcs read as a face turned to the viewer, and then one eye looks like a
+ * face missing an eye.
+ */
+const face: readonly Part[] = [
+  { id: 'eye', kind: 'path', d: 'M760 594 Q786 556 812 594', stroke: 'ink', width: FACE_STROKE },
+  { id: 'smile', kind: 'path', d: 'M742 674 Q808 740 868 670', stroke: 'ink', width: FACE_STROKE },
+];
+
+/**
+ * The holes cut back out of the monochrome silhouette. Geometry, so it lives
+ * here with the rest of the geometry rather than in the renderer.
+ */
+export const MONO_CUTS = {
+  /** At the coin's edge and its inner ring, drawn in the coin's own frame. */
+  coin: [
+    { r: 220, width: 26 },
+    { r: 150, width: 24 },
+  ],
+  /** A left-facing arc where each segment meets the one behind it. */
+  seams: [
+    { d: 'M455 641 A 71 71 0 0 0 455 783', width: 26 },
+    { d: 'M572 615 A 85 85 0 0 0 572 785', width: 26 },
+    { d: 'M625 556 A 163 147 0 0 0 625 744', width: 26 },
+  ],
+  /** The eye and the smile, cut wider than they are drawn so they survive. */
+  face: [
+    { d: 'M760 594 Q786 556 812 594', width: 26 },
+    { d: 'M742 674 Q808 740 868 670', width: 30 },
+  ],
+  /** Width of the leg grooves, which are clipped to the body. */
+  legGroove: 38,
+} as const;
+
+export function mascot(pose: Pose, frame = 0): Drawing {
+  void frame;
+  if (pose !== 'carrying') throw new Error(`pose not implemented: ${pose}`);
+  return {
+    parts: [...behind, ...coin, ...bodyParts, ...legsOnTop, ...face],
+    viewBox: '0 0 1024 1024',
+    transform: OFFSET,
+  };
+}
