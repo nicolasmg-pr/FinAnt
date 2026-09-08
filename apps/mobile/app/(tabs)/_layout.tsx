@@ -39,6 +39,7 @@ export default function TabsLayout() {
         name="banks"
         options={{
           title: t('nav.banks'),
+          headerShown: false,
           tabBarIcon: ({ color, size }) => <Feather name="home" color={color} size={size} />,
         }}
       />
@@ -46,6 +47,7 @@ export default function TabsLayout() {
         name="budgets"
         options={{
           title: t('nav.budgets'),
+          headerShown: false,
           tabBarIcon: ({ color, size }) => <Feather name="target" color={color} size={size} />,
         }}
       />
@@ -53,6 +55,7 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: t('nav.settings'),
+          headerShown: false,
           tabBarIcon: ({ color, size }) => <Feather name="settings" color={color} size={size} />,
         }}
       />

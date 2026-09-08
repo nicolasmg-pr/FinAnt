@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   add,
   balanceAt,
@@ -35,7 +36,10 @@ import {
 } from '../../src/db/institutions-repo';
 import { useAppData } from '../../src/hooks/use-app-data';
 import { intlLocale } from '../../src/i18n';
-import { radius, spacing, useTheme } from '../../src/theme';
+import { Button } from '../../src/components/ui/Button';
+import { ListRow } from '../../src/components/ui/ListRow';
+import { Touchable } from '../../src/components/ui/Touchable';
+import { spacing, type, useTheme } from '../../src/design';
 
 const CURRENCY = 'EUR';
 
@@ -159,6 +163,7 @@ function anchorFields<T extends { balanceText: string; dateText: string }>(
 export default function BanksScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { transactions, accounts, reload } = useAppData();
   const [institutions, setInstitutions] = useState<InstitutionRow[]>([]);
@@ -405,58 +410,71 @@ export default function BanksScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <ScrollView contentContainerStyle={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
+        <Text style={[type.title, styles.screenTitle, { color: theme.text }]}>
+          {t('banks.title')}
+        </Text>
+
         {banks.length === 0 && unassigned.length === 0 ? (
-          <Card title={t('banks.title')}>
-            <Text style={{ color: theme.textMuted }}>{t('banks.empty')}</Text>
+          <Card>
+            <Text style={[type.body, { color: theme.textMuted }]}>{t('banks.empty')}</Text>
           </Card>
         ) : null}
 
         {banks.map((bank) => (
           <Card key={bank.institution.id}>
-            <Pressable onPress={() => openBankEdit(bank.institution)}>
+            <Touchable onPress={() => openBankEdit(bank.institution)} accessibilityRole="button">
               <View style={styles.row}>
-                <Text style={[styles.bankName, { color: theme.text }]} numberOfLines={1}>
+                <Text style={[type.heading, styles.grow, { color: theme.text }]} numberOfLines={1}>
                   {bank.institution.name}
                 </Text>
                 {bank.total ? (
                   <Amount value={bank.total} tone="neutral" size="heading" />
                 ) : (
-                  <Text style={{ color: theme.textMuted }}>{t('banks.noBalance')}</Text>
+                  <Text style={[type.label, { color: theme.textMuted }]}>
+                    {t('banks.noBalance')}
+                  </Text>
                 )}
               </View>
-              <Text style={[styles.meta, { color: theme.textMuted }]}>
+              <Text style={[type.caption, { color: theme.textMuted }]}>
                 {t('banks.accounts', { count: bank.accounts.length })} ·{' '}
                 {t('banks.movements', { count: bank.movementCount })}
               </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => openMovements(bank.accounts.map((view) => view.row.id))}
-              accessibilityRole="button"
-            >
-              <Text style={[styles.meta, { color: theme.accent }]}>{t('banks.viewMovements')}</Text>
-            </Pressable>
+            </Touchable>
 
             {bank.accounts.length === 0 ? (
-              <Text style={[styles.meta, { color: theme.textMuted }]}>{t('banks.noAccounts')}</Text>
+              <Text style={[type.label, { color: theme.textMuted }]}>{t('banks.noAccounts')}</Text>
             ) : (
-              bank.accounts.map((view) => (
+              bank.accounts.map((view, index) => (
                 <AccountLine
                   key={view.row.id}
                   view={view}
+                  divider={index < bank.accounts.length - 1}
                   onEdit={() => openAccountEdit(view, bank.institution.name)}
                   onOpenMovements={() => openMovements([view.row.id])}
                 />
               ))
             )}
 
-            <Pressable
-              onPress={() => openNewAccount(bank.institution)}
-              accessibilityRole="button"
-              style={[styles.addAccount, { borderTopColor: theme.border }]}
-            >
-              <Text style={[styles.meta, { color: theme.accent }]}>{t('banks.addAccount')}</Text>
-            </Pressable>
+            <View style={styles.cardActions}>
+              <View style={styles.action}>
+                <Button
+                  label={t('banks.addAccount')}
+                  variant="secondary"
+                  icon="plus"
+                  onPress={() => openNewAccount(bank.institution)}
+                />
+              </View>
+              {bank.movementCount > 0 ? (
+                <View style={styles.action}>
+                  <Button
+                    label={t('banks.viewMovements')}
+                    variant="secondary"
+                    onPress={() => openMovements(bank.accounts.map((view) => view.row.id))}
+                  />
+                </View>
+              ) : null}
+            </View>
           </Card>
         ))}
 
@@ -466,12 +484,13 @@ export default function BanksScreen() {
               <View key={view.row.id} style={styles.unassigned}>
                 <AccountLine
                   view={view}
+                  divider={false}
                   onEdit={() => openAccountEdit(view, '')}
                   onOpenMovements={() => openMovements([view.row.id])}
                 />
                 {institutions.length > 0 ? (
                   <>
-                    <Text style={[styles.meta, { color: theme.textMuted }]}>
+                    <Text style={[type.label, { color: theme.textMuted }]}>
                       {t('banks.moveToBank')}
                     </Text>
                     <View style={styles.chips}>
@@ -491,12 +510,7 @@ export default function BanksScreen() {
           </Card>
         ) : null}
 
-        <Pressable
-          onPress={openNewBank}
-          style={[styles.addButton, { backgroundColor: theme.accent }]}
-        >
-          <Text style={styles.addButtonText}>{t('banks.add')}</Text>
-        </Pressable>
+        <Button label={t('banks.add')} icon="plus" onPress={openNewBank} />
       </ScrollView>
 
       <FormSheet
@@ -555,79 +569,60 @@ export default function BanksScreen() {
  */
 function AccountLine({
   view,
+  divider,
   onEdit,
   onOpenMovements,
 }: {
   view: AccountView;
+  divider: boolean;
   onEdit: () => void;
   onOpenMovements: () => void;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
 
+  // Movement count, the date the owner asserted the balance on, and the
+  // opening figure the history was measured back to — one line, because the
+  // row is a summary and the detail lives in the edit sheet.
+  const meta = [t('banks.movements', { count: view.movementCount })];
+  if (view.row.balance_date) {
+    meta.push(t('banks.balanceOn', { date: view.row.balance_date }));
+  }
+  if (view.opening && view.firstMovement) {
+    meta.push(
+      t('banks.openingOn', {
+        amount: formatMoney(view.opening, intlLocale()),
+        date: view.firstMovement,
+      }),
+    );
+  }
+
   return (
-    <View style={[styles.account, { borderTopColor: theme.border }]}>
-      <Pressable onPress={onEdit} accessibilityRole="button">
-        <View style={styles.row}>
-          <Text style={[styles.accountName, { color: theme.text }]} numberOfLines={1}>
-            {view.row.name}
-          </Text>
-          {view.balance ? (
-            <Amount value={view.balance} tone="neutral" />
-          ) : (
-            <Text style={{ color: theme.textMuted, fontSize: 13 }}>{t('banks.noBalance')}</Text>
-          )}
-        </View>
-      </Pressable>
-
-      <Text style={[styles.meta, { color: theme.textMuted }]}>
-        {t('banks.movements', { count: view.movementCount })}
-        {view.row.balance_date ? ` · ${t('banks.balanceOn', { date: view.row.balance_date })}` : ''}
-      </Text>
-
-      {view.opening && view.firstMovement ? (
-        <Text style={[styles.meta, { color: theme.textMuted }]}>
-          {t('banks.openingOn', {
-            amount: formatMoney(view.opening, intlLocale()),
-            date: view.firstMovement,
-          })}
-        </Text>
-      ) : null}
-
-      <View style={styles.accountLinks}>
-        <Pressable onPress={onEdit} accessibilityRole="button">
-          <Text style={[styles.meta, { color: theme.accent }]}>{t('banks.editAccount')}</Text>
-        </Pressable>
-        {view.movementCount > 0 ? (
-          <Pressable onPress={onOpenMovements} accessibilityRole="button">
-            <Text style={[styles.meta, { color: theme.accent }]}>{t('banks.viewMovements')}</Text>
-          </Pressable>
-        ) : null}
-      </View>
-    </View>
+    <ListRow
+      title={view.row.name}
+      subtitle={meta.join(' · ')}
+      divider={divider}
+      // Tapping the row edits it; the movements are one tap further, on the
+      // card, so a mis-tap never leaves this screen.
+      onPress={onEdit}
+      trailing={
+        view.balance ? (
+          <Amount value={view.balance} tone="neutral" />
+        ) : (
+          <Text style={[type.label, { color: theme.textMuted }]}>{t('banks.noBalance')}</Text>
+        )
+      }
+    />
   );
 }
 
 const styles = StyleSheet.create({
   screen: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  screenTitle: { marginBottom: spacing.lg },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
-  bankName: { fontSize: 16, fontWeight: '600', flexShrink: 1 },
-  meta: { fontSize: 13 },
-  account: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: spacing.sm,
-    marginTop: spacing.sm,
-    gap: 2,
-  },
-  accountName: { fontSize: 15, flexShrink: 1 },
-  accountLinks: { flexDirection: 'row', gap: spacing.lg, marginTop: 2 },
-  addAccount: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: spacing.sm,
-    marginTop: spacing.sm,
-  },
+  grow: { flexShrink: 1 },
+  cardActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  action: { flex: 1 },
   unassigned: { gap: spacing.xs },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
-  addButton: { borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
-  addButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
 });

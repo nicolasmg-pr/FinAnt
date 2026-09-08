@@ -66,7 +66,7 @@ export function Button({
 
 const styles = StyleSheet.create({
   button: { borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-  md: { paddingVertical: spacing.md, paddingHorizontal: spacing.xl },
+  md: { paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   lg: { paddingVertical: spacing.lg, paddingHorizontal: spacing.xl },
   content: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 });

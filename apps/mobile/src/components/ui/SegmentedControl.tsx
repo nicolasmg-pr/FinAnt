@@ -71,8 +71,8 @@ export function SegmentedControl<T extends string>({
     >
       {width > 0 ? (
         <Animated.View
+          // pointerEvents belongs in the style: the prop form is deprecated.
           style={[styles.thumb, elevation, { backgroundColor: thumbColor }, thumb]}
-          pointerEvents="none"
         />
       ) : null}
       {options.map((option) => {
@@ -106,6 +106,7 @@ const styles = StyleSheet.create({
     padding: PADDING,
   },
   thumb: {
+    pointerEvents: 'none',
     position: 'absolute',
     top: PADDING,
     left: PADDING,

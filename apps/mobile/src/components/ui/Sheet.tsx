@@ -116,7 +116,6 @@ export function Sheet({
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.lift}
-          pointerEvents="box-none"
         >
           <Animated.View
             onLayout={(event) => {
@@ -148,7 +147,7 @@ export function Sheet({
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
   scrim: { backgroundColor: 'rgba(0,0,0,0.4)' },
-  lift: { justifyContent: 'flex-end' },
+  lift: { justifyContent: 'flex-end', pointerEvents: 'box-none' },
   panel: {
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
