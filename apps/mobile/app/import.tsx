@@ -27,6 +27,7 @@ import { StatTile } from '../src/components/ui/StatTile';
 import { Touchable } from '../src/components/ui/Touchable';
 import { Amount } from '../src/components/Amount';
 import { Card } from '../src/components/Card';
+import { Trail } from '../src/components/trail/Trail';
 import {
   createAccount,
   findAccountByIban,
@@ -182,6 +183,11 @@ export default function ImportScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<IngestResult | null>(null);
+  // Captured at confirm time: `staged` is a memo over `file` and `choice`, and
+  // confirm clears both, so the issue count is gone by the time the result card
+  // renders. Rows the parser could not read are part of the outcome and have to
+  // survive the screen changing state.
+  const [setAside, setSetAside] = useState(0);
 
   // Parsed for the chosen account, so the hashes in the preview are the ones stored.
   const staged = useMemo(
@@ -189,10 +195,13 @@ export default function ImportScreen() {
     [file, choice],
   );
   const needsName = choice !== null && accountChoiceNeedsName(choice);
+  // Every row the file offered, however it ended up.
+  const carried = result ? result.inserted + result.duplicates + setAside : 0;
 
   const pick = async (forcedProfile?: ImportProfile) => {
     setError(null);
     setResult(null);
+    setSetAside(0);
     setFile(null);
     setChoice(null);
     const picked = await DocumentPicker.getDocumentAsync({
@@ -271,6 +280,7 @@ export default function ImportScreen() {
       if (!file.fixedToLocal) await writeSetting(SETTING_LAST_IMPORT_ACCOUNT, current.accountId);
       // Stay on screen: the owner should see how many rows were new and how
       // many the unique indexes already held before the modal closes.
+      setSetAside(staged.issues.length);
       setResult(await ingest(staged.transactions));
       setFile(null);
       setChoice(null);
@@ -307,6 +317,15 @@ export default function ImportScreen() {
 
       {result ? (
         <Card title={t('import.result')}>
+          {carried > 0 ? (
+            <Trail
+              parts={[
+                { ratio: result.inserted / carried, tone: 'income' },
+                { ratio: result.duplicates / carried, tone: 'textMuted' },
+                { ratio: setAside / carried, tone: 'warning' },
+              ]}
+            />
+          ) : null}
           <Text style={[type.body, { color: theme.text }]}>
             {t('import.imported', { count: result.inserted })}
           </Text>
@@ -323,6 +342,11 @@ export default function ImportScreen() {
           {result.autoExcluded > 0 ? (
             <Text style={[type.label, { color: theme.textMuted }]}>
               {t('import.autoExcluded', { count: result.autoExcluded })}
+            </Text>
+          ) : null}
+          {setAside > 0 ? (
+            <Text style={[type.label, { color: theme.textMuted }]}>
+              {t('import.setAside', { count: setAside })}
             </Text>
           ) : null}
           <Button label={t('common.done')} onPress={() => router.back()} />

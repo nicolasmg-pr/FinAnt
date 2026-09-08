@@ -185,6 +185,8 @@ export const en = {
     duplicatesSkipped_other: '{{count}} duplicates skipped',
     issues_one: '{{count}} row could not be read',
     issues_other: '{{count}} rows could not be read',
+    setAside_one: '{{count}} row set aside as unreadable',
+    setAside_other: '{{count}} rows set aside as unreadable',
     confirm: 'Import',
     supportedFormats:
       'Excel or Google Sheets tracker (.xlsx), bank CSV, camt.053 XML, or a Trade Republic PDF statement',

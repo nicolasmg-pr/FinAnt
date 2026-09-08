@@ -188,6 +188,8 @@ export const es: Translations = {
     duplicatesSkipped_other: '{{count}} duplicados omitidos',
     issues_one: 'No se pudo leer {{count}} fila',
     issues_other: 'No se pudieron leer {{count}} filas',
+    setAside_one: '{{count}} fila apartada por ilegible',
+    setAside_other: '{{count}} filas apartadas por ilegibles',
     confirm: 'Importar',
     supportedFormats:
       'Hoja de Excel o Google Sheets (.xlsx), CSV del banco, XML camt.053 o extracto PDF de Trade Republic',

@@ -187,6 +187,8 @@ export const de: Translations = {
     duplicatesSkipped_other: '{{count}} Dubletten übersprungen',
     issues_one: '{{count}} Zeile konnte nicht gelesen werden',
     issues_other: '{{count}} Zeilen konnten nicht gelesen werden',
+    setAside_one: '{{count}} Zeile beiseitegelegt, nicht lesbar',
+    setAside_other: '{{count}} Zeilen beiseitegelegt, nicht lesbar',
     confirm: 'Importieren',
     supportedFormats:
       'Excel- oder Google-Sheets-Tabelle (.xlsx), Bank-CSV, camt.053-XML oder Trade-Republic-PDF-Auszug',
