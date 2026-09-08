@@ -1,6 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import {
   MAX_FONT_SCALE,
   radius,
@@ -46,9 +50,17 @@ export function SegmentedControl<T extends string>({
     options.findIndex((option) => option.value === value),
   );
 
+  // The spring is started from an effect rather than called inside
+  // useAnimatedStyle: an animation begun during style evaluation restarts on
+  // every re-render, and Reanimated warns about it.
+  const offset = useSharedValue(0);
+  useEffect(() => {
+    offset.value = withSpring(segment * index, motion.spring);
+  }, [segment, index, motion, offset]);
+
   const thumb = useAnimatedStyle(() => ({
     width: segment,
-    transform: [{ translateX: withSpring(segment * index, motion.spring) }],
+    transform: [{ translateX: offset.value }],
   }));
 
   return (
