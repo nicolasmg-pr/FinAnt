@@ -19,6 +19,7 @@
     "lint:fix": "eslint . --fix && prettier --write \"**/*.{ts,tsx,json,md}\"",
     "typecheck": "tsc -b packages/core packages/importers packages/i18n packages/assistant --pretty && npm run typecheck --workspace=@finant/mobile",
     "inspect:csv": "tsx scripts/inspect-csv.ts",
+    "icons": "tsx scripts/render-icons.ts",
     "verify:workbook": "tsx scripts/verify-workbook.ts",
     "eval:assistant": "tsx scripts/eval-assistant.ts"
   },
@@ -29,12 +30,13 @@
     "react-native-gesture-handler": "2.32.0"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^22.10.0",
     "eslint": "^9.17.0",
     "eslint-config-expo": "^10.0.0",
     "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
     "typescript": "~6.0.3",
-    "vitest": "^3.0.0",
-    "tsx": "^4.19.2"
+    "vitest": "^3.0.0"
   }
 }
