@@ -1,5 +1,5 @@
 import Svg, { Circle, Ellipse, G, Path } from 'react-native-svg';
-import { mascot, useTheme, type Part, type Pose, type Role } from '../../design';
+import { STROKE, mascot, useTheme, type Part, type Pose, type Role } from '../../design';
 import type { Palette } from '../../design';
 
 /**
@@ -41,10 +41,14 @@ export function Ant({
   const colours = palettes(theme, variant);
   const { parts, viewBox, transform } = mascot(pose, frame);
 
+  // This component applies strokeLinecap and strokeLinejoin unconditionally.
+  // The icon serialiser in scripts/mascot-svg.ts applies them conditionally to work
+  // around a resvg tessellation quirk at 48px. react-native-svg is a different
+  // renderer with no such quirk, and round caps and joins are what the drawing wants.
   const paint = (part: Part) => ({
     fill: part.fill ? colours[part.fill] : 'none',
     stroke: part.stroke ? colours[part.stroke] : undefined,
-    strokeWidth: part.stroke ? (part.width ?? 26) : undefined,
+    strokeWidth: part.stroke ? (part.width ?? STROKE) : undefined,
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
   });

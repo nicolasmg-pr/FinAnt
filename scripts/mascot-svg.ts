@@ -1,6 +1,7 @@
 import {
   COIN_TRANSFORM,
   ICON_PALETTE,
+  STROKE,
   mascot,
   MONO_CUTS,
   type Part,
@@ -44,7 +45,7 @@ function attrs(part: Part): string {
   out.push(`fill="${paint(part.fill) ?? 'none'}"`);
   if (part.stroke) {
     out.push(`stroke="${paint(part.stroke)}"`);
-    out.push(`stroke-width="${part.width ?? 26}"`);
+    out.push(`stroke-width="${part.width ?? STROKE}"`);
     if (part.kind === 'path') {
       if (!part.closed) out.push('stroke-linecap="round"');
       if (hasInteriorVertex(part.d)) out.push('stroke-linejoin="round"');

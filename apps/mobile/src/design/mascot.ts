@@ -91,7 +91,7 @@ export const OFFSET = 'translate(-16 -54)';
 export const COIN_TRANSFORM =
   'translate(14 34) translate(470 430) scale(0.84) translate(-470 -430)';
 
-const STROKE = 26;
+export const STROKE = 26;
 const FACE_STROKE = 22;
 
 /**

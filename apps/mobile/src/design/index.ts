@@ -17,6 +17,7 @@ export {
 } from './trail';
 export {
   ICON_PALETTE,
+  STROKE,
   mascot,
   type Drawing,
   type MonoCut,
