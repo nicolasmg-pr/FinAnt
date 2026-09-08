@@ -45,9 +45,9 @@ are not revisited during implementation.
 
 `apps/mobile/src/design/palette.ts` gains one pair in each theme:
 
-| Role | Light | Dark |
-| --- | --- | --- |
-| `grain` | `#A8720E` | `#D9A441` |
+| Role        | Light     | Dark      |
+| ----------- | --------- | --------- |
+| `grain`     | `#A8720E` | `#D9A441` |
 | `grainSoft` | `#F6E7C6` | `#33280F` |
 
 `grain` carries one meaning and only one: **value accumulated over time**. It is
@@ -209,11 +209,18 @@ The SVG is the source of truth and is committed. Every PNG is build output from
 one script, so a change to the mark is a change to one file.
 
 ```
-apps/mobile/assets/brand/icon.svg        full mark
+apps/mobile/assets/brand/icon-mark.svg   full mark, transparent ground
 apps/mobile/assets/brand/icon-mono.svg   simplified mark
 scripts/render-icons.ts                  svg -> every png size
 package.json                             "icons": "tsx scripts/render-icons.ts"
 ```
+
+An earlier draft of this section also listed an `icon.svg` holding the full mark
+on its cream ground. It was dropped during implementation: two files carrying
+the same mark geometry are two files that can drift, which defeats the whole
+point of committing the SVG. The cream ground is now applied at render time by
+a `withBackground` helper, so `icon-mark.svg` is the only place the mark is
+drawn.
 
 ### The mark
 
@@ -222,7 +229,7 @@ segments, antennae, six legs. Teal `#06695F` on cream `#F2F6F5`.
 
 Legs are the first detail to disappear at small sizes, so `icon-mono.svg` drops
 them entirely, thickens the body segments, and keeps the grain — the grain is
-what makes the silhouette an ant *saving* rather than an ant. The simplified
+what makes the silhouette an ant _saving_ rather than an ant. The simplified
 mark is what the Android monochrome layer uses, and it is drawn inside the
 central 66% of the canvas so the adaptive mask cannot crop it.
 
@@ -234,14 +241,14 @@ which is a poor build dependency. The script therefore uses `@resvg/resvg-js`,
 added as a **root devDependency**. It is never imported by the app, so the
 project's no-network-at-runtime rule is untouched.
 
-| Output | Size | Notes |
-| --- | --- | --- |
-| `assets/icon.png` | 1024 | Opaque. Apple rejects an alpha channel. |
-| `assets/android-icon-foreground.png` | 1024 | Alpha, inside the 66% circle |
-| `assets/android-icon-background.png` | 1024 | Flat `#06695F` |
-| `assets/android-icon-monochrome.png` | 1024 | Alpha silhouette, simplified mark |
-| `assets/splash-icon.png` | 1024 | |
-| `assets/favicon.png` | 48 | Simplified mark |
+| Output                               | Size | Notes                                   |
+| ------------------------------------ | ---- | --------------------------------------- |
+| `assets/icon.png`                    | 1024 | Opaque. Apple rejects an alpha channel. |
+| `assets/android-icon-foreground.png` | 1024 | Alpha, inside the 66% circle            |
+| `assets/android-icon-background.png` | 1024 | Flat `#06695F`                          |
+| `assets/android-icon-monochrome.png` | 1024 | Alpha silhouette, simplified mark       |
+| `assets/splash-icon.png`             | 1024 |                                         |
+| `assets/favicon.png`                 | 48   | Simplified mark                         |
 
 `app.json` moves `android.adaptiveIcon.backgroundColor` from `#0F172A` to
 `#06695F`, so it agrees with the background image instead of holding a leftover
@@ -260,15 +267,15 @@ or German is a compile error rather than a blank label.
 
 ## Testing
 
-| What | How |
-| --- | --- |
-| Segment geometry, clamping, the round-down rule, the below-six fallback | `src/design/tests/trail.test.ts` under `npm test` |
-| Multi-part trails: boundaries land on gaps, an over-full set truncates the last part rather than scaling all of them | same file |
-| `grainSpacing` covers all three confidence values | same file |
-| Every `grain` pair clears AA in both themes | `palette.test.ts` under `npm test` |
-| Types, including the three translation files | `npm run typecheck` |
-| Bundle builds without a simulator | `cd apps/mobile && npx expo export --platform ios` |
-| The mark reads at 1024, 180 and 48, and the Android monochrome layer survives its mask | Render and look at the output |
+| What                                                                                                                 | How                                                |
+| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Segment geometry, clamping, the round-down rule, the below-six fallback                                              | `src/design/tests/trail.test.ts` under `npm test`  |
+| Multi-part trails: boundaries land on gaps, an over-full set truncates the last part rather than scaling all of them | same file                                          |
+| `grainSpacing` covers all three confidence values                                                                    | same file                                          |
+| Every `grain` pair clears AA in both themes                                                                          | `palette.test.ts` under `npm test`                 |
+| Types, including the three translation files                                                                         | `npm run typecheck`                                |
+| Bundle builds without a simulator                                                                                    | `cd apps/mobile && npx expo export --platform ios` |
+| The mark reads at 1024, 180 and 48, and the Android monochrome layer survives its mask                               | Render and look at the output                      |
 
 ## Order of work
 
