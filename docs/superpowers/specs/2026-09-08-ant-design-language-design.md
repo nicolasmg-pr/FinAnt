@@ -74,17 +74,17 @@ test.
 The branch draws three distinct things with the grain vocabulary, and they are
 not synonyms:
 
-- **The segmented trail form** (`Trail`, and `BudgetBar` on top of it) means *a
-  share of a bounded quantity* — a budget against its limit, a period's spend
+- **The segmented trail form** (`Trail`, and `BudgetBar` on top of it) means _a
+  share of a bounded quantity_ — a budget against its limit, a period's spend
   against its income, a category against the period's expenses, an import's
   rows against the file's rows. None of these are accumulation; they are all
   proportions of something with a fixed size.
-- **The `grain` colour** means *value accumulated over time*, and nothing
+- **The `grain` colour** means _value accumulated over time_, and nothing
   else. Its only user is the dashboard's `GrainRow` of months — a count that
   only grows, one booked month at a time, and never resets or gets spent
   against a limit.
-- **Grains inside a chart** (`ForecastChart`, `BalanceChart`) mean *projected,
-  not booked*. This is carried by shape alone — discrete marks instead of a
+- **Grains inside a chart** (`ForecastChart`, `BalanceChart`) mean _projected,
+  not booked_. This is carried by shape alone — discrete marks instead of a
   continuous fill or line — and each chart keeps its own colours (`income`,
   `expense`, `accent`) so a projection and a booked figure differ in exactly
   one way, not two.
@@ -263,16 +263,83 @@ drawn.
 
 ### The mark
 
-A side-profile ant carrying a single round grain above its head. Three body
-segments, antennae, six legs. Teal `#06695F` on cream `#F2F6F5`.
+A side-profile ant walking right, carrying a gold coin on its back. Leaf-shaped
+gaster, two petiole nodes, head with a closed happy eye and a wide smile, two
+antennae, six legs. Redrawn as vector from reference artwork the owner supplied,
+in the app's palette rather than the reference's emerald and light gold.
 
-Legs are the first detail to disappear at small sizes, so `icon-mono.svg` drops
-them entirely, thickens the body segments, and keeps the grain — the grain is
-what makes the silhouette an ant _saving_ rather than an ant. The simplified
-mark is what the Android monochrome layer uses. It is drawn full-canvas, like
-`icon-mark.svg`; `insetForAdaptive` in `render-icons.ts` scales both marks down
-to 0.62 at render time so the content sits inside the central 66% Android's
-adaptive mask can crop to, rather than the SVG being authored inset itself.
+Colour roles: ochre `#A8720E` is `grain` and fills the coin, the nodes and the
+head — the coin is the same colour the interface uses for value that has been
+accumulated, so what the ant carries is literally the app's grain. `#F6E7C6` is
+`grainSoft`, the coin's inner ring and its glint. The gaster is `#3FD0BE`, the
+dark theme's `accent`.
+
+`#08302C` is the mark's ink and belongs to the mark alone: an outline has to
+hold against the light teal gaster, the ochre head and the cream ground at once,
+and no palette role is dark enough for all three.
+
+Three choices in the drawing are load-bearing, and each was arrived at by
+rendering the alternative and looking at it:
+
+- **The head is ochre, not teal.** An all-teal body merges into a single mass at
+  favicon size; the warm head is what keeps the front of the ant separate from
+  the back at 48px.
+- **The gaster is the light teal, not `#06695F`.** It reads as a distinct body
+  part against the ochre head and the ink outline. This began as a fix for the
+  rearmost leg, which was then drawn across the gaster; that leg now sits behind
+  it, so the light fill is a free choice rather than a forced one.
+- **The eye and the smile are set well forward on the head.** The ant is in
+  profile and looking where it is walking, so one eye is correct. Set further
+  back the same two arcs read as a face turned towards the viewer, and a
+  viewer-facing face with one eye looks like a face missing an eye.
+
+The legs split across the z-order, and the split matters. The three middle legs
+are drawn **on top** of the gaster and the nodes, so the upper part of each one
+shows crossing the segment it hangs from — the one place the reference does show
+the joint.
+
+The other three are drawn **behind** the body, each emerging from under a segment
+whose outline stays unbroken. The rearmost leg has its knee raised high inside
+the gaster; drawn on top, that knee and the gaster's own lower edge close into a
+triangle that reads as a letter A sitting on the ant. The two front legs drawn on
+top instead poke their stubs into the head's fill and cut through its bottom
+edge, and the head stops reading as a head.
+
+Each leg is a right-angle knee and a horizontal foot; the rear feet point
+backwards and the front feet forwards, so the ant reads as walking rather than
+standing.
+
+Stroke weights are floored at 22 on the 1024 canvas — 2.1% — because anything
+thinner closes up at favicon size. The artwork is offset by `translate(-16 -54)`
+so it sits on the optical centre rather than the geometric one, and the coin is
+scaled to 0.84 so the ant, not its load, is the subject.
+
+`icon-mono.svg` is the same mark for Android's monochrome layer, which keeps
+only the alpha channel and tints it a single system colour. The colour mark is
+built from outlined shapes, and an outline is the one thing a single flat colour
+cannot express: filled in, the coin, the segments, the legs and the face all
+fuse into one lump. So in the monochrome file the ink becomes a gap. Every shape
+is filled solid out to the outer edge of its stroke, then the ink is cut back
+out as holes in a mask, in three kinds of cut:
+
+- A full ring at the coin's edge and a second at its inner ring. Outside the
+  overlap these fall on transparent ground and cost nothing.
+- A left-facing arc on each node and on the head, where it meets the segment
+  behind it. Partial on purpose: a full ring would also cut the legs passing
+  underneath and leave them floating.
+- The three middle legs, clipped to the body, so the part of each one that
+  crosses its segment reads as a groove while the part below it stays solid —
+  which is what the outlined colour mark does. The rearmost leg and the two front
+  legs are not cut: they sit behind the body in the colour mark, so there is no
+  groove for them to leave.
+
+The coin's glint is dropped and every stroke is thicker, because this layer is
+composited at launcher size where both would close up.
+
+`icon-mono.svg` is drawn full-canvas, like `icon-mark.svg`; `insetForAdaptive`
+in `render-icons.ts` scales both marks down to 0.62 at render time so the
+content sits inside the central 66% Android's adaptive mask can crop to, rather
+than the SVG being authored inset itself.
 
 ### Rendering
 
@@ -282,13 +349,13 @@ which is a poor build dependency. The script therefore uses `@resvg/resvg-js`,
 added as a **root devDependency**. It is never imported by the app, so the
 project's no-network-at-runtime rule is untouched.
 
-| Output                               | Size | Notes                                   |
-| ------------------------------------ | ---- | --------------------------------------- |
+| Output                               | Size | Notes                                           |
+| ------------------------------------ | ---- | ----------------------------------------------- |
 | `assets/icon.png`                    | 1024 | Opaque. Apple rejects an alpha channel.         |
 | `assets/android-icon-foreground.png` | 1024 | Alpha, inset to 0.62 by `insetForAdaptive`      |
 | `assets/android-icon-background.png` | 1024 | Flat cream `#F2F6F5`                            |
 | `assets/android-icon-monochrome.png` | 1024 | Alpha silhouette, simplified mark, same inset   |
-| `assets/splash-icon.png`             | 1024 |                                                  |
+| `assets/splash-icon.png`             | 1024 |                                                 |
 | `assets/favicon.png`                 | 48   | Full mark on cream, same as `icon.png`, smaller |
 
 `app.json` sets `android.adaptiveIcon.backgroundColor` to the same cream the

@@ -1,18 +1,79 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <g transform="translate(-39 25)">
-    <g fill="none" stroke="#06695F" stroke-width="26" stroke-linecap="round">
-      <path d="M596 566 L648 664 L716 700"/>
-      <path d="M524 596 L536 700 L596 752"/>
-      <path d="M452 592 L428 704 L474 764"/>
-      <path d="M676 452 C724 372 772 340 812 330"/>
-      <path d="M700 486 C764 452 820 448 862 462"/>
+  <!--
+    The FinAnt mark: a side-profile ant walking right, carrying a gold coin on
+    its back. Redrawn as vector from the owner's reference artwork, in the
+    app's own palette rather than the reference's emerald and light gold.
+
+    Colour roles: ochre `#A8720E` is `grain` — the coin is the same colour the
+    interface uses for value that has been accumulated, so what the ant carries
+    is literally the app's grain. `#F6E7C6` is `grainSoft`, the coin's inner
+    ring and glint. The gaster is `#3FD0BE`, the dark theme's `accent`.
+
+    The gaster is deliberately the light teal and not `#06695F`. The rearmost
+    leg is drawn across it with its knee raised, the way the reference does it,
+    and that only reads as a leg against a light body: on a dark teal gaster the
+    same line reads as a gouge cut out of the ant.
+
+    `#08302C` is the mark's ink and belongs to the mark alone: an outline has to
+    hold against the light teal gaster, the ochre head and the cream ground at
+    once, and no palette role is dark enough for all three.
+
+    Everything is drawn on the full 1024 canvas and offset so the artwork sits
+    on the optical centre. Stroke weights are floored at 22 (2.1% of the
+    canvas) because anything thinner closes up at favicon size.
+  -->
+  <g transform="translate(-16 -54)">
+    <!-- Antennae, the rearmost leg and the two front legs, all drawn behind the
+         body, so each emerges from underneath a segment whose outline stays
+         unbroken.
+
+         The rearmost leg has its knee raised high inside the gaster. Drawn on
+         top, that raised knee and the gaster's own lower edge close into a
+         triangle that reads as a letter A sitting on the ant. The front legs
+         drawn on top instead poke their stubs into the head's fill and cut
+         through its bottom edge, and the head stops reading as a head. -->
+    <g stroke="#08302C" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <path d="M718 518 L706 418 L812 348"/>
+      <path d="M792 540 L840 476 L944 486"/>
+      <path d="M372 744 L306 602 L220 846 L150 846"/>
+      <path d="M690 730 L748 880 L818 880"/>
+      <path d="M796 742 L870 850 L940 850"/>
     </g>
-    <g fill="#06695F">
-      <ellipse cx="372" cy="566" rx="132" ry="112"/>
-      <circle cx="470" cy="558" r="30"/>
-      <ellipse cx="556" cy="542" rx="76" ry="70"/>
-      <ellipse cx="674" cy="510" rx="86" ry="80"/>
+
+    <!-- The coin, behind the body so it reads as riding on the back. -->
+    <g transform="translate(14 34) translate(470 430) scale(0.84) translate(-470 -430)">
+      <circle cx="470" cy="430" r="205" fill="#A8720E" stroke="#08302C" stroke-width="31"/>
+      <circle cx="470" cy="430" r="150" fill="none" stroke="#F6E7C6" stroke-width="24"/>
+      <path d="M396 352 L410 316 L424 352 L460 366 L424 380 L410 416 L396 380 L360 366 Z" fill="#F6E7C6"/>
     </g>
-    <ellipse cx="744" cy="286" rx="98" ry="76" fill="#A8720E" transform="rotate(-14 744 286)"/>
+
+    <!-- Gaster, the two petiole nodes, head. The gaster is a leaf rather than
+         an ellipse, pointed at the rear, as in the reference. -->
+    <path d="M108 726 C132 626 196 566 292 570 C388 574 452 640 456 712 C460 784 392 836 296 832 C200 828 132 800 108 726 Z" fill="#3FD0BE" stroke="#08302C" stroke-width="26" stroke-linejoin="round"/>
+    <circle cx="455" cy="712" r="58" fill="#A8720E" stroke="#08302C" stroke-width="26"/>
+    <circle cx="572" cy="700" r="72" fill="#A8720E" stroke="#08302C" stroke-width="26"/>
+    <ellipse cx="750" cy="650" rx="150" ry="134" transform="rotate(-6 750 650)" fill="#A8720E" stroke="#08302C" stroke-width="26"/>
+
+    <!-- The three middle legs, drawn ON TOP of the gaster and the nodes, so the
+         upper part of each one shows crossing the segment it hangs from — the
+         one place the reference does show the joint. Each leg is a right-angle
+         knee and a horizontal foot; the rear feet point backwards and the front
+         feet forwards, so the ant reads as walking rather than standing. -->
+    <g stroke="#08302C" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <path d="M352 772 L332 892 L262 892"/>
+      <path d="M452 668 L446 884 L376 884"/>
+      <path d="M570 640 L584 872 L514 872"/>
+    </g>
+
+    <!-- A closed, happy eye and a wide smile, both set forward on the head:
+         the ant is in profile and looking where it is walking, so it has one
+         eye, not two. Set further back they read as a face turned to the
+         viewer, which then looks like a face missing an eye. Two arcs, because
+         no filled eye survives at favicon size but a stroke of the same weight
+         as the outline does. -->
+    <g stroke="#08302C" stroke-width="22" stroke-linecap="round" fill="none">
+      <path d="M760 594 Q786 556 812 594"/>
+      <path d="M742 674 Q808 740 868 670"/>
+    </g>
   </g>
 </svg>
