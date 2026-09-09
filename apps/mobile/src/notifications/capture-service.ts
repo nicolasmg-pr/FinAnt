@@ -7,7 +7,12 @@ import {
 } from '@finant/importers';
 import { importHashOf, money, resolveRoute } from '@finant/core';
 import NotificationCapture from '../../modules/notification-capture';
-import { getCapture, insertCapture, setCaptureStatus } from '../db/notification-captures-repo';
+import {
+  getCapture,
+  hasUnsettledCaptureFor,
+  insertCapture,
+  setCaptureStatus,
+} from '../db/notification-captures-repo';
 import {
   allowedPackageNames,
   getNotificationSourceByPackage,
@@ -34,11 +39,12 @@ export interface RawCapture {
  * process killed mid-write — is lost silently. Nothing ends up wrong, because
  * the statement import still books the movement; it just does not appear early.
  *
- * Three other exits besides the plain write: a notification from a disabled
- * source is dropped before anything is read; a duplicate (same hash already
- * stored) is dropped after the `INSERT OR IGNORE` reports no row; and a
- * `movement` verdict on a source with `autoApprove` set goes straight on into
- * `acceptCapture`.
+ * Four other exits besides the plain write: a notification from a disabled
+ * source is dropped before anything is read; a repost — Android's own key
+ * already on an unsettled row with the same text — is dropped before the
+ * insert; a duplicate (same hash already stored) is dropped after the
+ * `INSERT OR IGNORE` reports no row; and a `movement` verdict on a source with
+ * `autoApprove` set goes straight on into `acceptCapture`.
  *
  * Never logs any part of the notification.
  */
@@ -47,6 +53,17 @@ export async function recordCapture(raw: RawCapture): Promise<void> {
   // The native allowlist is a projection of the database, so a source the
   // owner disabled between the two can still reach here. The database decides.
   if (!source || !source.enabled) return;
+
+  // Android reposts. A "payment pending" that becomes "payment completed", or
+  // the same text enqueued twice, arrives as a fresh StatusBarNotification
+  // stamped with the current time, so the capture hash below cannot see it —
+  // `sbn.key` can. Checked before anything is written, because with
+  // `autoApprove` on the insert is one step from a duplicate movement.
+  if (
+    raw.androidKey !== null &&
+    (await hasUnsettledCaptureFor(raw.androidKey, raw.title, raw.body))
+  )
+    return;
 
   const postedAt = new Date(raw.postedAtMillis);
   const bookingDate = localCalendarDay(raw.postedAtMillis, postedAt.getTimezoneOffset());
@@ -91,9 +108,9 @@ export async function recordCapture(raw: RawCapture): Promise<void> {
     parsed: parsed.kind === 'movement' ? parsed.movement : null,
   });
 
-  // Already seen: Android reposts an updated notification, and a settled
-  // capture — accepted, or dismissed, including every `ignored` one — leaves
-  // a tombstone holding its hash.
+  // Already seen: a byte-identical re-delivery, or a settled capture —
+  // accepted, or dismissed, including every `ignored` one — whose tombstone
+  // still holds this hash. A repost is a different hash and was caught above.
   if (captureId === null) return;
 
   if (parsed.kind === 'movement' && source.autoApprove) {

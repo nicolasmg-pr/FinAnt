@@ -25,9 +25,13 @@ export interface NewCapture {
 /**
  * Records a capture, or does nothing if this notification was already seen.
  *
- * `INSERT OR IGNORE` against the unique capture hash is the whole dedupe
- * story: Android reposts an updated notification with the same post time and
- * text, and a tombstone from an accepted capture still holds its hash.
+ * `INSERT OR IGNORE` against the unique capture hash catches a byte-identical
+ * re-delivery, including the tombstone an accepted or dismissed capture leaves
+ * behind. It does not catch a repost: AOSP builds a fresh
+ * `StatusBarNotification` stamped with `System.currentTimeMillis()` every time
+ * a notification is enqueued, updates included, so the same payment posted
+ * twice hashes differently. `hasUnsettledCaptureFor` is what covers that case,
+ * on Android's own notification key rather than on the post time.
  *
  * @returns the new row's id, or null when it was a duplicate.
  */
@@ -54,6 +58,42 @@ export async function insertCapture(input: NewCapture): Promise<string | null> {
     new Date().toISOString(),
   );
   return result.changes > 0 ? id : null;
+}
+
+/**
+ * Whether this notification is already on record under the same Android key
+ * and the same text.
+ *
+ * Android's `sbn.key` is stable across a repost of the same notification; its
+ * post time is not. So a bank updating "payment pending" into "payment
+ * completed", or re-posting the identical text, arrives with a new capture
+ * hash and would otherwise become a second row — and, with `auto_approve` on,
+ * a second provisional movement for one payment.
+ *
+ * `pending`, `unreadable` and `accepted` are the statuses where a second row
+ * would do damage. `dismissed` is excluded on purpose: the owner having thrown
+ * one away is not a reason to swallow the next one silently.
+ *
+ * `IS` rather than `=` so a null title or body compares equal to itself, which
+ * `=` in SQL never does.
+ */
+export async function hasUnsettledCaptureFor(
+  androidKey: string,
+  title: string | null,
+  body: string | null,
+): Promise<boolean> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) AS count FROM notification_captures
+      WHERE android_key = ?
+        AND title IS ?
+        AND body IS ?
+        AND status IN ('pending', 'unreadable', 'accepted');`,
+    androidKey,
+    title,
+    body,
+  );
+  return (row?.count ?? 0) > 0;
 }
 
 export async function listCaptures(
