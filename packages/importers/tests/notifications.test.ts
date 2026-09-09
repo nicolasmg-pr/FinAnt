@@ -79,8 +79,15 @@ describe('parseNotification', () => {
 });
 
 describe('captureHashOf', () => {
-  it('is stable for the same notification', () => {
-    expect(captureHashOf(capture)).toBe(captureHashOf({ ...capture, bookingDate: '2026-03-11' }));
+  it('ignores the booking date, which is derived from the post time', () => {
+    // Assigned to a typed variable first: passing the object literal inline
+    // trips TypeScript's excess-property check, because captureHashOf's
+    // parameter type deliberately has no bookingDate.
+    const sameNotificationLaterDay: CapturedNotification = {
+      ...capture,
+      bookingDate: '2026-03-11',
+    };
+    expect(captureHashOf(capture)).toBe(captureHashOf(sameNotificationLaterDay));
   });
 
   it('differs when the text differs', () => {
