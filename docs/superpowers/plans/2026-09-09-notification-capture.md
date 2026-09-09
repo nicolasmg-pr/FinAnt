@@ -1944,6 +1944,14 @@ Create `android/src/main/AndroidManifest.xml`:
 ```xml
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <!--
+    WAKE_LOCK is needed by acquireBoundedWakeLock() in the listener service:
+    the device must not suspend between a notification arriving and the headless
+    task finishing its database write. It is a normal permission, so declaring
+    it is all there is to do — there is no prompt and nothing to request.
+  -->
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+  <!--
     The listener lives in this module's manifest, which the Android manifest
     merger folds into the app. No Expo config plugin is involved, so there is
     nothing to re-apply after a prebuild.
@@ -2111,7 +2119,16 @@ class FinAntNotificationListenerService : NotificationListenerService() {
      * system bound this listener.
      */
     private fun startCaptureTask(data: WritableMap) {
-        HeadlessJsTaskService.acquireWakeLockNow(this)
+        // Our own lock, with a timeout, rather than
+        // HeadlessJsTaskService.acquireWakeLockNow: that one is untimed and is
+        // released only by HeadlessJsTaskService.onDestroy, which this app
+        // never runs — this class extends NotificationListenerService, so the
+        // lock would pin the CPU awake for the life of a process the system
+        // keeps alive indefinitely. Acquired with the task's own timeout, it
+        // releases itself even if the JS hop never finishes.
+        (getSystemService(Context.POWER_SERVICE) as? PowerManager)
+            ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FinAnt:notification-capture")
+            ?.acquire(TASK_TIMEOUT_MS)
 
         val reactHost = (application as? ReactApplication)?.reactHost ?: return
         val config = HeadlessJsTaskConfig(
@@ -2266,6 +2283,20 @@ export const CAPTURE_TASK_KEY = 'FinAntNotificationCapture';
 export default requireNativeModule<NotificationCaptureModule>('NotificationCapture');
 ```
 
+- [ ] **Step 8b: Declare React Native in the module's `android/build.gradle`**
+
+`expo-module-gradle-plugin` contributes only `kotlin-stdlib-jdk7`, `org.jetbrains:annotations` and `expo-modules-core` (as `compileOnly`) — see `ProjectConfiguration.kt:53-65` in `node_modules/expo-modules-core/expo-module-gradle-plugin`. And expo-modules-core declares `com.facebook.react:react-android` as `implementation`, not `api` (`node_modules/expo-modules-core/android/build.gradle:223`), so React Native's classes are **not** exposed transitively. Without this block the service cannot resolve a single `com.facebook.react.*` import:
+
+```gradle
+dependencies {
+  // No version: the React Native Gradle plugin resolves it for the app build,
+  // which is how expo-modules-core declares it too.
+  implementation 'com.facebook.react:react-android'
+}
+```
+
+`androidx.core` needs no declaration — expo-modules-core exposes `androidx.core:core-ktx` as `api`, so `NotificationManagerCompat` resolves.
+
 - [ ] **Step 9: Build it**
 
 ```bash
@@ -2363,8 +2394,14 @@ export async function recordCapture(raw: RawCapture): Promise<void> {
   const bookingDate = localCalendarDay(raw.postedAtMillis, postedAt.getTimezoneOffset());
   const captureHash = captureHashOf({
     packageName: raw.packageName,
-    title: raw.title,
-    body: raw.body,
+    // An `ignored` notification is recognised as deliberately not money, so its
+    // row exists only as a tombstone holding the hash. Keeping its text would
+    // mean storing a bank's marketing indefinitely, and this table's contract
+    // is that a settled capture forgets its narrative. `pending` keeps the text
+    // because the owner is about to read it; `unreadable` keeps it because that
+    // text is the bug report.
+    title: parsed.kind === 'ignored' ? null : raw.title,
+    body: parsed.kind === 'ignored' ? null : raw.body,
     postedAtMillis: raw.postedAtMillis,
   });
 
@@ -2770,16 +2807,26 @@ export function useCaptureInbox() {
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
-    const [rows, pending, coverage] = await Promise.all([
-      listCaptures(['pending', 'unreadable']),
-      listProvisionalTransactions(),
-      latestBookedDateByAccount(),
-    ]);
-    const today = new Date().toISOString().slice(0, 10);
-    setCaptures(rows);
-    setProvisionals(pending);
-    setStale(new Set(staleProvisionals(pending, coverage, today)));
-    setLoading(false);
+    // try/catch/finally, not a bare await: the empty state is gated on
+    // `!loading`, so a rejected read that never clears the flag leaves the
+    // inbox showing no data, no empty state and no error — blank until the
+    // app restarts. `error` is what lets the screen say something instead.
+    setError(null);
+    try {
+      const [rows, pending, coverage] = await Promise.all([
+        listCaptures(['pending', 'unreadable']),
+        listProvisionalTransactions(),
+        latestBookedDateByAccount(),
+      ]);
+      const today = new Date().toISOString().slice(0, 10);
+      setCaptures(rows);
+      setProvisionals(pending);
+      setStale(new Set(staleProvisionals(pending, coverage, today)));
+    } catch (cause) {
+      setError(cause as Error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -2796,7 +2843,7 @@ Staleness is derived, not stored: it is a function of the ledger's own coverage,
 
 Create `apps/mobile/app/notification-inbox.tsx`, in three sections:
 
-1. **Pending captures** (`status === 'pending'`): amount via the existing `Amount` component, the parsed description, the account the routes resolve to, and `Add movement` / `Edit first` / `Dismiss`. `Add movement` calls `acceptCapture(id)`; a `null` return means no route matched, so show `t('notifications.noRoute')` and leave it pending. `Edit first` navigates to `/movement/new` prefilled from the parsed movement.
+1. **Pending captures** (`status === 'pending'`): amount via the existing `Amount` component, the parsed description, the account the routes resolve to, and `Add movement` / `Edit first` / `Dismiss`. `Add movement` calls `acceptCapture(id)`; a `null` return means no route matched, so show `t('notifications.noRoute')` and leave it pending. `Edit first` navigates to `/movement/new` prefilled from the parsed movement **and carrying the capture's id**. Saving there must call `acceptEditedCapture(captureId, draft)` in `capture-service.ts`, not the ordinary `ingest([draft])`: the row is still provisional — editing what a notification said is not the bank booking it — and the capture must be settled against the row that was written. Saving it as an ordinary manual entry would produce a booked-looking row that reconciliation never retires, leaving a permanent duplicate once the statement arrives, and would leave the capture pending so the owner could accept it a second time.
 2. **Unreadable captures** (`status === 'unreadable'`): the raw `title` and `body`, `t('notifications.unreadableExplainer')`, a `Copy text` button using `expo-clipboard` if already a dependency — if it is not, render the text selectable rather than adding a dependency for this — and `Dismiss`.
 3. **Stale provisionals**: rows from `provisionals` whose id is in `stale`, each with `t('notifications.provisionalStale', { days: PROVISIONAL_STALE_DAYS })` and a link to the movement, where the owner can delete it. The inbox never deletes a movement itself.
 

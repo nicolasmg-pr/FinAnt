@@ -175,7 +175,10 @@ Android 8+ background-start limits aside, a foreground-service notification for
 every coffee is absurd. So it replicates the ~20 lines of RN's own `startTask`
 in place:
 
-1. `HeadlessJsTaskService.acquireWakeLockNow(this)`
+1. A `PARTIAL_WAKE_LOCK` of our own, acquired with the task's timeout so it
+   self-releases — **not** `HeadlessJsTaskService.acquireWakeLockNow`, which is
+   untimed and released only by `HeadlessJsTaskService.onDestroy`, a class this
+   app never runs
 2. On the UI thread, `HeadlessJsTaskContext.getInstance(reactContext).startTask(config)`
 3. If there is no current React context, `reactHost.start()` and start the task
    from a `ReactInstanceEventListener`, mirroring RN's bridgeless path.
