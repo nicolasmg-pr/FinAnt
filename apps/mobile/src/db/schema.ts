@@ -356,6 +356,39 @@ export const MIGRATIONS: readonly { version: number; sql: string }[] = [
       CREATE INDEX idx_tx_provisional ON transactions(provisional) WHERE provisional = 1;
     `,
   },
+  {
+    version: 10,
+    sql: `
+      -- A fingerprint of a notification's text that survives settling, unlike
+      -- title and body themselves: setCaptureStatus NULLs those on purpose, so
+      -- a capture's narrative does not sit in the ledger past the moment the
+      -- owner has dealt with it. content_hash is computed once, at capture
+      -- time, from the same fields (never the post time, which a repost always
+      -- changes), and kept forever after.
+      --
+      -- It is what lets a repost be recognised once the narrative it would
+      -- have been compared against is already gone: matching an accepted row
+      -- on its Android notification key alone, with no text and no fingerprint
+      -- to check against, cannot tell a repost of that same payment from a
+      -- genuinely different one arriving through the same reused notification
+      -- slot — and would silently drop the second. content_hash plus the key
+      -- together tell them apart.
+      --
+      -- Nullable, and left NULL rather than guessed at for any row that does
+      -- not carry the title and body to compute it from: a capture already
+      -- settled before this migration had its text NULLed under the old rule,
+      -- and there is nothing left here to fingerprint. A NULL content_hash
+      -- simply never matches, which is the safe direction.
+      --
+      -- This migration only adds the column. SQLite has no fnv1aHash, so the
+      -- backfill for a pending or unreadable row that still holds its title
+      -- and body runs straight after migrations, in JS, in
+      -- backfillNotificationContentHashes() (database.ts) — the same place
+      -- syncBuiltInCategories() and syncDefaultRules() already run their own
+      -- post-migration fix-ups.
+      ALTER TABLE notification_captures ADD COLUMN content_hash TEXT;
+    `,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;

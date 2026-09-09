@@ -17,6 +17,15 @@ export interface NewCapture {
   body: string | null;
   androidKey: string | null;
   captureHash: string;
+  /**
+   * `contentHashOf({ packageName, title, body })` — a fingerprint of the text
+   * alone, with no post time mixed in. Written once here and never touched
+   * again, including by `setCaptureStatus`, so it survives the moment `title`
+   * and `body` are NULLed on settle. That is what lets `hasUnsettledCaptureFor`
+   * recognise a repost of an already-`accepted` capture with no text left to
+   * compare it against.
+   */
+  contentHash: string;
   status: CaptureStatus;
   parserId: string | null;
   parsed: ParsedMovement | null;
@@ -31,7 +40,8 @@ export interface NewCapture {
  * `StatusBarNotification` stamped with `System.currentTimeMillis()` every time
  * a notification is enqueued, updates included, so the same payment posted
  * twice hashes differently. `hasUnsettledCaptureFor` is what covers that case,
- * on Android's own notification key rather than on the post time.
+ * on Android's own notification key and `content_hash` rather than on the
+ * post time.
  *
  * @returns the new row's id, or null when it was a duplicate.
  */
@@ -41,8 +51,9 @@ export async function insertCapture(input: NewCapture): Promise<string | null> {
   const result = await db.runAsync(
     `INSERT OR IGNORE INTO notification_captures (
        id, source_id, package_name, posted_at, booking_date, title, body,
-       android_key, capture_hash, status, parser_id, parsed_json, transaction_id, created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?);`,
+       android_key, capture_hash, content_hash, status, parser_id, parsed_json,
+       transaction_id, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?);`,
     id,
     input.sourceId,
     input.packageName,
@@ -52,6 +63,7 @@ export async function insertCapture(input: NewCapture): Promise<string | null> {
     input.body,
     input.androidKey,
     input.captureHash,
+    input.contentHash,
     input.status,
     input.parserId,
     input.parsed === null ? null : JSON.stringify(input.parsed),
@@ -62,55 +74,51 @@ export async function insertCapture(input: NewCapture): Promise<string | null> {
 
 /**
  * Whether this notification is a repost of one already on record under the
- * same Android key.
+ * same Android key and the same content fingerprint.
  *
  * `sbn.key` is stable across a repost of the same notification; its post time
- * is not, so a repost hashes differently and `INSERT OR IGNORE` would
- * otherwise let it through as a second row — and, with `auto_approve` on, a
- * second provisional movement for one payment.
+ * is not, so a repost hashes differently in `capture_hash` and `INSERT OR
+ * IGNORE` would otherwise let it through as a second row — and, with
+ * `auto_approve` on, a second provisional movement for one payment.
  *
- * `pending` and `unreadable` rows still hold their text, so a repost of one of
- * those is recognised only when the title and body are identical too. A bank
- * genuinely re-wording a notification — "payment pending" becoming "payment
- * completed" — fails that comparison on purpose: it lands as a second,
- * distinct capture rather than being folded into the first, because treating
- * a re-worded notification as a repost risks silently absorbing a real second
- * payment into the old row.
+ * The caller passes `contentHashOf({ packageName, title, body })` — the same
+ * fingerprint `insertCapture` wrote into `content_hash` when the row was
+ * first created, computed from the notification's own text and never from
+ * anything that changes on a repost. Matching on it, rather than on `title`
+ * and `body` directly, is what makes `pending`, `unreadable` and `accepted`
+ * work alike: a `pending` or `unreadable` row still has its text, but an
+ * `accepted` row does not — `setCaptureStatus` NULLs it on settle, the
+ * retention promise — and `content_hash` is the one thing that survives that
+ * to be compared against. Without it, an accepted row could only be matched
+ * on `android_key` alone, and a repost arriving after accept would slip
+ * straight past into a duplicate provisional movement.
  *
- * `accepted` rows have already had their title, body and parsed_json nulled by
- * `setCaptureStatus` — the retention promise — so there is no text left to
- * compare. Matching on `android_key` alone is what stops a repost arriving
- * after accept from slipping past this check and writing the duplicate
- * provisional movement this function exists to prevent.
+ * The same fingerprint is what keeps that match safe rather than trading one
+ * silent failure for another: `android_key` alone names a notification slot,
+ * which a bank can legitimately reuse for a later, unrelated payment, but
+ * that payment's wording differs, so its content hash differs too, and it is
+ * never mistaken for a repost of the old one — status of the earlier row
+ * notwithstanding.
  *
- * `dismissed` stays out of the key-only match, and not by oversight:
- * `android_key` names a notification slot, which a bank can reuse for a later,
- * unrelated payment. Matching a dismissed row on the key alone would drop that
- * later capture without a trace — the ledger's worst failure. Letting a repost
- * of an already-dismissed notification come back as a new capture is the
- * safer direction: at most it resurfaces something the owner dismisses again,
- * and the real movement still arrives through the next statement import
- * either way.
- *
- * `IS` rather than `=` so a null title or body compares equal to itself, which
- * `=` in SQL never does.
+ * `dismissed` still stays out, by choice rather than by this necessity: a
+ * repost of a notification the owner already dismissed is let back in as a
+ * new capture rather than silently re-suppressed, since dismissing one
+ * notification's text is not evidence about whatever the same slot carries
+ * next, and the cost of letting it back in is only a capture the owner
+ * dismisses again.
  */
 export async function hasUnsettledCaptureFor(
   androidKey: string,
-  title: string | null,
-  body: string | null,
+  contentHash: string,
 ): Promise<boolean> {
   const db = await getDatabase();
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) AS count FROM notification_captures
       WHERE android_key = ?
-        AND (
-          status = 'accepted'
-          OR (status IN ('pending', 'unreadable') AND title IS ? AND body IS ?)
-        );`,
+        AND content_hash = ?
+        AND status IN ('pending', 'unreadable', 'accepted');`,
     androidKey,
-    title,
-    body,
+    contentHash,
   );
   return (row?.count ?? 0) > 0;
 }

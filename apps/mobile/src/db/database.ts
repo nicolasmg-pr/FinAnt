@@ -5,6 +5,7 @@ import {
   parseRetiredShippedRules,
   shippedRulesToInstall,
 } from '@finant/core';
+import { contentHashOf } from '@finant/importers';
 import NotificationCapture from '../../modules/notification-capture';
 import { destroyDatabaseKey, getOrCreateDatabaseKey } from '../security/keys';
 import { LATEST_VERSION, MIGRATIONS } from './schema';
@@ -32,6 +33,7 @@ async function open(): Promise<SQLite.SQLiteDatabase> {
   await migrate(db);
   await syncBuiltInCategories(db);
   await syncDefaultRules(db);
+  await backfillNotificationContentHashes(db);
   return db;
 }
 
@@ -174,6 +176,51 @@ async function syncDefaultRules(db: SQLite.SQLiteDatabase): Promise<void> {
         rule.priority,
         JSON.stringify(rule.match),
         now,
+      );
+    }
+  });
+}
+
+/**
+ * Fills in `content_hash` (migration 10) for capture rows that predate it and
+ * still hold their text.
+ *
+ * SQLite has no `fnv1aHash`, so migration 10 itself only adds the column;
+ * this runs the computation in JS immediately after, on every launch, the
+ * same way `syncBuiltInCategories` and `syncDefaultRules` fix up rows the raw
+ * SQL migration could not. It targets exactly the rows migration 10's own
+ * comment describes: a `pending` or `unreadable` capture had not been settled
+ * when this release arrived, so its `title`/`body` are still there to hash.
+ * An already-`accepted` or -`dismissed` row had its text NULLed under the old
+ * code before this column existed, so there is nothing left to fingerprint —
+ * it keeps `content_hash IS NULL`, which never matches in
+ * `hasUnsettledCaptureFor` and so never suppresses a later capture by
+ * mistake. That is a narrower gap than the one this migration closes: a
+ * handful of pre-existing settled captures losing repost protection, once,
+ * rather than guessing at a hash for text that is already gone.
+ *
+ * Idempotent and cheap on every subsequent launch: once a row is backfilled,
+ * or was written after this migration and already carries its hash, the
+ * `WHERE` clause matches nothing.
+ */
+async function backfillNotificationContentHashes(db: SQLite.SQLiteDatabase): Promise<void> {
+  const rows = await db.getAllAsync<{
+    id: string;
+    package_name: string;
+    title: string | null;
+    body: string | null;
+  }>(
+    `SELECT id, package_name, title, body FROM notification_captures
+      WHERE content_hash IS NULL AND (title IS NOT NULL OR body IS NOT NULL);`,
+  );
+  if (rows.length === 0) return;
+
+  await db.withTransactionAsync(async () => {
+    for (const row of rows) {
+      await db.runAsync(
+        'UPDATE notification_captures SET content_hash = ? WHERE id = ?;',
+        contentHashOf({ packageName: row.package_name, title: row.title, body: row.body }),
+        row.id,
       );
     }
   });

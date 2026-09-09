@@ -1,5 +1,6 @@
 import {
   captureHashOf,
+  contentHashOf,
   localCalendarDay,
   parseNotification,
   type DraftTransaction,
@@ -41,11 +42,11 @@ export interface RawCapture {
  *
  * Four other exits besides the plain write: a notification from a disabled
  * source is dropped before anything is read; a repost — Android's own key
- * already on a row with matching text (`pending`, `unreadable`), or on an
- * `accepted` row regardless of text — is dropped before the insert; a
- * duplicate (same hash already stored) is dropped after the `INSERT OR
- * IGNORE` reports no row; and a `movement` verdict on a source with
- * `autoApprove` set goes straight on into `acceptCapture`.
+ * together with the same content fingerprint, already on a `pending`,
+ * `unreadable` or `accepted` row — is dropped before the insert; a duplicate
+ * (same hash already stored) is dropped after the `INSERT OR IGNORE` reports
+ * no row; and a `movement` verdict on a source with `autoApprove` set goes
+ * straight on into `acceptCapture`.
  *
  * Never logs any part of the notification.
  */
@@ -55,19 +56,28 @@ export async function recordCapture(raw: RawCapture): Promise<void> {
   // owner disabled between the two can still reach here. The database decides.
   if (!source || !source.enabled) return;
 
-  // Android reposts the same notification — enqueued again, or its text
-  // updated in place — under a fresh StatusBarNotification stamped with the
-  // current time, so the capture hash below cannot see it; `sbn.key` can.
+  // contentHashOf ignores post time entirely, unlike captureHash below, which
+  // is exactly what a repost changes and what captureHash cannot see past.
+  // Computed here, before anything is written, and passed to
+  // hasUnsettledCaptureFor rather than the raw title/body: an `accepted` row
+  // has already had its own title and body NULLed by setCaptureStatus, so the
+  // stored content_hash is the only thing left to compare a repost against.
+  const contentHash = contentHashOf({
+    packageName: raw.packageName,
+    title: raw.title,
+    body: raw.body,
+  });
+
   // Checked before anything is written, because with `autoApprove` on the
-  // insert is one step from a duplicate movement. A genuinely re-worded
-  // notification ("payment pending" becoming "payment completed") is *not*
-  // caught here: it lands as a second, distinct capture on purpose, because
-  // folding it into the old one risks silently absorbing a real second
-  // payment that happens to reuse the same notification slot.
-  if (
-    raw.androidKey !== null &&
-    (await hasUnsettledCaptureFor(raw.androidKey, raw.title, raw.body))
-  )
+  // insert is one step from a duplicate movement. `pending`, `unreadable` and
+  // `accepted` rows all match the same way — same key, same content hash —
+  // which is also what keeps the match safe: a bank reusing this notification
+  // slot for a later, unrelated payment writes different wording, so a
+  // different content hash, so it is never mistaken for a repost regardless
+  // of the earlier row's status. A genuinely re-worded notification ("payment
+  // pending" becoming "payment completed") differs the same way and lands as
+  // a second, distinct capture on purpose.
+  if (raw.androidKey !== null && (await hasUnsettledCaptureFor(raw.androidKey, contentHash)))
     return;
 
   const postedAt = new Date(raw.postedAtMillis);
@@ -103,6 +113,7 @@ export async function recordCapture(raw: RawCapture): Promise<void> {
     body: parsed.kind === 'ignored' ? null : raw.body,
     androidKey: raw.androidKey,
     captureHash,
+    contentHash,
     status:
       parsed.kind === 'movement'
         ? 'pending'
