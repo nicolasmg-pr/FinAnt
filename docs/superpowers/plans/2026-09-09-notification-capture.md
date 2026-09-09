@@ -530,7 +530,7 @@ export * from './provisional';
 - [ ] **Step 13: Run the tests**
 
 Run: `npx vitest run packages/core/tests/provisional.test.ts`
-Expected: PASS, all 16 tests.
+Expected: PASS, all 15 tests.
 
 If `daysBetween` returns a negative number in the stale test, check its argument order in `packages/core/src/dates.ts` and fix the call, not the test.
 
@@ -652,8 +652,15 @@ describe('parseNotification', () => {
 });
 
 describe('captureHashOf', () => {
-  it('is stable for the same notification', () => {
-    expect(captureHashOf(capture)).toBe(captureHashOf({ ...capture, bookingDate: '2026-03-11' }));
+  it('ignores the booking date, which is derived from the post time', () => {
+    // Assigned to a typed variable first: passing the object literal inline
+    // trips TypeScript's excess-property check, because captureHashOf's
+    // parameter type deliberately has no bookingDate.
+    const sameNotificationLaterDay: CapturedNotification = {
+      ...capture,
+      bookingDate: '2026-03-11',
+    };
+    expect(captureHashOf(capture)).toBe(captureHashOf(sameNotificationLaterDay));
   });
 
   it('differs when the text differs', () => {
@@ -763,11 +770,18 @@ export function captureHashOf(input: {
   readonly body: string | null;
   readonly postedAtMillis: number;
 }): string {
-  return fnv1aHash(
-    [input.packageName, String(input.postedAtMillis), input.title ?? '', input.body ?? ''].join(
-      '|',
-    ),
-  );
+  // Each field is length-prefixed before joining. The delimiter can legitimately
+  // appear inside a notification's text, and an unprefixed join lets two
+  // different notifications produce one payload — title "A" with body "B|C"
+  // against title "A|B" with body "C" — which in a dedupe key silently drops
+  // one of two real movements.
+  const fields = [
+    input.packageName,
+    String(input.postedAtMillis),
+    input.title ?? '',
+    input.body ?? '',
+  ];
+  return fnv1aHash(fields.map((field) => `${field.length}:${field}`).join('|'));
 }
 
 /**
@@ -941,6 +955,19 @@ describe('resolveRoute', () => {
     expect(result?.accountId).toBe('acc-gold');
   });
 
+  it('lets a matching discriminator outrank a fallback whatever the priorities say', () => {
+    // Guards a specific regression: merging the two `best()` phases into one
+    // pass over all routes would send every notification to the fallback
+    // whenever the fallback carried the higher priority number, and every
+    // other test here would still pass.
+    const eagerFallback: NotificationRoute = { ...giro, priority: 500 };
+    const result = resolveRoute({ text: 'Visa payment', amountMinor: -1234 }, [
+      visa,
+      eagerFallback,
+    ]);
+    expect(result).toEqual({ accountId: 'acc-visa', routeId: 'r-visa', viaFallback: false });
+  });
+
   it('breaks a priority tie on route id, so two runs agree', () => {
     const other: NotificationRoute = { ...visa, id: 'r-aaa', accountId: 'acc-other' };
     const result = resolveRoute({ text: 'Visa payment', amountMinor: -1234 }, [visa, other]);
@@ -1070,7 +1097,7 @@ export * from './notification-routing';
 - [ ] **Step 5: Run the tests**
 
 Run: `npx vitest run packages/core/tests/notification-routing.test.ts`
-Expected: PASS, all 8 tests.
+Expected: PASS, all 9 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -1097,7 +1124,7 @@ git commit -m "feat(core): one bank app can notify about several accounts, so ro
 - Consumes: `Transaction`, `NotificationRoute` from `@finant/core` (Tasks 1, 3).
 - Produces:
   - `listNotificationSources()`, `getNotificationSourceByPackage(packageName)`, `createNotificationSource(input)`, `updateNotificationSource(id, patch)`, `deleteNotificationSource(id)`, `listNotificationRoutes(sourceId)`, `createNotificationRoute(input)`, `deleteNotificationRoute(id)`, `allowedPackageNames()`
-  - `insertCapture(input)`, `listCaptures(statuses)`, `countOpenCaptures()`, `setCaptureStatus(id, status, transactionId)`, `redactCaptureText(id)`, `deleteAllCaptures()`
+  - `insertCapture(input)`, `listCaptures(statuses)`, `getCapture(id)`, `countOpenCaptures()`, `setCaptureStatus(id, status, transactionId)`, `repointCapture(provisionalTransactionId, bookedTransactionId)`, `deleteAllCaptures()`
   - `findTransactionByHash(accountId, importHash)`, `listProvisionalTransactions()`, `supersedeProvisionals(matches)`, `latestBookedDateByAccount()`
   - `NotificationSource`, `NotificationCapture`, `CaptureStatus`
 
@@ -1754,11 +1781,11 @@ export async function reconcileProvisionals(): Promise<number> {
   const { matches } = matchProvisionals(provisionals, candidates);
   if (matches.length === 0) return 0;
 
-  const superseded = await supersedeProvisionals(matches);
-  for (const match of matches) {
-    await repointCapture(match.provisionalId, match.bookedId);
-  }
-  return superseded;
+  // supersedeProvisionals also repoints the capture, in the same transaction:
+  // the two rows describe one fact — that this statement row booked what the
+  // notification announced — and a partial commit would leave a capture
+  // pointing at a movement that no longer exists, with nothing to retry it.
+  return supersedeProvisionals(matches);
 }
 ```
 
@@ -1823,7 +1850,19 @@ Replace the tail of the function:
   // Reconciliation runs before transfer detection: a provisional and the
   // statement row that books it must not be paired with each other, and the
   // provisional has to be retired before the matcher sees the ledger.
-  const superseded = inserted > 0 && !options.provisional ? await reconcileProvisionals() : 0;
+  // A statement's rows are durably inserted by this point, and reconciliation
+  // is atomic per pair — so a failure here leaves the provisionals live and the
+  // next import retries them. Failing the whole import over it would tell the
+  // owner nothing was saved when almost everything was, and this codebase does
+  // not throw away an import over one bad row.
+  let superseded = 0;
+  if (inserted > 0 && !options.provisional) {
+    try {
+      superseded = await reconcileProvisionals();
+    } catch {
+      superseded = 0;
+    }
+  }
 
   // Only a new row can complete a pair; a file full of duplicates changes nothing.
   const transfersMatched = inserted > 0 ? await detectTransfers() : 0;
