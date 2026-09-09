@@ -3,6 +3,7 @@ import type { DraftTransaction } from '@finant/importers';
 import { listExclusionRules } from '../db/exclusion-rules-repo';
 import { listRules } from '../db/rules-repo';
 import { insertTransactions, type NewTransaction } from '../db/transactions-repo';
+import { reconcileProvisionals } from './reconcile';
 import { detectTransfers } from './transfers';
 
 export interface IngestResult {
@@ -14,6 +15,16 @@ export interface IngestResult {
   readonly transfersMatched: number;
   /** Rows an exclusion rule kept out of the statistics on arrival. */
   readonly autoExcluded: number;
+  /** Provisional movements a statement row in this import replaced. */
+  readonly superseded: number;
+}
+
+export interface IngestOptions {
+  /**
+   * Marks every row in this batch as provisional: its only evidence is a push
+   * notification. Statement imports and manual entries never set it.
+   */
+  readonly provisional?: boolean;
 }
 
 /**
@@ -29,7 +40,10 @@ export interface IngestResult {
  * already excluded by name must not spend a month inside the totals just
  * because it arrived again in a newer statement.
  */
-export async function ingest(drafts: readonly DraftTransaction[]): Promise<IngestResult> {
+export async function ingest(
+  drafts: readonly DraftTransaction[],
+  options: IngestOptions = {},
+): Promise<IngestResult> {
   const rules = await listRules();
   const exclusions = await listExclusionRules();
   let autoCategorised = 0;
@@ -70,13 +84,28 @@ export async function ingest(drafts: readonly DraftTransaction[]): Promise<Inges
       importHash: draft.importHash,
       notes: draft.notes,
       excludedFromStats,
+      provisional: options.provisional ?? false,
     };
   });
 
   // Counted from what was actually written, not from what was offered: a
   // re-imported statement must not report the same exclusions a second time.
   const { inserted, duplicates, excluded: autoExcluded } = await insertTransactions(batch);
+
+  // Reconciliation runs before transfer detection: a provisional and the
+  // statement row that books it must not be paired with each other, and the
+  // provisional has to be retired before the matcher sees the ledger.
+  const superseded = inserted > 0 && !options.provisional ? await reconcileProvisionals() : 0;
+
   // Only a new row can complete a pair; a file full of duplicates changes nothing.
   const transfersMatched = inserted > 0 ? await detectTransfers() : 0;
-  return { inserted, duplicates, autoCategorised, uncategorised, transfersMatched, autoExcluded };
+  return {
+    inserted,
+    duplicates,
+    autoCategorised,
+    uncategorised,
+    transfersMatched,
+    autoExcluded,
+    superseded,
+  };
 }
