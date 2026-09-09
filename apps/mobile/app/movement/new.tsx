@@ -240,7 +240,12 @@ export default function NewMovementScreen() {
         // trusted over the rule engine, exactly as a category that came with a
         // file is; leaving it unset lets the rules decide.
         suggestedCategoryId: categoryId,
-        source: 'manual',
+        // Where the movement came from, not who typed it: editing the amount
+        // on the way through does not change that a push notification is
+        // where this one originated. Manual classification is a separate
+        // axis, already recorded by `categorySource` above.
+        source: captureId === null ? 'manual' : 'notification',
+        // Push text never carries a bank transaction id, edited or not.
         externalId: null,
         // Two identical coffees on the same day are two movements, so a
         // from-scratch entry gets a discriminator no other row can repeat.
