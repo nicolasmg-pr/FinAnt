@@ -37,6 +37,7 @@ import {
 import { useAppData } from '../../src/hooks/use-app-data';
 import { intlLocale } from '../../src/i18n';
 import { Button } from '../../src/components/ui/Button';
+import { Empty } from '../../src/components/ui/Empty';
 import { ListRow } from '../../src/components/ui/ListRow';
 import { Touchable } from '../../src/components/ui/Touchable';
 import { spacing, type, useTheme } from '../../src/design';
@@ -417,7 +418,7 @@ export default function BanksScreen() {
 
         {banks.length === 0 && unassigned.length === 0 ? (
           <Card>
-            <Text style={[type.body, { color: theme.textMuted }]}>{t('banks.empty')}</Text>
+            <Empty message={t('banks.empty')} />
           </Card>
         ) : null}
 

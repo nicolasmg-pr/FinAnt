@@ -27,6 +27,7 @@ import { parseAmount } from '@finant/importers';
 import { Amount } from '../../src/components/Amount';
 import { Chip } from '../../src/components/Chip';
 import { Button } from '../../src/components/ui/Button';
+import { Empty } from '../../src/components/ui/Empty';
 import { Field } from '../../src/components/ui/Field';
 import { ListRow } from '../../src/components/ui/ListRow';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
@@ -139,9 +140,9 @@ export default function TransactionsScreen() {
           />
         }
         ListEmptyComponent={
-          <Text style={[type.body, styles.empty, { color: theme.textMuted }]}>
-            {activeCount > 0 ? t('transactions.filters.noMatch') : t('transactions.empty')}
-          </Text>
+          <Empty
+            message={activeCount > 0 ? t('transactions.filters.noMatch') : t('transactions.empty')}
+          />
         }
         renderItem={({ item, index }) => (
           <Row
@@ -577,5 +578,4 @@ const styles = StyleSheet.create({
   banner: { padding: spacing.md, borderRadius: radius.md },
   list: { padding: spacing.lg },
   dot: { width: 10, height: 10, borderRadius: radius.pill },
-  empty: { textAlign: 'center', marginTop: spacing.xxl },
 });
