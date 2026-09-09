@@ -133,6 +133,26 @@ export async function acceptCapture(captureId: string): Promise<string | null> {
   return written?.id ?? null;
 }
 
+/**
+ * Accepts a capture the owner edited before saving.
+ *
+ * Same contract as `acceptCapture`, but the draft comes from the movement
+ * form rather than from the parser: the owner may have corrected the amount,
+ * the date or the account. The movement is still provisional — editing what a
+ * notification said is not the bank booking it — and the capture is still
+ * settled against the row that was written, so it cannot be accepted twice.
+ */
+export async function acceptEditedCapture(
+  captureId: string,
+  draft: DraftTransaction,
+): Promise<string | null> {
+  await ingest([draft], { provisional: true });
+
+  const written = await findTransactionByHash(draft.accountId, draft.importHash);
+  await setCaptureStatus(captureId, 'accepted', written?.id ?? null);
+  return written?.id ?? null;
+}
+
 export async function dismissCapture(captureId: string): Promise<void> {
   await setCaptureStatus(captureId, 'dismissed', null);
 }

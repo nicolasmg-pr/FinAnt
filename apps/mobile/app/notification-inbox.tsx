@@ -42,7 +42,7 @@ function resolveCaptureRoute(
 export default function NotificationInboxScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { captures, provisionals, stale, reload } = useCaptureInbox();
+  const { captures, provisionals, stale, loading, reload } = useCaptureInbox();
 
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [routesBySource, setRoutesBySource] = useState<
@@ -53,6 +53,9 @@ export default function NotificationInboxScreen() {
   // resolution below because that call is the one source of truth for whether
   // a route exists — this only records that it, specifically, just failed.
   const [failedIds, setFailedIds] = useState<ReadonlySet<string>>(new Set());
+  // What accept or dismiss failed with, per capture. Never carries a
+  // notification's own text — only `(cause as Error).message`.
+  const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
 
   useFocusEffect(
     useCallback(() => {
@@ -102,9 +105,17 @@ export default function NotificationInboxScreen() {
   const accountName = (accountId: string): string | null =>
     accounts.find((account) => account.id === accountId)?.name ?? null;
 
+  const clearError = (captureId: string) =>
+    setErrors((current) => {
+      if (!(captureId in current)) return current;
+      const { [captureId]: _removed, ...rest } = current;
+      return rest;
+    });
+
   const accept = async (captureId: string) => {
     if (busyId) return;
     setBusyId(captureId);
+    clearError(captureId);
     try {
       const movementId = await acceptCapture(captureId);
       if (movementId === null) {
@@ -118,6 +129,8 @@ export default function NotificationInboxScreen() {
         return next;
       });
       await reload();
+    } catch (cause) {
+      setErrors((current) => ({ ...current, [captureId]: (cause as Error).message }));
     } finally {
       setBusyId(null);
     }
@@ -126,15 +139,19 @@ export default function NotificationInboxScreen() {
   const dismiss = async (captureId: string) => {
     if (busyId) return;
     setBusyId(captureId);
+    clearError(captureId);
     try {
       await dismissCapture(captureId);
       await reload();
+    } catch (cause) {
+      setErrors((current) => ({ ...current, [captureId]: (cause as Error).message }));
     } finally {
       setBusyId(null);
     }
   };
 
-  const empty = pending.length === 0 && unreadable.length === 0 && staleRows.length === 0;
+  const empty =
+    !loading && pending.length === 0 && unreadable.length === 0 && staleRows.length === 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -155,6 +172,7 @@ export default function NotificationInboxScreen() {
                   viaFallback={resolution?.viaFallback ?? false}
                   showNoRoute={resolution === null || failedIds.has(capture.id)}
                   busy={busyId === capture.id}
+                  error={errors[capture.id] ?? null}
                   onAccept={() => void accept(capture.id)}
                   onDismiss={() => void dismiss(capture.id)}
                 />
@@ -171,6 +189,7 @@ export default function NotificationInboxScreen() {
                 key={capture.id}
                 capture={capture}
                 busy={busyId === capture.id}
+                error={errors[capture.id] ?? null}
                 onDismiss={() => void dismiss(capture.id)}
               />
             ))}
@@ -202,6 +221,7 @@ function PendingCard({
   viaFallback,
   showNoRoute,
   busy,
+  error,
   onAccept,
   onDismiss,
 }: {
@@ -210,6 +230,7 @@ function PendingCard({
   viaFallback: boolean;
   showNoRoute: boolean;
   busy: boolean;
+  error: string | null;
   onAccept: () => void;
   onDismiss: () => void;
 }) {
@@ -225,6 +246,11 @@ function PendingCard({
     router.push({
       pathname: '/movement/new',
       params: {
+        // Threaded through so the save on that screen can settle this same
+        // capture (`acceptEditedCapture`) instead of leaving it pending
+        // forever, or worse, letting the owner accept it a second time.
+        captureId: capture.id,
+        captureHash: capture.captureHash,
         side: movement.side,
         amountMinor: String(movement.amountMinor),
         currency: movement.currency,
@@ -268,6 +294,8 @@ function PendingCard({
         </View>
       ) : null}
 
+      {error ? <Text style={[type.body, { color: theme.expense }]}>{error}</Text> : null}
+
       <View style={styles.actions}>
         <Button label={t('notifications.accept')} loading={busy} onPress={onAccept} />
         <Button
@@ -295,10 +323,12 @@ function PendingCard({
 function UnreadableCard({
   capture,
   busy,
+  error,
   onDismiss,
 }: {
   capture: NotificationCapture;
   busy: boolean;
+  error: string | null;
   onDismiss: () => void;
 }) {
   const theme = useTheme();
@@ -313,6 +343,7 @@ function UnreadableCard({
       <Text style={[type.caption, { color: theme.textMuted }]}>
         {t('notifications.unreadableExplainer')}
       </Text>
+      {error ? <Text style={[type.body, { color: theme.expense }]}>{error}</Text> : null}
       <Button
         label={t('notifications.dismiss')}
         variant="danger"

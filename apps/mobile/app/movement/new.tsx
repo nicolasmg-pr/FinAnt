@@ -39,6 +39,7 @@ import { readSetting, SETTING_LAST_IMPORT_ACCOUNT } from '../../src/db/settings-
 import { newId } from '../../src/db/transactions-repo';
 import { useCategories } from '../../src/hooks/use-categories';
 import { useCategoryLabel } from '../../src/hooks/use-category-label';
+import { acceptEditedCapture } from '../../src/notifications/capture-service';
 import { ingest } from '../../src/services/ingest';
 import { spacing, type, useTheme } from '../../src/design';
 
@@ -72,8 +73,15 @@ function today(): string {
  * whose account or wording needs a correction before it becomes a movement.
  * Absent for the ordinary "add a movement" entry point, where every field
  * below keeps its plain default.
+ *
+ * `captureId` and `captureHash` travel together: saving with a `captureId`
+ * present settles that capture through `acceptEditedCapture` instead of the
+ * plain `ingest()` a from-scratch entry goes through, so the capture is never
+ * left pending forever, nor accepted a second time from the inbox afterwards.
  */
 type CaptureParams = {
+  captureId?: string;
+  captureHash?: string;
   side?: string;
   amountMinor?: string;
   currency?: string;
@@ -106,6 +114,8 @@ export default function NewMovementScreen() {
   const hasPrefill = Number.isSafeInteger(prefillAmountMinor);
   const prefillSide: TransactionSide = params.side === 'income' ? 'income' : 'expense';
   const prefillCurrency = typeof params.currency === 'string' ? params.currency : 'EUR';
+  const captureId = typeof params.captureId === 'string' ? params.captureId : null;
+  const captureHash = typeof params.captureHash === 'string' ? params.captureHash : null;
 
   const [institutions, setInstitutions] = useState<InstitutionRow[]>([]);
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
@@ -232,20 +242,33 @@ export default function NewMovementScreen() {
         suggestedCategoryId: categoryId,
         source: 'manual',
         externalId: null,
-        // Two identical coffees on the same day are two movements. A manual
-        // entry is a deliberate act, so it gets a discriminator no other row
-        // can repeat rather than being swallowed as a duplicate of the first.
+        // Two identical coffees on the same day are two movements, so a
+        // from-scratch entry gets a discriminator no other row can repeat.
+        // Editing a capture keeps that capture's own hash instead: it is the
+        // same notification `acceptCapture` would otherwise have used to
+        // build this exact hash, so an edit that changes nothing lands the
+        // identical row a plain accept would have, and a repost of the same
+        // notification still cannot land twice.
         importHash: importHashOf({
           accountId: current.accountId,
           bookingDate: dateText,
           amountMinor: signed.minor,
           description: text,
-          discriminator: newId(),
+          discriminator: captureHash ?? newId(),
         }),
         notes: notes.trim() || null,
       };
 
-      await ingest([draft]);
+      // A row born from a notification is provisional until a statement
+      // books it, whether the owner accepted the parse as-is or corrected it
+      // here first — editing what a notification said is not the bank
+      // booking it. `acceptEditedCapture` also settles the capture itself, so
+      // it cannot be accepted a second time from the inbox.
+      if (captureId) {
+        await acceptEditedCapture(captureId, draft);
+      } else {
+        await ingest([draft]);
+      }
       router.back();
     } catch (cause) {
       setError((cause as Error).message);
