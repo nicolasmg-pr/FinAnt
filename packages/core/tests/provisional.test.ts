@@ -116,6 +116,22 @@ describe('matchProvisionals', () => {
     expect(a.matches).toEqual(c.matches);
     expect(a.matches).toEqual([{ provisionalId: 'p2', bookedId: 'b1' }]);
   });
+
+  it('lets a later unique match consume a provisional an earlier tie left ambiguous', () => {
+    // b1 sits one day from both p1 and p2, so it ties and marks both
+    // ambiguous without consuming either. b2 then matches p2 exactly
+    // (dayDelta 0) while p1 is two days off, so b2 uniquely consumes p2. A
+    // provisional flagged ambiguous for one booked row can still be
+    // legitimately consumed by another, and the final ambiguous list must not
+    // report a provisional a later iteration went on to consume.
+    const p1 = provisional({ id: 'p1', date: '2026-03-10', amount: -20, description: 'CAFE' });
+    const p2 = provisional({ id: 'p2', date: '2026-03-12', amount: -20, description: 'CAFE' });
+    const b1 = tx({ id: 'b1', date: '2026-03-11', amount: -20, description: 'CAFE' });
+    const b2 = tx({ id: 'b2', date: '2026-03-12', amount: -20, description: 'CAFE' });
+    const result = matchProvisionals([p1, p2], [b1, b2]);
+    expect(result.matches).toEqual([{ provisionalId: 'p2', bookedId: 'b2' }]);
+    expect(result.ambiguous).toEqual(['p1']);
+  });
 });
 
 describe('staleProvisionals', () => {
