@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Feather from '@expo/vector-icons/Feather';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
@@ -21,6 +21,7 @@ import {
   type StatementAccount,
 } from '@finant/importers';
 import { AccountPicker } from '../src/components/AccountPicker';
+import { Ant } from '../src/components/mascot/Ant';
 import { Button } from '../src/components/ui/Button';
 import { ListRow } from '../src/components/ui/ListRow';
 import { StatTile } from '../src/components/ui/StatTile';
@@ -42,7 +43,7 @@ import {
 } from '../src/db/institutions-repo';
 import { readSetting, SETTING_LAST_IMPORT_ACCOUNT, writeSetting } from '../src/db/settings-repo';
 import { ingest, type IngestResult } from '../src/services/ingest';
-import { radius, spacing, type, useTheme } from '../src/design';
+import { radius, spacing, type, useMotion, useTheme } from '../src/design';
 
 /**
  * A picked file once its format is known, but before its rows are final. The
@@ -165,6 +166,28 @@ async function preselect(
     // A statement that names its bank gives both name fields a sensible default.
     suggestedName: file.statementAccount?.name ?? '',
   });
+}
+
+/**
+ * The ant walks while a statement parses. `import.tsx` tracks a single `busy`
+ * boolean, not a progress fraction, so this is a loop rather than a bar: it says
+ * work is happening, and claims nothing about how much is left.
+ *
+ * Under reduce-motion the frame never advances and the ant simply stands with
+ * its coin, because a looping animation is exactly what that setting is asking
+ * us not to do.
+ */
+function WalkingAnt({ busy }: { busy: boolean }) {
+  const motion = useMotion();
+  const [frame, setFrame] = useState(0);
+
+  useEffect(() => {
+    if (!busy || !motion.enabled) return;
+    const timer = setInterval(() => setFrame((f) => f + 1), 180);
+    return () => clearInterval(timer);
+  }, [busy, motion.enabled]);
+
+  return <Ant pose={busy && motion.enabled ? 'walk' : 'carrying'} frame={frame} size={72} />;
 }
 
 /**
@@ -401,6 +424,10 @@ export default function ImportScreen() {
               />
             ))}
 
+            <View style={styles.antRow}>
+              <WalkingAnt busy={busy} />
+            </View>
+
             <Button
               label={t('import.confirm')}
               loading={busy}
@@ -440,6 +467,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   centred: { textAlign: 'center' },
+  // Centres the ant horizontally; `centred` above is `textAlign` for `Text` and
+  // has no effect on a `View`'s layout.
+  antRow: { alignItems: 'center' },
   error: { marginBottom: spacing.lg },
   tiles: { flexDirection: 'row', gap: spacing.sm },
 });
