@@ -1,10 +1,11 @@
 package expo.modules.notificationcapture
 
 import android.app.Notification
+import android.content.Context
 import android.os.Bundle
+import android.os.PowerManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import com.facebook.react.HeadlessJsTaskService
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactInstanceEventListener
 import com.facebook.react.bridge.Arguments
@@ -69,7 +70,7 @@ class FinAntNotificationListenerService : NotificationListenerService() {
      * system bound this listener.
      */
     private fun startCaptureTask(data: WritableMap) {
-        HeadlessJsTaskService.acquireWakeLockNow(this)
+        acquireBoundedWakeLock()
 
         val reactHost = (application as? ReactApplication)?.reactHost ?: return
         val config = HeadlessJsTaskConfig(
@@ -83,21 +84,48 @@ class FinAntNotificationListenerService : NotificationListenerService() {
         )
 
         UiThreadUtil.runOnUiThread {
-            val current = reactHost.currentReactContext
-            if (current != null) {
-                HeadlessJsTaskContext.getInstance(current).startTask(config)
-                return@runOnUiThread
+            // Anything thrown here crashes the whole app rather than dropping
+            // one capture. A crash every time a payment notification lands is
+            // far worse than one missing provisional movement, so swallow it —
+            // there is nothing to log but the notification.
+            try {
+                val current = reactHost.currentReactContext
+                if (current != null) {
+                    HeadlessJsTaskContext.getInstance(current).startTask(config)
+                    return@runOnUiThread
+                }
+                reactHost.addReactInstanceEventListener(
+                    object : ReactInstanceEventListener {
+                        override fun onReactContextInitialized(context: ReactContext) {
+                            HeadlessJsTaskContext.getInstance(context).startTask(config)
+                            reactHost.removeReactInstanceEventListener(this)
+                        }
+                    },
+                )
+                reactHost.start()
+            } catch (throwable: Throwable) {
+                // Swallowed on purpose: see the comment above.
             }
-            reactHost.addReactInstanceEventListener(
-                object : ReactInstanceEventListener {
-                    override fun onReactContextInitialized(context: ReactContext) {
-                        HeadlessJsTaskContext.getInstance(context).startTask(config)
-                        reactHost.removeReactInstanceEventListener(this)
-                    }
-                },
-            )
-            reactHost.start()
         }
+    }
+
+    /**
+     * Our own lock, with a timeout, rather than
+     * HeadlessJsTaskService.acquireWakeLockNow: that one is untimed and is
+     * released only by HeadlessJsTaskService.onDestroy, which this app never
+     * runs — this class extends NotificationListenerService. Acquired with the
+     * task's own timeout, it releases itself even if the JS hop never finishes,
+     * so a notification cannot leave the CPU pinned awake.
+     *
+     * Keeping a lock at all is deliberate: without one the device can suspend
+     * before the headless task finishes its database write, and the capture is
+     * lost silently.
+     */
+    private fun acquireBoundedWakeLock() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+        powerManager
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FinAnt:notification-capture")
+            .acquire(TASK_TIMEOUT_MS)
     }
 
     companion object {

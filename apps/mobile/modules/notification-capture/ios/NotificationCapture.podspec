@@ -4,8 +4,7 @@ Pod::Spec.new do |s|
   s.summary        = 'FinAnt notification capture (Android-only, iOS stub).'
   s.description    = 'iOS stub of the FinAnt notification capture module. iOS has no API for reading other apps notifications; the real implementation is Android-only.'
   s.license        = 'UNLICENSED'
-  s.author         = ''
-  s.homepage       = 'https://github.com/finant/finant'
+  s.author         = 'Nicolas Mendez'
   s.platforms      = {
     :ios => '16.4',
   }

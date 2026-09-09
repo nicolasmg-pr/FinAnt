@@ -46,16 +46,25 @@ internal object CaptureAllowlist {
      * holding QUERY_ALL_PACKAGES and without anyone guessing a package id.
      */
     fun learn(context: Context, packageName: String) {
-        val store = prefs(context)
-        val seen = store.getStringSet(KEY_LEARNED, emptySet()) ?: emptySet()
-        if (packageName in seen) return
-        store.edit().putStringSet(KEY_LEARNED, seen + packageName).apply()
+        // Synchronized against consumeLearned: it runs on the listener's main
+        // thread while consumeLearned runs on the Expo function thread, and
+        // both do a read-modify-write on KEY_LEARNED. Without this, a learn()
+        // straddling a consumeLearned() could resurrect a cleared name or lose
+        // its own.
+        synchronized(CaptureAllowlist) {
+            val store = prefs(context)
+            val seen = store.getStringSet(KEY_LEARNED, emptySet()) ?: emptySet()
+            if (packageName in seen) return
+            store.edit().putStringSet(KEY_LEARNED, seen + packageName).apply()
+        }
     }
 
     fun consumeLearned(context: Context): List<String> {
-        val store = prefs(context)
-        val seen = (store.getStringSet(KEY_LEARNED, emptySet()) ?: emptySet()).sorted()
-        store.edit().putStringSet(KEY_LEARNED, emptySet()).putLong(KEY_LEARNING_UNTIL, 0L).apply()
-        return seen
+        synchronized(CaptureAllowlist) {
+            val store = prefs(context)
+            val seen = (store.getStringSet(KEY_LEARNED, emptySet()) ?: emptySet()).sorted()
+            store.edit().putStringSet(KEY_LEARNED, emptySet()).putLong(KEY_LEARNING_UNTIL, 0L).apply()
+            return seen
+        }
     }
 }
