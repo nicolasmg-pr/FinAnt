@@ -24,6 +24,9 @@ cannot see.
 There is no FinAnt account, no server, and no cloud copy. Erasing the app erases
 the data, and so does Settings > Erase all data: it deletes the database file and
 then the key, rather than deleting rows and leaving them in the file's free pages.
+It also empties the notification allowlist and anything learning mode collected,
+because those live outside the database — a total erase that left a preferences
+file behind still naming the owner's banks would not be one.
 
 The database refuses to open at all on a build without SQLCipher. Plain SQLite
 ignores an unknown `PRAGMA key` silently, which would write every movement in
@@ -76,15 +79,25 @@ source.
 Learning mode — "find my bank apps" — works the same way: while it is armed,
 the service records the package name only, never a title, a text or a post
 time, of every notification it sees, into the same preferences, and the flag
-expires by a timestamp the native code checks on every notification. Nothing
-it collects survives past the owner picking a name off the resulting list.
+expires by a timestamp the native code checks on every notification. What it
+collects is thrown away as soon as the owner has picked from the resulting
+list — and if the app never gets that far, because the process was killed
+during the window, the same expiry check clears it on the first notification
+the service sees afterwards. Either way the list cannot outlive the run that
+made it, and "Erase all data" clears it too.
 
 An allowlisted notification's title and body are written into
 `notification_captures`, inside SQLCipher, alongside everything else in the
 ledger. That text is set to NULL the moment the capture is settled — accepted,
 dismissed, or recognised by a parser as `ignored` (a bank's marketing push or
-a login alert) — leaving a hash-only tombstone so Android reposting the same
-notification cannot create a second row. A capture the parsers could not read
+a login alert) — leaving a hash-only tombstone so a byte-identical
+re-delivery cannot create a second row. That hash is not enough on its own:
+Android stamps a repost with a fresh post time, so a bank turning "payment
+pending" into "payment completed" hashes differently. A repost is caught by
+Android's own notification key instead, against the unsettled captures already
+holding the same text, and a notification carrying `FLAG_GROUP_SUMMARY` is
+dropped in the listener — a summary repeats its children, and reading it would
+capture one payment twice. A capture the parsers could not read
 keeps its text until the owner dismisses it, because that text is the only
 report of what went wrong.
 

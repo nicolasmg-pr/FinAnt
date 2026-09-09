@@ -57,8 +57,9 @@ only gives a signed amount uses `sideFromAmount()`.
   uses, with at most one nullable fallback route per source.
 - `notification_captures` (migration 9) — the inbox: one row per notification
   read from an allowed source, from first sight through parsing to acceptance
-  or dismissal, deduplicated by a hash of its own text and post time. See
-  Migration 9 below.
+  or dismissal. Deduplicated twice: a hash of its own text and post time
+  catches a byte-identical re-delivery, and Android's own notification key
+  catches a repost, whose post time is a fresh one. See Migration 9 below.
 
 ## Categories
 
@@ -442,7 +443,8 @@ until the owner accepts it. Either way it is never the movement of record:
 only a statement import or a manual entry produces one of those. See
 `docs/security-model.md` for what the native listener can and cannot see.
 
-`transactions` gains two nullable columns:
+`transactions` gains two columns — `provisional` is `NOT NULL DEFAULT 0`, so
+every row already on record reads as booked; `superseded_by_id` is nullable:
 
 - `provisional` — `1` on a row written from a notification, `0` on every row a
   statement import or a manual entry produces. It stays `1` even after the
@@ -483,7 +485,11 @@ matching provisional, ordered by date delta then by id, and each provisional
 is consumed at most once. **An ambiguous match is never resolved by
 guessing.** If two provisionals fit one booked row equally well, both stay
 provisional and are left for the owner — picking one is how a real movement
-quietly disappears.
+quietly disappears. `reconcileProvisionals` returns those ids alongside the
+count it retired, and the notification inbox lists them in their own section,
+next to the stale ones: same card, different explanation. Nothing records an
+ambiguous pairing in a column, so the inbox recomputes it from the ledger
+through `ambiguousProvisionals()`.
 
 There is no unique index behind any of this: a notification's `import_hash` is
 built over its own narrative and a statement's over the bank's, so the two
