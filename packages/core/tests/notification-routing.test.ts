@@ -83,4 +83,19 @@ describe('resolveRoute', () => {
     const result = resolveRoute({ text: 'Ingreso de NÓMINA', amountMinor: 250000 }, [spanish]);
     expect(result?.accountId).toBe('acc-es');
   });
+
+  it('a matching discriminator outranks a fallback whatever the priority numbers say', () => {
+    // Protects against refactoring two `best()` calls into one pass: if merged
+    // naively, the fallback's higher priority would send every notification there.
+    const highPriorityFallback: NotificationRoute = {
+      ...giro,
+      priority: 500,
+    };
+    const result = resolveRoute({ text: 'Visa payment', amountMinor: -1234 }, [
+      visa,
+      highPriorityFallback,
+    ]);
+    expect(result?.accountId).toBe('acc-visa');
+    expect(result?.viaFallback).toBe(false);
+  });
 });

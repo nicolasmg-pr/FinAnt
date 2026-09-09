@@ -15,7 +15,11 @@ export interface NotificationRoute {
   readonly id: string;
   readonly sourceId: string;
   readonly accountId: string;
-  /** `null` marks the fallback: used only when no discriminator matched. */
+  /**
+   * `null` marks the fallback: used only when no discriminator matched.
+   * Only `'description'` and `'any'` match fields are meaningful for a notification;
+   * `counterparty` and `reference` are always `null`, so rules authored against those fields will never match.
+   */
   readonly match: RuleMatch | null;
   /** Higher wins. Ties break on route id for determinism. */
   readonly priority: number;
