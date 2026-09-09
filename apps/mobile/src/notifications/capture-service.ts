@@ -34,6 +34,12 @@ export interface RawCapture {
  * process killed mid-write — is lost silently. Nothing ends up wrong, because
  * the statement import still books the movement; it just does not appear early.
  *
+ * Three other exits besides the plain write: a notification from a disabled
+ * source is dropped before anything is read; a duplicate (same hash already
+ * stored) is dropped after the `INSERT OR IGNORE` reports no row; and a
+ * `movement` verdict on a source with `autoApprove` set goes straight on into
+ * `acceptCapture`.
+ *
  * Never logs any part of the notification.
  */
 export async function recordCapture(raw: RawCapture): Promise<void> {
@@ -64,8 +70,15 @@ export async function recordCapture(raw: RawCapture): Promise<void> {
     packageName: raw.packageName,
     postedAt: postedAt.toISOString(),
     bookingDate,
-    title: raw.title,
-    body: raw.body,
+    // An `ignored` notification is recognised as deliberately not money, so
+    // its row exists only as a tombstone holding the hash: keeping its text
+    // would mean storing a bank's marketing indefinitely, and the table's
+    // contract is that a settled capture forgets its narrative. `pending` and
+    // `unreadable` keep their text — the owner is about to review the former,
+    // and the latter's text *is* the bug report — until `setCaptureStatus`
+    // nulls it on accept or dismiss.
+    title: parsed.kind === 'ignored' ? null : raw.title,
+    body: parsed.kind === 'ignored' ? null : raw.body,
     androidKey: raw.androidKey,
     captureHash,
     status:
@@ -78,8 +91,9 @@ export async function recordCapture(raw: RawCapture): Promise<void> {
     parsed: parsed.kind === 'movement' ? parsed.movement : null,
   });
 
-  // Already seen: Android reposts an updated notification, and an accepted
-  // capture leaves a tombstone holding its hash.
+  // Already seen: Android reposts an updated notification, and a settled
+  // capture — accepted, or dismissed, including every `ignored` one — leaves
+  // a tombstone holding its hash.
   if (captureId === null) return;
 
   if (parsed.kind === 'movement' && source.autoApprove) {
