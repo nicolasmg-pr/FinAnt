@@ -1,4 +1,4 @@
-import { requireNativeModule } from 'expo-modules-core';
+import { requireOptionalNativeModule } from 'expo-modules-core';
 
 export interface NotificationCaptureModule {
   /** False on iOS, which has no API for reading other apps' notifications. */
@@ -22,4 +22,25 @@ export interface NotificationCaptureModule {
 /** Must match `FinAntNotificationListenerService.TASK_KEY`. */
 export const CAPTURE_TASK_KEY = 'FinAntNotificationCapture';
 
-export default requireNativeModule<NotificationCaptureModule>('NotificationCapture');
+/**
+ * What every caller gets when the native module is not linked into the build.
+ *
+ * This is not a theoretical case: `apps/mobile/index.js` pulls the headless
+ * task in on every launch of both platforms, so a hard `requireNativeModule`
+ * here would turn a missing or not-yet-prebuilt module into an app that does
+ * not start at all, rather than one feature that is unavailable. Every caller
+ * already branches on `isSupported()`, so reporting false is enough; the rest
+ * are no-ops and safe defaults so that a caller which skipped the branch still
+ * cannot crash.
+ */
+const unavailable: NotificationCaptureModule = {
+  isSupported: () => false,
+  isPermissionGranted: () => false,
+  openPermissionSettings: () => {},
+  setAllowedPackages: () => {},
+  startLearning: () => {},
+  consumeLearnedPackages: () => [],
+};
+
+export default requireOptionalNativeModule<NotificationCaptureModule>('NotificationCapture') ??
+  unavailable;
