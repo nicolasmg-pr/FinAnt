@@ -127,7 +127,7 @@ export async function ingest(
       // Counted rather than logged: the only thing there is to log here is a
       // message about the owner's own movements, and this codebase logs none.
       // A reconciliation that silently never fires otherwise looks exactly
-      // like one with nothing to do, so `reconciliationFailures()` leaves a
+      // like one with nothing to do, so `reconciliationFailureCount()` leaves a
       // reader something to find.
       reconciliationFailures += 1;
       superseded = 0;
