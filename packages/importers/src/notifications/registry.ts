@@ -8,7 +8,8 @@ import type { CapturedNotification, NotificationParseResult, NotificationParser 
  * one would be worse than having none: a wrong template files a movement under
  * a wrong amount, while a missing one just says "I could not read this".
  *
- * See `docs/notification-formats.md`.
+ * Real wordings will be documented in `docs/notification-formats.md` as each
+ * bank's template lands.
  */
 export const NOTIFICATION_PARSERS: readonly NotificationParser[] = [];
 

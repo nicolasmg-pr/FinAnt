@@ -94,6 +94,25 @@ describe('captureHashOf', () => {
       captureHashOf({ ...capture, postedAtMillis: capture.postedAtMillis + 60_000 }),
     );
   });
+
+  it('prevents collision when the delimiter falls at different places in title and body', () => {
+    // Without length prefixes, these two would collide:
+    // title "A", body "B|C" -> "com.example.bank|1772000000000|A|B|C"
+    // title "A|B", body "C" -> "com.example.bank|1772000000000|A|B|C"
+    const capture1 = {
+      packageName: 'com.example.bank',
+      title: 'A',
+      body: 'B|C',
+      postedAtMillis: 1772000000000,
+    };
+    const capture2 = {
+      packageName: 'com.example.bank',
+      title: 'A|B',
+      body: 'C',
+      postedAtMillis: 1772000000000,
+    };
+    expect(captureHashOf(capture1)).not.toBe(captureHashOf(capture2));
+  });
 });
 
 describe('localCalendarDay', () => {

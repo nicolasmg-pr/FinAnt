@@ -59,6 +59,10 @@ export interface NotificationParser {
  * Deliberately excludes `bookingDate`, which is derived from `postedAtMillis`
  * and would add nothing, and deliberately includes `postedAtMillis`, so two
  * identical coffees bought an hour apart stay two movements.
+ *
+ * Fields are length-prefixed before joining because the delimiter can
+ * legitimately appear inside a notification's text; without length prefixes,
+ * two different notifications could produce the same payload.
  */
 export function captureHashOf(input: {
   readonly packageName: string;
@@ -66,11 +70,13 @@ export function captureHashOf(input: {
   readonly body: string | null;
   readonly postedAtMillis: number;
 }): string {
-  return fnv1aHash(
-    [input.packageName, String(input.postedAtMillis), input.title ?? '', input.body ?? ''].join(
-      '|',
-    ),
-  );
+  const fields = [
+    input.packageName,
+    String(input.postedAtMillis),
+    input.title ?? '',
+    input.body ?? '',
+  ];
+  return fnv1aHash(fields.map((field) => `${field.length}:${field}`).join('|'));
 }
 
 /**
