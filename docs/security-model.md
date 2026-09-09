@@ -92,14 +92,26 @@ ledger. That text is set to NULL the moment the capture is settled — accepted,
 dismissed, or recognised by a parser as `ignored` (a bank's marketing push or
 a login alert) — leaving a hash-only tombstone so a byte-identical
 re-delivery cannot create a second row. That hash is not enough on its own:
-Android stamps a repost with a fresh post time, so a bank turning "payment
-pending" into "payment completed" hashes differently. A repost is caught by
-Android's own notification key instead, against the unsettled captures already
-holding the same text, and a notification carrying `FLAG_GROUP_SUMMARY` is
-dropped in the listener — a summary repeats its children, and reading it would
-capture one payment twice. A capture the parsers could not read
-keeps its text until the owner dismisses it, because that text is the only
-report of what went wrong.
+Android stamps a repost of the same notification with a fresh post time, which
+hashes differently. A repost is caught by Android's own notification key
+instead. For a row that still holds its text (`pending`, `unreadable`) the key
+must match _and_ the title and body must be identical, so a bank genuinely
+re-wording a notification — "payment pending" becoming "payment completed" —
+is not mistaken for a repost; it lands as a second, distinct capture on
+purpose, because folding a re-worded notification into the old row risks
+silently absorbing a real second payment. For an `accepted` row the text is
+already gone, so the key alone is the match: dropping that check after accept
+is exactly what would let a repost slip past and write a second provisional
+movement for one payment. `dismissed` rows are left out of the key-only match:
+the key names a notification slot a bank can reuse for a later, unrelated
+payment, and matching a dismissed row on it alone would discard that later
+capture without a trace — worse than a repost of an already-dismissed
+notification resurfacing for the owner to dismiss again, since the real
+movement still arrives through the next statement import either way. A
+notification carrying `FLAG_GROUP_SUMMARY` is dropped in the listener — a
+summary repeats its children, and reading it would capture one payment twice.
+A capture the parsers could not read keeps its text until the owner dismisses
+it, because that text is the only report of what went wrong.
 
 Nothing about this feature is stored anywhere but SQLCipher and the package
 allowlist above — no separate queue, no cache file. That has one consequence
