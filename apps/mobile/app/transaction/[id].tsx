@@ -262,6 +262,11 @@ export default function TransactionDetailScreen() {
       {/* The amount is the page. No card behind it. */}
       <View style={styles.hero}>
         <Amount value={tx.amount} size="display" />
+        {tx.provisional ? (
+          <Text style={[type.caption, { color: theme.textMuted }]}>
+            {t('notifications.provisionalExplainer')}
+          </Text>
+        ) : null}
         <Text style={[type.title, { color: theme.text }]}>{tx.counterparty ?? tx.description}</Text>
         {tx.counterparty ? (
           <Text style={[type.body, { color: theme.textMuted }]}>{tx.description}</Text>

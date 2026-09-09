@@ -5,6 +5,7 @@ import {
   parseRetiredShippedRules,
   shippedRulesToInstall,
 } from '@finant/core';
+import NotificationCapture from '../../modules/notification-capture';
 import { destroyDatabaseKey, getOrCreateDatabaseKey } from '../security/keys';
 import { LATEST_VERSION, MIGRATIONS } from './schema';
 import { SETTING_RETIRED_SHIPPED_RULES } from './settings-repo';
@@ -208,4 +209,18 @@ export async function eraseEverything(): Promise<void> {
 
   await SQLite.deleteDatabaseAsync(DATABASE_NAME);
   await destroyDatabaseKey();
+
+  // The notification allowlist lives outside SQLCipher, in plain Android
+  // preferences, because the listener runs while this connection is closed.
+  // Deleting the database would otherwise leave a file behind that still names
+  // the owner's banks, which is not what "erase all data" says.
+  //
+  // Imported straight from the native module rather than through
+  // `capture-service`: this file sits near the bottom of the dependency graph,
+  // and that module would drag `ingest` and the repositories back into it.
+  if (NotificationCapture.isSupported()) {
+    NotificationCapture.setAllowedPackages([]);
+    // Discarded on purpose — reading is how the learned list is cleared.
+    NotificationCapture.consumeLearnedPackages();
+  }
 }

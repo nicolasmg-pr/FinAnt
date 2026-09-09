@@ -13,7 +13,11 @@ import { linkTransferPairs, listAllTransactions } from '../db/transactions-repo'
  */
 export async function detectTransfers(): Promise<number> {
   const ledger = await listAllTransactions();
-  const pairs = matchTransfers(ledger);
+  // A provisional movement is one half of nothing: pairing it would link the
+  // notification to the very statement row that is about to supersede it, and
+  // both would end up categorised as an internal transfer and dropped from
+  // every total.
+  const pairs = matchTransfers(ledger.filter((row) => !row.provisional));
   await linkTransferPairs(pairs);
   return pairs.length;
 }

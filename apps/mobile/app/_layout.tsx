@@ -96,6 +96,8 @@ export default function RootLayout() {
             options={{ presentation: 'modal', headerShown: true }}
           />
           <Stack.Screen name="categories" options={{ headerShown: true }} />
+          <Stack.Screen name="notification-capture" options={{ headerShown: true }} />
+          <Stack.Screen name="notification-inbox" options={{ headerShown: true }} />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -35,6 +35,7 @@ export function FormSheet({
   onCancel,
   onSave,
   onDelete,
+  saveDisabled = false,
 }: {
   visible: boolean;
   title: string;
@@ -45,6 +46,9 @@ export function FormSheet({
   onSave: () => void;
   /** Omitted on a form that creates something: there is nothing to delete yet. */
   onDelete?: () => void;
+  /** True while the draft cannot yet be saved — e.g. a required field is
+   * still empty. Save renders disabled rather than silently doing nothing. */
+  saveDisabled?: boolean;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -72,7 +76,7 @@ export function FormSheet({
         {onDelete ? (
           <Button label={t('common.delete')} variant="danger" onPress={onDelete} />
         ) : null}
-        <Button label={t('common.save')} onPress={onSave} />
+        <Button label={t('common.save')} disabled={saveDisabled} onPress={onSave} />
       </View>
     </Sheet>
   );

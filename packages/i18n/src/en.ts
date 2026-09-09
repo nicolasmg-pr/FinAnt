@@ -203,6 +203,58 @@ export const en = {
     transfersMatched_other: '{{count}} transfers between your accounts matched',
     autoExcluded_one: '{{count}} movement excluded from statistics by a rule of yours',
     autoExcluded_other: '{{count}} movements excluded from statistics by rules of yours',
+    superseded_one: '{{count}} unconfirmed movement confirmed by this statement',
+    superseded_other: '{{count}} unconfirmed movements confirmed by this statement',
+  },
+  notifications: {
+    title: 'Bank notifications',
+    settingsRow: 'Bank notifications',
+    androidOnly: 'Android only. iOS has no way for an app to read notifications.',
+    explainer:
+      'FinAnt can read the notifications your bank apps post on this phone and turn them into movements. Nothing is sent anywhere. A movement created this way is marked unconfirmed until the bank statement you import next confirms it.',
+    permissionGranted: 'Notification access granted',
+    permissionMissing: 'Notification access not granted',
+    grant: 'Open Android settings',
+    revokedHint:
+      'Some phones drop this permission when the app updates. Check here if movements stop arriving.',
+    learn: 'Find my bank apps',
+    learning: 'Listening for {{seconds}}s. Trigger a payment or open your bank app.',
+    learnExplainer:
+      'FinAnt records only the name of the app that notified you, never the text, so you can pick your banks from a list.',
+    learnEmpty: 'No apps notified you during that time.',
+    sources: 'Bank apps',
+    addSource: 'Add bank app',
+    sourceName: 'Name this bank',
+    autoApprove: 'Add movements without asking',
+    autoApproveHint:
+      'Off: a notification waits in the inbox for you. On: it becomes an unconfirmed movement straight away.',
+    routes: 'Accounts',
+    addRoute: 'Add account rule',
+    routeFallback: 'Anything else',
+    routeMatch: 'When the notification mentions',
+    deleteCaptures: 'Delete all captured notifications',
+    inbox: 'Notification inbox',
+    reviewChip: '{{count}} to review',
+    pending: 'Waiting for you',
+    unreadable: "Couldn't read this one",
+    unreadableExplainer:
+      'The wording changed, or FinAnt has no template for this notification yet. Copy the text if you want it supported.',
+    copyText: 'Copy text',
+    accept: 'Add movement',
+    edit: 'Edit first',
+    dismiss: 'Dismiss',
+    noRoute: 'No account rule matches this notification. Add one to accept it.',
+    viaFallback: 'Routed by the fallback rule. Check the account is right.',
+    empty: 'Nothing waiting.',
+    provisional: 'Unconfirmed',
+    provisionalExplainer:
+      'Seen in a notification from your bank, not yet confirmed by a statement.',
+    provisionalStale:
+      'No statement has confirmed this after {{days}} days, though later movements on this account have been imported. The payment may have been declined.',
+    balanceIncluding: 'including {{count}} unconfirmed',
+    ambiguous: 'Worth a look',
+    ambiguousExplainer:
+      'More than one unconfirmed movement matched a statement row equally well, so none of them was retired. Check which one the bank actually booked.',
   },
   settings: {
     rulesTitle: 'Classification rules',

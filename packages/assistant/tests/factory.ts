@@ -28,6 +28,8 @@ export function tx(overrides: Partial<Transaction> = {}): Transaction {
     notes: null,
     excludedFromStats: false,
     transferPeerId: null,
+    provisional: false,
+    supersededById: null,
     createdAt: '2026-09-01T00:00:00.000Z',
   };
   return { ...base, ...overrides };

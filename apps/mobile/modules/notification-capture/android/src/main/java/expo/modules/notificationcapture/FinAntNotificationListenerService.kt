@@ -1,0 +1,167 @@
+package expo.modules.notificationcapture
+
+import android.app.Notification
+import android.content.Context
+import android.os.Bundle
+import android.os.PowerManager
+import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
+import com.facebook.react.ReactApplication
+import com.facebook.react.ReactInstanceEventListener
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.ReactContext
+import com.facebook.react.bridge.UiThreadUtil
+import com.facebook.react.bridge.WritableMap
+import com.facebook.react.jstasks.HeadlessJsTaskConfig
+import com.facebook.react.jstasks.HeadlessJsTaskContext
+import com.facebook.react.jstasks.LinearCountingRetryPolicy
+
+/**
+ * Reads the notifications the owner's own bank apps post, and nothing else.
+ *
+ * Notification access is a broad grant: the system offers this service every
+ * notification on the device. The allowlist check in onNotificationPosted is
+ * therefore the security boundary of this entire feature, and it is kept short
+ * enough to verify by reading. Nothing outside the allowlist is read, copied,
+ * stored or logged — and no notification text is ever logged at all.
+ */
+class FinAntNotificationListenerService : NotificationListenerService() {
+
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        val packageName = sbn?.packageName ?: return
+
+        // Learning mode: the package name, and only the package name.
+        if (CaptureAllowlist.isLearning(this)) {
+            CaptureAllowlist.learn(this, packageName)
+        }
+
+        // ── THE SECURITY BOUNDARY ────────────────────────────────────────────
+        // A message from a person, a 2FA code, a health reminder: all of them
+        // return here, before sbn.notification is ever dereferenced.
+        if (packageName !in CaptureAllowlist.allowed(this)) return
+        // ─────────────────────────────────────────────────────────────────────
+
+        val notification = sbn.notification ?: return
+
+        // A group summary repeats what its children already say. Android posts
+        // it alongside them, so reading it would capture the same payment a
+        // second time under a different key and text — and with auto-approve
+        // on, write a second provisional movement. Checked after the allowlist
+        // so the gate above stays the first thing this method does.
+        if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+
+        val extras: Bundle = notification.extras ?: return
+        val data = Arguments.createMap().apply {
+            putString("packageName", packageName)
+            putString("title", extras.getCharSequence(Notification.EXTRA_TITLE)?.toString())
+            putString(
+                "body",
+                (extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
+                    ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString(),
+            )
+            putDouble("postedAtMillis", sbn.postTime.toDouble())
+            putString("androidKey", sbn.key)
+        }
+
+        startCaptureTask(data)
+    }
+
+    /**
+     * Hands the notification to JavaScript.
+     *
+     * This replicates the body of RN's own HeadlessJsTaskService.startTask
+     * because this class cannot extend it — it already extends
+     * NotificationListenerService — and must not call startForegroundService
+     * either: Android 8+ restricts starting a service from the background, and
+     * a foreground-service notification for every card payment is absurd.
+     *
+     * Doing it in place is sound because the process is already alive: the
+     * system bound this listener.
+     */
+    private fun startCaptureTask(data: WritableMap) {
+        // After the null check, not before: with no ReactHost there is nothing
+        // to wake for, and acquiring first would pin the CPU for the full
+        // timeout over a capture that was dropped on the next line.
+        val reactHost = (application as? ReactApplication)?.reactHost ?: return
+        acquireBoundedWakeLock()
+
+        val config = HeadlessJsTaskConfig(
+            TASK_KEY,
+            data,
+            TASK_TIMEOUT_MS,
+            // The app may well be open when a payment notification lands, and
+            // RN throws rather than running a foreground-disallowed task.
+            true,
+            LinearCountingRetryPolicy(RETRY_ATTEMPTS, RETRY_DELAY_MS),
+        )
+
+        UiThreadUtil.runOnUiThread {
+            // Anything thrown here crashes the whole app rather than dropping
+            // one capture. A crash every time a payment notification lands is
+            // far worse than one missing provisional movement, so swallow it —
+            // there is nothing to log but the notification.
+            try {
+                val current = reactHost.currentReactContext
+                if (current != null) {
+                    HeadlessJsTaskContext.getInstance(current).startTask(config)
+                    return@runOnUiThread
+                }
+                reactHost.addReactInstanceEventListener(
+                    object : ReactInstanceEventListener {
+                        override fun onReactContextInitialized(context: ReactContext) {
+                            // This runs later, invoked by the framework outside
+                            // the dynamic extent of the try above — the cold-start
+                            // path this feature exists for, since the app is
+                            // fully closed when the notification arrives. It
+                            // needs its own containment, and the listener must
+                            // come off either way or it fires again on the next
+                            // context and starts a duplicate task.
+                            try {
+                                HeadlessJsTaskContext.getInstance(context).startTask(config)
+                            } catch (throwable: Throwable) {
+                                // Swallowed on purpose: see the comment above.
+                            } finally {
+                                reactHost.removeReactInstanceEventListener(this)
+                            }
+                        }
+                    },
+                )
+                reactHost.start()
+            } catch (throwable: Throwable) {
+                // Swallowed on purpose: see the comment above.
+            }
+        }
+    }
+
+    /**
+     * Our own lock, with a timeout, rather than
+     * HeadlessJsTaskService.acquireWakeLockNow: that one is untimed and is
+     * released only by HeadlessJsTaskService.onDestroy, which this app never
+     * runs — this class extends NotificationListenerService. Acquired with the
+     * task's own timeout, it releases itself even if the JS hop never finishes,
+     * so a notification cannot leave the CPU pinned awake.
+     *
+     * Keeping a lock at all is deliberate: without one the device can suspend
+     * before the headless task finishes its database write, and the capture is
+     * lost silently.
+     */
+    private fun acquireBoundedWakeLock() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+        // The lock is deliberately not kept in a field or released by hand: the
+        // timeout passed to acquire() is what releases it. Do not "fix" this
+        // into a stored lock with a manual release — that is the version that
+        // leaks, because there is no single point where this service knows the
+        // JS hop has finished.
+        powerManager
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FinAnt:notification-capture")
+            .acquire(TASK_TIMEOUT_MS)
+    }
+
+    companion object {
+        /** Must match the AppRegistry.registerHeadlessTask key in JavaScript. */
+        const val TASK_KEY = "FinAntNotificationCapture"
+        private const val TASK_TIMEOUT_MS = 15_000L
+        private const val RETRY_ATTEMPTS = 3
+        private const val RETRY_DELAY_MS = 1_000
+    }
+}

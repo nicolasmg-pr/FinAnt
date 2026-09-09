@@ -517,7 +517,20 @@ function Row({
             ]}
           />
         }
-        trailing={<Amount value={transaction.amount} />}
+        trailing={
+          <View style={styles.trailingStack}>
+            {transaction.provisional ? (
+              <Chip
+                label={t('notifications.provisional')}
+                selected={false}
+                onPress={() =>
+                  router.push({ pathname: '/transaction/[id]', params: { id: transaction.id } })
+                }
+              />
+            ) : null}
+            <Amount value={transaction.amount} />
+          </View>
+        }
         divider={divider}
         onPress={() =>
           router.push({ pathname: '/transaction/[id]', params: { id: transaction.id } })
@@ -578,4 +591,5 @@ const styles = StyleSheet.create({
   banner: { padding: spacing.md, borderRadius: radius.md },
   list: { padding: spacing.lg },
   dot: { width: 10, height: 10, borderRadius: radius.pill },
+  trailingStack: { alignItems: 'flex-end', gap: spacing.xs },
 });

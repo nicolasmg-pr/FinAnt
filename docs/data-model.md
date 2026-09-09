@@ -49,6 +49,17 @@ only gives a signed amount uses `sideFromAmount()`.
 - `budgets` — monthly limit per category.
 - `import_profiles` — user-defined column mappings for file import.
 - `settings` — key/value: locale, main currency, app lock, last import account.
+- `notification_sources` (migration 9) — one row per bank app the owner has
+  allowed to feed the ledger: its package name, the label the owner gave it,
+  and whether it auto-approves what it sends.
+- `notification_routes` (migration 9) — which account a source's notifications
+  book to, keyed by the same `RuleMatch` discriminator `rules.match_json`
+  uses, with at most one nullable fallback route per source.
+- `notification_captures` (migration 9) — the inbox: one row per notification
+  read from an allowed source, from first sight through parsing to acceptance
+  or dismissal. Deduplicated twice: a hash of its own text and post time
+  catches a byte-identical re-delivery, and Android's own notification key
+  catches a repost, whose post time is a fresh one. See Migration 9 below.
 
 ## Categories
 
@@ -422,3 +433,101 @@ re-exclude the movement on the next import, however many times the owner
 un-excluded the row by hand. Settings > Automatic exclusions lists every rule
 with the merchant key it was learned from and can delete it; deleting there
 stops future imports but deliberately leaves history alone.
+
+## Migration 9: notification capture
+
+Android only. A push notification from one of the owner's own bank apps is
+parsed into a **provisional** movement — written immediately if the owner
+turned on `auto_approve` for that source, or held in `notification_captures`
+until the owner accepts it. Either way it is never the movement of record:
+only a statement import or a manual entry produces one of those. See
+`docs/security-model.md` for what the native listener can and cannot see.
+
+`transactions` gains two columns — `provisional` is `NOT NULL DEFAULT 0`, so
+every row already on record reads as booked; `superseded_by_id` is nullable:
+
+- `provisional` — `1` on a row written from a notification, `0` on every row a
+  statement import or a manual entry produces. It stays `1` even after the
+  owner accepts a pending capture by hand: agreeing with what a notification
+  said is not the bank having booked it. `acceptEditedCapture` enforces the
+  same rule when the owner corrects the draft first — amount, date or account
+  — before saving it: the row it writes is still provisional, because editing
+  what a notification said is not the bank booking it either. Only
+  reconciliation, below, clears the flag — by replacing the row, not by
+  flipping it.
+- `superseded_by_id` — set on a provisional the moment reconciliation replaces
+  it, pointing at the row that won. The provisional is soft-deleted
+  (`deleted_at`) in the same write, so the trail survives from "notification
+  seen on Tuesday" to "row the bank actually booked" without a second table.
+
+### Reconciliation
+
+`packages/core/src/provisional.ts`, run from
+`apps/mobile/src/services/reconcile.ts` inside `ingest()`, after insertion and
+before `detectTransfers()` — a provisional and the statement row that later
+books it would otherwise look like a transfer to that matcher.
+
+A provisional and a booked row are candidates only if they share an account, a
+currency and a `side`, and their `booking_date`s fall within 3 days of each
+other. **The amount must match exactly; there is no tolerance band.** What the
+bank booked is what the ledger shows, and a booked figure that differs from
+the one the notification announced is a different fact, not a rounding of the
+same one. The cost is explicit: a restaurant bill authorised at 42,30 and
+booked at 43,50 with a tip added never reconciles, and both rows sit in the
+ledger — the unconfirmed 42,30 and the booked 43,50 — until the owner clears
+the leftover by hand, which the staleness check below eventually surfaces. A
+tolerance band was considered and rejected: it buys tidiness by merging two
+rows on a guess, and a wrong merge makes a real movement disappear, which is
+worse than a visible leftover.
+
+Assignment is greedy and one-to-one: each booked row takes the closest
+matching provisional, ordered by date delta then by id, and each provisional
+is consumed at most once. **An ambiguous match is never resolved by
+guessing.** If two provisionals fit one booked row equally well, both stay
+provisional and are left for the owner — picking one is how a real movement
+quietly disappears. `reconcileProvisionals` returns those ids alongside the
+count it retired, and the notification inbox lists them in their own section,
+next to the stale ones: same card, different explanation. Nothing records an
+ambiguous pairing in a column, so the inbox recomputes it from the ledger
+through `ambiguousProvisionals()`.
+
+There is no unique index behind any of this: a notification's `import_hash` is
+built over its own narrative and a statement's over the bank's, so the two
+rows never collide and no constraint can catch the pairing. That is why
+reconciliation is explicit, reviewed code instead of a database rule, and why
+`packages/core/tests/provisional.test.ts` is the most heavily tested file this
+feature added.
+
+### Stale provisionals
+
+A declined authorisation, a released hotel hold, a notification accepted for a
+payment that then failed — these leave a provisional no statement will ever
+book. Left alone it would count in the totals forever, which is the one way
+this feature could quietly make the ledger wrong.
+
+Staleness is **derived, never stored**: `staleProvisionals()` in
+`packages/core/src/provisional.ts` is recomputed from the ledger's own
+coverage every time the inbox loads, over each account's latest imported
+booking date and today's date — there is no `stale` column. A provisional
+older than 45 days, on an account whose statements now reach past its own
+booking date, is flagged; nothing deletes it, because a bank booking something
+six weeks late is not impossible, and that is the owner's call to make. 45
+days is deliberately longer than any card settlement cycle the owner's banks
+use, so a slow booking is never mistaken for a dead one.
+
+### The `posted_at` exception
+
+`CLAUDE.md` forbids routing a booking date through a `Date`/timestamp, because
+it moves 1 March into February west of UTC. `notification_captures.posted_at`
+is the one column in this schema that touches a real timestamp, because
+Android reports a notification's post time as epoch milliseconds and there is
+no way to receive it as anything else.
+
+The rule is honoured by converting exactly once, at the edge:
+`localCalendarDay()` in `@finant/importers` derives the device's local
+calendar day from that millisecond value the moment a notification is
+captured, and it is that string — never `posted_at` — that is written to
+`booking_date` and carried everywhere downstream. `posted_at` itself is kept
+only for display and for the capture's dedupe hash, so that two identical
+coffees bought an hour apart stay two captures; nothing downstream may ever
+derive a date from it.

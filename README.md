@@ -9,6 +9,16 @@ database on the device. There is no FinAnt account, no server and no cloud copy.
 The app makes exactly one network request in its life, and only if you ask for
 it: downloading the optional assistant model.
 
+On Android only, and only if you turn it on, FinAnt can also read the
+notifications your own bank apps post on the phone, turning a payment into a
+movement before the statement that books it ever exists — iOS has no API for
+this, so it will never reach iPhone. That notification never leaves the device
+either — it goes straight into the same encrypted database and nowhere else —
+and the movement it produces stays marked unconfirmed until a real statement
+import confirms it. Granting an app this kind of notification access is also
+why FinAnt can never be published on the Play Store: Google's policy forbids
+it outright, which is a fair trade for an app you build and install yourself.
+
 Languages: English, Spanish, German.
 
 ## Installing the app

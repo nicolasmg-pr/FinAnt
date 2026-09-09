@@ -205,6 +205,59 @@ export const de: Translations = {
     transfersMatched_other: '{{count}} Umbuchungen zwischen deinen Konten zugeordnet',
     autoExcluded_one: '{{count}} Buchung durch eine deiner Regeln aus der Statistik ausgeschlossen',
     autoExcluded_other: '{{count}} Buchungen durch deine Regeln aus der Statistik ausgeschlossen',
+    superseded_one: '{{count}} unbestätigter Umsatz durch diesen Kontoauszug bestätigt',
+    superseded_other: '{{count}} unbestätigte Umsätze durch diesen Kontoauszug bestätigt',
+  },
+  notifications: {
+    title: 'Bank-Benachrichtigungen',
+    settingsRow: 'Bank-Benachrichtigungen',
+    androidOnly: 'Nur für Android. Unter iOS kann keine App Benachrichtigungen lesen.',
+    explainer:
+      'FinAnt kann die Benachrichtigungen deiner Bank-Apps auf diesem Telefon lesen und daraus Umsätze machen. Es wird nichts gesendet. Ein so entstandener Umsatz ist unbestätigt, bis ihn der nächste importierte Kontoauszug bestätigt.',
+    permissionGranted: 'Zugriff auf Benachrichtigungen erteilt',
+    permissionMissing: 'Zugriff auf Benachrichtigungen nicht erteilt',
+    grant: 'Android-Einstellungen öffnen',
+    revokedHint:
+      'Manche Telefone entziehen diese Berechtigung bei einem App-Update. Schau hier nach, wenn keine Umsätze mehr ankommen.',
+    learn: 'Meine Bank-Apps finden',
+    learning: 'Hört {{seconds}} s zu. Löse eine Zahlung aus oder öffne deine Bank-App.',
+    learnExplainer:
+      'FinAnt merkt sich dabei nur den Namen der App, die dich benachrichtigt hat, nie den Text, damit du deine Banken aus einer Liste auswählen kannst.',
+    learnEmpty: 'In dieser Zeit hat dich keine App benachrichtigt.',
+    sources: 'Bank-Apps',
+    addSource: 'Bank-App hinzufügen',
+    sourceName: 'Gib dieser Bank einen Namen',
+    autoApprove: 'Umsätze ohne Nachfrage hinzufügen',
+    autoApproveHint:
+      'Aus: Eine Benachrichtigung wartet im Posteingang auf dich. An: Sie wird sofort zu einem unbestätigten Umsatz.',
+    routes: 'Konten',
+    addRoute: 'Kontoregel hinzufügen',
+    routeFallback: 'Alles andere',
+    routeMatch: 'Wenn die Benachrichtigung erwähnt',
+    deleteCaptures: 'Alle erfassten Benachrichtigungen löschen',
+    inbox: 'Posteingang',
+    reviewChip: '{{count}} zu prüfen',
+    pending: 'Wartet auf dich',
+    unreadable: 'Konnte das nicht lesen',
+    unreadableExplainer:
+      'Der Wortlaut hat sich geändert, oder FinAnt hat für diese Benachrichtigung noch keine Vorlage. Kopiere den Text, wenn du möchtest, dass sie unterstützt wird.',
+    copyText: 'Text kopieren',
+    accept: 'Umsatz hinzufügen',
+    edit: 'Erst bearbeiten',
+    dismiss: 'Verwerfen',
+    noRoute:
+      'Keine Kontoregel passt zu dieser Benachrichtigung. Füge eine hinzu, um sie zu übernehmen.',
+    viaFallback: 'Über die Standardregel zugeordnet. Prüfe, ob das Konto stimmt.',
+    empty: 'Nichts wartet.',
+    provisional: 'Unbestätigt',
+    provisionalExplainer:
+      'In einer Benachrichtigung deiner Bank gesehen, noch nicht durch einen Kontoauszug bestätigt.',
+    provisionalStale:
+      'Nach {{days}} Tagen hat noch kein Kontoauszug das bestätigt, obwohl spätere Umsätze auf diesem Konto bereits importiert wurden. Die Zahlung wurde möglicherweise abgelehnt.',
+    balanceIncluding: 'davon {{count}} unbestätigt',
+    ambiguous: 'Sieh dir das an',
+    ambiguousExplainer:
+      'Mehrere unbestätigte Umsätze passen gleich gut zu einer Zeile im Kontoauszug, deshalb wurde keiner davon abgelegt. Prüfe, welchen die Bank wirklich gebucht hat.',
   },
   settings: {
     rulesTitle: 'Regeln zur Zuordnung',

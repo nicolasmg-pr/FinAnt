@@ -1,0 +1,26 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.notificationcapture'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.notificationcapture"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // expo-module-gradle-plugin contributes only kotlin-stdlib, annotations and
+  // expo-modules-core, and expo-modules-core declares react-android as
+  // `implementation` rather than `api` — so React Native's classes are not
+  // exposed transitively and this module has to ask for them itself. The
+  // listener service needs them for the headless task it starts.
+  // No version: the React Native Gradle plugin resolves it for the app build,
+  // which is how expo-modules-core declares it too.
+  implementation 'com.facebook.react:react-android'
+}
