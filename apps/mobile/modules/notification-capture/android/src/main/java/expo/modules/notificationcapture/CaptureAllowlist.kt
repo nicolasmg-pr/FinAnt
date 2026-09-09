@@ -37,8 +37,29 @@ internal object CaptureAllowlist {
             .apply()
     }
 
-    fun isLearning(context: Context): Boolean =
-        prefs(context).getLong(KEY_LEARNING_UNTIL, 0L) > System.currentTimeMillis()
+    /**
+     * Whether learning mode is still armed — and, on the first call after it
+     * has expired, the point where what it collected is thrown away.
+     *
+     * Expiry alone used to stop collection without clearing anything, so a
+     * process death during the five-minute window — precisely when the owner
+     * has left the app to trigger a payment — left a plaintext list of every
+     * app that notified them sitting in preferences indefinitely. Clearing it
+     * here means the next notification from any app, allowlisted or not,
+     * disposes of it. Inside the same `synchronized` discipline as `learn` and
+     * `consumeLearned`, which do the same read-modify-write on KEY_LEARNED.
+     */
+    fun isLearning(context: Context): Boolean {
+        synchronized(CaptureAllowlist) {
+            val store = prefs(context)
+            val until = store.getLong(KEY_LEARNING_UNTIL, 0L)
+            if (until > System.currentTimeMillis()) return true
+            if (until != 0L || store.contains(KEY_LEARNED)) {
+                store.edit().remove(KEY_LEARNED).putLong(KEY_LEARNING_UNTIL, 0L).apply()
+            }
+            return false
+        }
+    }
 
     /**
      * Records a package name and nothing else — never a title, a text or a post
