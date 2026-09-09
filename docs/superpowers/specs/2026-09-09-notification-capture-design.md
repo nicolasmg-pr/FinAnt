@@ -233,6 +233,7 @@ CREATE TABLE notification_captures (
   source_id TEXT REFERENCES notification_sources(id) ON DELETE SET NULL,
   package_name TEXT NOT NULL,
   posted_at TEXT NOT NULL,
+  booking_date TEXT NOT NULL,   -- the local calendar day, derived once at the edge
   title TEXT,
   body TEXT,
   android_key TEXT,
@@ -316,10 +317,11 @@ Matching a provisional movement to an incoming statement row:
 
 - Candidate requires: same account, same currency, same `side`, and
   `booking_date` within ±3 days.
-- Amount: exact match preferred. Otherwise within `max(2%, 100 minor units)` —
-  a card authorization of EUR 42.30 booking at EUR 43.50 with a tip, or a
-  foreign-currency purchase settling at a different rate.
-- Assignment is greedy one-to-one, ordered by (amount delta, date delta). Each
+- **Amount must match exactly.** There is no tolerance band. What the bank
+  booked is what the ledger shows, and a booked figure that differs from the
+  one the notification announced is a different fact, not a rounding of the
+  same one.
+- Assignment is greedy one-to-one, ordered by date delta then id. Each
   provisional is consumed at most once.
 - **Ambiguity is never resolved by guessing.** If two provisionals match one
   booked row equally well, both stay provisional and are flagged for the owner.
@@ -429,7 +431,7 @@ did not import deliberately, so it prunes itself:
 
 Testable with `npm test` (vitest, packages only):
 
-- `packages/core/tests/provisional.test.ts` — tolerance bands, one-to-one
+- `packages/core/tests/provisional.test.ts` — exact-amount matching, one-to-one
   consumption, ambiguity refusing to guess, currency and side guards, the ±3 day
   window, that a matched pair leaves exactly one live row, and that a
   provisional past the stale window is marked rather than deleted.
@@ -478,6 +480,13 @@ the tests. Step 4 is the one that can silently leak; it carries the review.
   rows and a template fix. This is ongoing maintenance, not a bug fixed once.
 - Push text carries no bank transaction id and often not the final booked
   amount. Provisional movements are approximations by design.
+- **A movement the bank books for a different amount than it announced never
+  reconciles.** A restaurant bill authorised at 42,30 and booked at 43,50 with
+  a tip leaves both rows in the ledger: the unconfirmed 42,30 and the booked
+  43,50, until the owner clears the leftover the stale check surfaces. This is
+  the deliberate consequence of matching on the exact amount, chosen over a
+  tolerance band that would merge two rows on a guess — a wrong merge makes a
+  real movement disappear, which is worse than a visible leftover.
 - **No fallback buffer.** Nothing is stored outside SQLCipher, so if Android
   kills the process mid-write, that notification is lost _silently_. Nothing
   ends up wrong — the statement import still catches the movement — but it will
