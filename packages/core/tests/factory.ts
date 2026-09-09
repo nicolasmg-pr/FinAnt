@@ -20,6 +20,9 @@ export function tx(partial: {
   accountId?: string;
   categorySource?: 'auto' | 'manual' | 'none';
   transferPeerId?: string | null;
+  provisional?: boolean;
+  supersededById?: string | null;
+  source?: 'file-import' | 'manual' | 'notification';
 }): Transaction {
   seq += 1;
   const amountMinor = Math.round(partial.amount * 100);
@@ -36,7 +39,9 @@ export function tx(partial: {
     reference: null,
     categoryId: partial.categoryId ?? null,
     categorySource: partial.categorySource ?? 'none',
-    source: 'file-import',
+    source: partial.source ?? 'file-import',
+    provisional: partial.provisional ?? false,
+    supersededById: partial.supersededById ?? null,
     externalId: null,
     importHash: importHashOf({
       accountId,

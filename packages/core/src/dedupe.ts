@@ -33,6 +33,20 @@ export function importHashOf(input: {
     normalise(input.description),
     input.discriminator === undefined ? '' : String(input.discriminator),
   ].join('|');
+  return fnv1aHash(payload);
+}
+
+/**
+ * FNV-1a over a payload string, suffixed with the payload length.
+ *
+ * Shared by `importHashOf` and by the notification capture hash, so the two
+ * cannot drift apart. No crypto dependency, no async, and a collision here
+ * only risks hiding one duplicate-looking row — it is not a security boundary.
+ *
+ * The output format is frozen: `transactions.import_hash` values already on
+ * devices were produced by it, and they are the dedupe key.
+ */
+export function fnv1aHash(payload: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < payload.length; i += 1) {
     hash ^= payload.charCodeAt(i);

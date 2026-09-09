@@ -34,7 +34,7 @@ export interface Account {
   readonly archived: boolean;
 }
 
-export type TransactionSource = 'file-import' | 'manual';
+export type TransactionSource = 'file-import' | 'manual' | 'notification';
 
 export type CategorySource = 'auto' | 'manual' | 'none';
 
@@ -75,6 +75,21 @@ export interface Transaction {
   /** Id of the other half of a matched transfer between the owner's own
    * accounts, set by the matcher. `null` for every other movement. */
   readonly transferPeerId: string | null;
+  /**
+   * True while the only evidence for this movement is a push notification one
+   * of the owner's bank apps posted. It counts in the month's totals and in
+   * the account balance, and is replaced by the statement row that books it.
+   *
+   * The owner accepting a capture by hand does not clear this: agreeing with
+   * what the notification said is not the bank having booked it.
+   */
+  readonly provisional: boolean;
+  /**
+   * Set on a provisional movement when reconciliation replaced it with the
+   * statement row that booked it. The provisional is soft-deleted at the same
+   * time, so this is the trail from what the owner saw to what the bank did.
+   */
+  readonly supersededById: string | null;
   readonly createdAt: string;
 }
 
