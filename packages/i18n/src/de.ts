@@ -205,6 +205,8 @@ export const de: Translations = {
     transfersMatched_other: '{{count}} Umbuchungen zwischen deinen Konten zugeordnet',
     autoExcluded_one: '{{count}} Buchung durch eine deiner Regeln aus der Statistik ausgeschlossen',
     autoExcluded_other: '{{count}} Buchungen durch deine Regeln aus der Statistik ausgeschlossen',
+    superseded_one: '{{count}} unbestätigter Umsatz durch diesen Kontoauszug bestätigt',
+    superseded_other: '{{count}} unbestätigte Umsätze durch diesen Kontoauszug bestätigt',
   },
   notifications: {
     title: 'Bank-Benachrichtigungen',

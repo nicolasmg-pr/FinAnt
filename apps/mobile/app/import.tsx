@@ -367,6 +367,14 @@ export default function ImportScreen() {
               {t('import.autoExcluded', { count: result.autoExcluded })}
             </Text>
           ) : null}
+          {/* The one moment the app soft-deletes rows the owner could see
+            yesterday. Saying nothing would make it the quietest thing this
+            screen does. */}
+          {result.superseded > 0 ? (
+            <Text style={[type.label, { color: theme.textMuted }]}>
+              {t('import.superseded', { count: result.superseded })}
+            </Text>
+          ) : null}
           {setAside > 0 ? (
             <Text style={[type.label, { color: theme.textMuted }]}>
               {t('import.setAside', { count: setAside })}

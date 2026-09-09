@@ -206,6 +206,8 @@ export const es: Translations = {
     transfersMatched_other: '{{count}} traspasos entre tus cuentas emparejados',
     autoExcluded_one: '{{count}} movimiento excluido de las estadísticas por una regla tuya',
     autoExcluded_other: '{{count}} movimientos excluidos de las estadísticas por reglas tuyas',
+    superseded_one: '{{count}} movimiento sin confirmar confirmado por este extracto',
+    superseded_other: '{{count}} movimientos sin confirmar confirmados por este extracto',
   },
   notifications: {
     title: 'Notificaciones bancarias',

@@ -203,6 +203,8 @@ export const en = {
     transfersMatched_other: '{{count}} transfers between your accounts matched',
     autoExcluded_one: '{{count}} movement excluded from statistics by a rule of yours',
     autoExcluded_other: '{{count}} movements excluded from statistics by rules of yours',
+    superseded_one: '{{count}} unconfirmed movement confirmed by this statement',
+    superseded_other: '{{count}} unconfirmed movements confirmed by this statement',
   },
   notifications: {
     title: 'Bank notifications',

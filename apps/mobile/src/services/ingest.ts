@@ -19,6 +19,22 @@ export interface IngestResult {
   readonly superseded: number;
 }
 
+/**
+ * How many times reconciliation has thrown since the process started.
+ *
+ * An import must not fail over it — the statement's rows are already durably
+ * inserted by then — but a swallowed failure that leaves no trace at all is
+ * indistinguishable from a run with nothing to reconcile. Nothing about the
+ * error is kept: a message would carry the owner's own data.
+ */
+let reconciliationFailures = 0;
+
+/** For a future diagnostics surface, and for a reader wondering whether
+ * reconciliation ever ran. Never rendered today, and never logged. */
+export function reconciliationFailureCount(): number {
+  return reconciliationFailures;
+}
+
 export interface IngestOptions {
   /**
    * Marks every row in this batch as provisional: its only evidence is a push
@@ -106,8 +122,14 @@ export async function ingest(
   let superseded = 0;
   if (inserted > 0 && !options.provisional) {
     try {
-      superseded = await reconcileProvisionals();
+      superseded = (await reconcileProvisionals()).superseded;
     } catch {
+      // Counted rather than logged: the only thing there is to log here is a
+      // message about the owner's own movements, and this codebase logs none.
+      // A reconciliation that silently never fires otherwise looks exactly
+      // like one with nothing to do, so `reconciliationFailures()` leaves a
+      // reader something to find.
+      reconciliationFailures += 1;
       superseded = 0;
     }
   }
