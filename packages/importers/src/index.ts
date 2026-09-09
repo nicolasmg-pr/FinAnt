@@ -9,3 +9,4 @@ export * from './xlsx';
 export * from './workbook';
 export * from './camt053';
 export * from './inspect';
+export * from './notifications/index';
