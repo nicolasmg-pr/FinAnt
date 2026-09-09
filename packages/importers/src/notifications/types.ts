@@ -80,6 +80,33 @@ export function captureHashOf(input: {
 }
 
 /**
+ * Identity of a notification's *text*, independent of when it was posted.
+ *
+ * `captureHashOf` above deliberately includes `postedAtMillis`, which is
+ * exactly what makes it useless for recognising a repost: Android stamps a
+ * repost with a fresh post time, so the same wording sent twice gets two
+ * different capture hashes. This is the fingerprint that survives that:
+ * same package, title and body, regardless of when either was posted.
+ *
+ * It is what `notification_captures.content_hash` stores, computed once at
+ * capture time and kept even after `setCaptureStatus` NULLs `title` and
+ * `body` on settle — the fingerprint is what a later repost has to be
+ * checked against once the narrative itself is gone.
+ *
+ * Same length-prefixing as `captureHashOf`, for the same reason: the
+ * delimiter can appear inside a notification's own text, and two different
+ * notifications could otherwise join into the same payload.
+ */
+export function contentHashOf(input: {
+  readonly packageName: string;
+  readonly title: string | null;
+  readonly body: string | null;
+}): string {
+  const fields = [input.packageName, input.title ?? '', input.body ?? ''];
+  return fnv1aHash(fields.map((field) => `${field.length}:${field}`).join('|'));
+}
+
+/**
  * The one sanctioned timestamp-to-date conversion in this codebase.
  *
  * Android hands us `postTime` as epoch milliseconds and there is no way around

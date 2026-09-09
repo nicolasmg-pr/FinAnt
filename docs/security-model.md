@@ -92,14 +92,40 @@ ledger. That text is set to NULL the moment the capture is settled — accepted,
 dismissed, or recognised by a parser as `ignored` (a bank's marketing push or
 a login alert) — leaving a hash-only tombstone so a byte-identical
 re-delivery cannot create a second row. That hash is not enough on its own:
-Android stamps a repost with a fresh post time, so a bank turning "payment
-pending" into "payment completed" hashes differently. A repost is caught by
-Android's own notification key instead, against the unsettled captures already
-holding the same text, and a notification carrying `FLAG_GROUP_SUMMARY` is
-dropped in the listener — a summary repeats its children, and reading it would
-capture one payment twice. A capture the parsers could not read
-keeps its text until the owner dismisses it, because that text is the only
-report of what went wrong.
+Android stamps a repost of the same notification with a fresh post time,
+which hashes differently. A repost is caught by Android's own notification
+key instead, matched together with a second, separate fingerprint —
+`content_hash` — computed once from the notification's own text when it is
+first captured and kept for as long as the row exists, unlike `title` and
+`body` themselves.
+
+That second fingerprint is what lets the same check cover a `pending`, an
+`unreadable` and an already-`accepted` capture alike, and is why the key
+cannot be trusted on its own for any of them. `android_key` names a
+notification _slot_: stable across a repost of one notification, but a bank
+is free to reuse the same slot for a later, unrelated payment. Matching on
+the key alone — tried and rejected during this feature's review — would
+therefore have to choose between two failures: catching a repost after
+`accept` (closing the hole that let a repost slip past and write a second
+provisional movement for one payment) while also silently dropping every
+later, distinct payment that happened to arrive through the same slot,
+because nothing there was checking whether the text was actually the same.
+`content_hash` removes the choice: a later, different payment has different
+wording, so a different content hash, so the key matching is never enough by
+itself and the different payment is never mistaken for a repost, regardless
+of what the earlier row's status is. A bank genuinely re-wording a
+notification — "payment pending" becoming "payment completed" — fails the
+same comparison and lands as a second, distinct capture for the same reason.
+`dismissed` rows are still left out of the check entirely, not because the
+fingerprint could not cover them but because a repost of a notification the
+owner already dismissed is let back in as a new capture rather than
+suppressed — the cost of that choice is only a capture the owner dismisses
+again, and dismissing one notification's text says nothing about whatever the
+same slot carries next. A notification carrying `FLAG_GROUP_SUMMARY` is
+dropped in the listener — a summary repeats its children, and reading it
+would capture one payment twice. A capture the parsers could not read keeps
+its text until the owner dismisses it, because that text is the only report
+of what went wrong.
 
 Nothing about this feature is stored anywhere but SQLCipher and the package
 allowlist above — no separate queue, no cache file. That has one consequence

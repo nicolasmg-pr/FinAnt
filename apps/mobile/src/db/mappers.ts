@@ -215,6 +215,15 @@ export interface NotificationCapture {
   readonly title: string | null;
   readonly body: string | null;
   readonly captureHash: string;
+  /**
+   * Fingerprint of the notification's text alone, ignoring post time —
+   * unlike `captureHash`, which mixes it in. Kept after `title` and `body`
+   * are NULLed on settle, which is the point: it is what lets a repost still
+   * be recognised once the narrative it would otherwise be compared against
+   * is gone. Null on a row settled before migration 10, whose text was
+   * already NULLed under the old rule with nothing left to fingerprint.
+   */
+  readonly contentHash: string | null;
   readonly status: CaptureStatus;
   readonly parserId: string | null;
   readonly parsed: ParsedMovement | null;
@@ -231,6 +240,7 @@ export interface NotificationCaptureRow {
   body: string | null;
   android_key: string | null;
   capture_hash: string;
+  content_hash: string | null;
   status: string;
   parser_id: string | null;
   parsed_json: string | null;
@@ -247,6 +257,7 @@ export function toNotificationCapture(row: NotificationCaptureRow): Notification
     title: row.title,
     body: row.body,
     captureHash: row.capture_hash,
+    contentHash: row.content_hash,
     status: row.status as CaptureStatus,
     parserId: row.parser_id,
     parsed: row.parsed_json === null ? null : (JSON.parse(row.parsed_json) as ParsedMovement),
