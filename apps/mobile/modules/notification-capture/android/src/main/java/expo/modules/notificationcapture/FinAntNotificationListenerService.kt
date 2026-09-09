@@ -41,7 +41,16 @@ class FinAntNotificationListenerService : NotificationListenerService() {
         if (packageName !in CaptureAllowlist.allowed(this)) return
         // ─────────────────────────────────────────────────────────────────────
 
-        val extras: Bundle = sbn.notification?.extras ?: return
+        val notification = sbn.notification ?: return
+
+        // A group summary repeats what its children already say. Android posts
+        // it alongside them, so reading it would capture the same payment a
+        // second time under a different key and text — and with auto-approve
+        // on, write a second provisional movement. Checked after the allowlist
+        // so the gate above stays the first thing this method does.
+        if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+
+        val extras: Bundle = notification.extras ?: return
         val data = Arguments.createMap().apply {
             putString("packageName", packageName)
             putString("title", extras.getCharSequence(Notification.EXTRA_TITLE)?.toString())
@@ -70,9 +79,12 @@ class FinAntNotificationListenerService : NotificationListenerService() {
      * system bound this listener.
      */
     private fun startCaptureTask(data: WritableMap) {
+        // After the null check, not before: with no ReactHost there is nothing
+        // to wake for, and acquiring first would pin the CPU for the full
+        // timeout over a capture that was dropped on the next line.
+        val reactHost = (application as? ReactApplication)?.reactHost ?: return
         acquireBoundedWakeLock()
 
-        val reactHost = (application as? ReactApplication)?.reactHost ?: return
         val config = HeadlessJsTaskConfig(
             TASK_KEY,
             data,
@@ -135,6 +147,11 @@ class FinAntNotificationListenerService : NotificationListenerService() {
      */
     private fun acquireBoundedWakeLock() {
         val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+        // The lock is deliberately not kept in a field or released by hand: the
+        // timeout passed to acquire() is what releases it. Do not "fix" this
+        // into a stored lock with a manual release — that is the version that
+        // leaks, because there is no single point where this service knows the
+        // JS hop has finished.
         powerManager
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FinAnt:notification-capture")
             .acquire(TASK_TIMEOUT_MS)
