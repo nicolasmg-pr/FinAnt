@@ -38,6 +38,8 @@ export interface NewTransaction {
    * towards a single monthly total, not even for the minute before the owner
    * next opens the app. */
   excludedFromStats: boolean;
+  /** True only for a movement whose sole evidence is a push notification. */
+  provisional: boolean;
 }
 
 /**
@@ -62,8 +64,8 @@ export async function insertTransactions(batch: readonly NewTransaction[]): Prom
         `INSERT OR IGNORE INTO transactions (
            id, account_id, booking_date, value_date, amount_minor, currency, side,
            description, counterparty, reference, category_id, category_source,
-           source, external_id, import_hash, notes, excluded_from_stats, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+           source, external_id, import_hash, notes, excluded_from_stats, provisional, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         newId(),
         tx.accountId,
         tx.bookingDate,
@@ -81,6 +83,7 @@ export async function insertTransactions(batch: readonly NewTransaction[]): Prom
         tx.importHash,
         tx.notes,
         tx.excludedFromStats ? 1 : 0,
+        tx.provisional ? 1 : 0,
         now,
       );
       if (result.changes > 0) {
@@ -297,4 +300,79 @@ export async function applyRecategorisations(
     }
   });
   return changed;
+}
+
+/**
+ * One movement by its dedupe identity. `insertTransactions` reports counts
+ * rather than ids, and a capture needs the id of the row it produced.
+ */
+export async function findTransactionByHash(
+  accountId: string,
+  importHash: string,
+): Promise<Transaction | null> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<TransactionRow>(
+    'SELECT * FROM transactions WHERE account_id = ? AND import_hash = ? AND deleted_at IS NULL;',
+    accountId,
+    importHash,
+  );
+  return row ? toTransaction(row) : null;
+}
+
+/** Live provisional movements, for reconciliation and for the inbox. */
+export async function listProvisionalTransactions(): Promise<Transaction[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<TransactionRow>(
+    `SELECT * FROM transactions
+      WHERE provisional = 1 AND deleted_at IS NULL
+      ORDER BY booking_date DESC, created_at DESC;`,
+  );
+  return rows.map(toTransaction);
+}
+
+/**
+ * Retires each provisional in favour of the statement row that booked it.
+ *
+ * Soft delete, not hard: the row's identity has to stay in the table so the
+ * unique indexes keep holding it, exactly as for a movement the owner deleted.
+ * `superseded_by_id` records which row won, so the trail from what the owner
+ * saw to what the bank booked survives.
+ */
+export async function supersedeProvisionals(
+  pairs: readonly { provisionalId: string; bookedId: string }[],
+): Promise<number> {
+  if (pairs.length === 0) return 0;
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+  let changed = 0;
+  await db.withTransactionAsync(async () => {
+    for (const pair of pairs) {
+      const result = await db.runAsync(
+        `UPDATE transactions
+            SET deleted_at = ?, superseded_by_id = ?
+          WHERE id = ? AND provisional = 1 AND deleted_at IS NULL;`,
+        now,
+        pair.bookedId,
+        pair.provisionalId,
+      );
+      changed += result.changes;
+    }
+  });
+  return changed;
+}
+
+/**
+ * The latest booked date on record per account, which is how far statements
+ * have covered it. A provisional older than that with no match is one the bank
+ * never booked. Provisional rows are excluded: they are not coverage.
+ */
+export async function latestBookedDateByAccount(): Promise<Map<string, string>> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ account_id: string; latest: string }>(
+    `SELECT account_id, MAX(booking_date) AS latest
+       FROM transactions
+      WHERE deleted_at IS NULL AND provisional = 0
+      GROUP BY account_id;`,
+  );
+  return new Map(rows.map((row) => [row.account_id, row.latest]));
 }

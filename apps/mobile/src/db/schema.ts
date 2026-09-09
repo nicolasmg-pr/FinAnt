@@ -273,6 +273,89 @@ export const MIGRATIONS: readonly { version: number; sql: string }[] = [
         END;
     `,
   },
+  {
+    version: 9,
+    sql: `
+      -- Movements gain a second origin: a push notification one of the owner's
+      -- own bank apps posted on this device, read by an Android notification
+      -- listener. Android only, opt-in, and never a substitute for a statement.
+      --
+      -- One row per bank app the owner allows. The label is theirs: nothing
+      -- here is auto-created, and a package name is not a bank's name.
+      CREATE TABLE notification_sources (
+        id TEXT PRIMARY KEY NOT NULL,
+        package_name TEXT NOT NULL,
+        label TEXT NOT NULL,
+        institution_id TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        -- Per source, not global: the owner will trust one bank's wording long
+        -- before another's, and one switch would force the weakest template to
+        -- gate the strongest.
+        auto_approve INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_notif_source_package ON notification_sources(package_name);
+
+      -- A bank app is one channel for several accounts (a Girokonto and its
+      -- Visa, card spend and savings-plan executions). match_json holds a
+      -- RuleMatch tree, the same shape rules.match_json holds and evaluated by
+      -- the same matcher. NULL marks the fallback route, used only when no
+      -- discriminator matched, and there can be at most one per source.
+      CREATE TABLE notification_routes (
+        id TEXT PRIMARY KEY NOT NULL,
+        source_id TEXT NOT NULL REFERENCES notification_sources(id) ON DELETE CASCADE,
+        account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        match_json TEXT,
+        priority INTEGER NOT NULL DEFAULT 100,
+        created_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_notif_route_fallback ON notification_routes(source_id)
+        WHERE match_json IS NULL;
+
+      -- The inbox. This is the only place in FinAnt that holds a narrative the
+      -- owner did not import deliberately, so it prunes itself: accepting or
+      -- dismissing a capture NULLs title and body and keeps the row as a
+      -- hash-only tombstone, which is what stops Android reposting the same
+      -- notification from creating a second movement.
+      --
+      -- posted_at is a real timestamp, and the only one in this schema. Android
+      -- reports postTime as epoch millis and there is no way around it, so it
+      -- is converted to a local calendar day exactly once, at the edge, by
+      -- localCalendarDay() in @finant/importers. Nothing downstream may derive
+      -- a date from posted_at: that is how 1 March becomes February west of UTC.
+      CREATE TABLE notification_captures (
+        id TEXT PRIMARY KEY NOT NULL,
+        source_id TEXT REFERENCES notification_sources(id) ON DELETE SET NULL,
+        package_name TEXT NOT NULL,
+        posted_at TEXT NOT NULL,
+        booking_date TEXT NOT NULL,
+        title TEXT,
+        body TEXT,
+        android_key TEXT,
+        capture_hash TEXT NOT NULL,
+        status TEXT NOT NULL,
+        parser_id TEXT,
+        parsed_json TEXT,
+        transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_notif_capture_hash ON notification_captures(capture_hash);
+      CREATE INDEX idx_notif_capture_status ON notification_captures(status);
+
+      -- A notification-born movement counts in the month's totals and in the
+      -- account balance immediately, and is replaced by the statement row that
+      -- books it. The owner accepting one by hand does not clear the flag:
+      -- agreeing with the notification is not the bank having booked it.
+      ALTER TABLE transactions ADD COLUMN provisional INTEGER NOT NULL DEFAULT 0;
+
+      -- Set when reconciliation replaced a provisional with the statement row
+      -- that booked it. The provisional is soft-deleted at the same moment, so
+      -- this is the trail from what the owner saw to what the bank did.
+      ALTER TABLE transactions ADD COLUMN superseded_by_id TEXT;
+
+      CREATE INDEX idx_tx_provisional ON transactions(provisional) WHERE provisional = 1;
+    `,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
