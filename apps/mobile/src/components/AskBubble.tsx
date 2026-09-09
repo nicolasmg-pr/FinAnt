@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, useWindowDimensions } from 'react-native';
-import Feather from '@expo/vector-icons/Feather';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -12,6 +11,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useElevation, useMotion, useTheme } from '../design';
 import { SETTING_ASSISTANT_BUBBLE_POSITION, readSetting, writeSetting } from '../db/settings-repo';
+import { Ant } from './mascot/Ant';
 
 const SIZE = 56;
 const MARGIN = 12;
@@ -118,7 +118,7 @@ export function AskBubble({ onPress }: { onPress: () => void }) {
         accessibilityLabel={t('assistant.bubbleLabel')}
         style={[styles.bubble, { backgroundColor: theme.accent }, elevation, style]}
       >
-        <Feather name="message-circle" size={24} color={theme.onAccent} />
+        <Ant pose="face" size={34} variant="onAccent" />
       </Animated.View>
     </GestureDetector>
   );

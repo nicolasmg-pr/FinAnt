@@ -21,6 +21,7 @@
     "typecheck": "tsc -b packages/core packages/importers packages/i18n packages/assistant --pretty && npm run typecheck --workspace=@finant/mobile",
     "inspect:csv": "tsx scripts/inspect-csv.ts",
     "icons": "tsx scripts/render-icons.ts",
+    "icons:check": "tsx scripts/render-icons.ts && git diff --exit-code HEAD -- apps/mobile/assets",
     "verify:workbook": "tsx scripts/verify-workbook.ts",
     "eval:assistant": "tsx scripts/eval-assistant.ts"
   },

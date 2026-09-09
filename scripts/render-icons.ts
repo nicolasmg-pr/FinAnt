@@ -3,13 +3,16 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crc32, deflateSync } from 'node:zlib';
 import { Resvg } from '@resvg/resvg-js';
+import { markSvg, monoSvg } from './mascot-svg';
 
 /**
- * `icon-mark.svg` is the only place the full ant-and-grain mark is drawn, and
- * `icon-mono.svg` the only place the simplified one is. Every icon PNG,
- * including the cream-background composite the app icon needs, is
- * synthesised from those two at render time, so changing the mark is one
- * edit rather than several files (or several PNG exports) that drift apart.
+ * The mark's geometry lives in `apps/mobile/src/design/mascot.ts`, the only
+ * place it is drawn. This script serialises that geometry to `icon-mark.svg`
+ * (full mark) and `icon-mono.svg` (simplified mark), then rasterises every
+ * icon PNG, including the cream-background composite the app icon needs,
+ * from those two at render time. The SVGs are generated output, not sources
+ * to edit by hand — changing the mark is one edit to `mascot.ts` rather than
+ * several files (or several PNG exports) that drift apart.
  */
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const brand = join(root, 'apps/mobile/assets/brand');
@@ -107,6 +110,9 @@ function withBackground(svg: string, colour: string): string {
     '</svg>',
   ].join('');
 }
+
+writeFileSync(join(brand, 'icon-mark.svg'), markSvg());
+writeFileSync(join(brand, 'icon-mono.svg'), monoSvg());
 
 const mark = read('icon-mark.svg');
 const mono = read('icon-mono.svg');

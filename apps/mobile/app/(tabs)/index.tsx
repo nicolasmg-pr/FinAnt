@@ -22,7 +22,9 @@ import { Amount } from '../../src/components/Amount';
 import { BalanceChart } from '../../src/components/BalanceChart';
 import { Card } from '../../src/components/Card';
 import { CategoryBreakdown } from '../../src/components/CategoryBreakdown';
+import { Empty } from '../../src/components/ui/Empty';
 import { ForecastChart } from '../../src/components/ForecastChart';
+import { Ant } from '../../src/components/mascot/Ant';
 import { GrainRow } from '../../src/components/trail/GrainRow';
 import { ListRow } from '../../src/components/ui/ListRow';
 import { SegmentedControl } from '../../src/components/ui/SegmentedControl';
@@ -174,7 +176,15 @@ export default function DashboardScreen() {
         style={{ backgroundColor: theme.background }}
         contentContainerStyle={[styles.screen, { paddingTop: insets.top + spacing.lg }]}
       >
-        <Text style={[type.title, { color: theme.text }]}>{t('nav.dashboard')}</Text>
+        <View style={styles.titleRow}>
+          {/* The title's line box (30) is taller than its cap height (24, bold),
+              so centring the icon on the box sits it visibly below the letters.
+              Nudged up to sit against the cap height instead. */}
+          <View style={styles.titleFace}>
+            <Ant pose="face" size={28} />
+          </View>
+          <Text style={[type.title, { color: theme.text }]}>{t('nav.dashboard')}</Text>
+        </View>
         <Empty message={t('dashboard.noData')} />
       </ScrollView>
     );
@@ -188,7 +198,15 @@ export default function DashboardScreen() {
         <RefreshControl refreshing={loading} onRefresh={reload} tintColor={theme.accent} />
       }
     >
-      <Text style={[type.title, { color: theme.text }]}>{t('nav.dashboard')}</Text>
+      <View style={styles.titleRow}>
+        {/* The title's line box (30) is taller than its cap height (24, bold),
+            so centring the icon on the box sits it visibly below the letters.
+            Nudged up to sit against the cap height instead. */}
+        <View style={styles.titleFace}>
+          <Ant pose="face" size={28} />
+        </View>
+        <Text style={[type.title, { color: theme.text }]}>{t('nav.dashboard')}</Text>
+      </View>
 
       {/* The hero carries no card chrome: the balance is the page, not an item
           on it. */}
@@ -408,18 +426,10 @@ function periodLabels(
   });
 }
 
-function Empty({ message }: { message: string }) {
-  const theme = useTheme();
-  return (
-    <View style={styles.empty}>
-      <Feather name="inbox" size={32} color={theme.textMuted} />
-      <Text style={[type.body, styles.emptyText, { color: theme.textMuted }]}>{message}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  titleFace: { marginTop: -3 },
   hero: { gap: spacing.sm, marginBottom: spacing.sm },
   heroLabel: { textTransform: 'uppercase' },
   // The chart reaches both screen edges; the screen's own padding is undone
@@ -435,6 +445,4 @@ const styles = StyleSheet.create({
   },
   warningText: { flexShrink: 1 },
   figures: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
-  empty: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xxl },
-  emptyText: { textAlign: 'center' },
 });

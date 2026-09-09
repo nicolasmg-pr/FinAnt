@@ -15,6 +15,16 @@ export {
   type Point,
   type TrailGeometry,
 } from './trail';
+export {
+  ICON_PALETTE,
+  STROKE,
+  mascot,
+  type Drawing,
+  type MonoCut,
+  type Part,
+  type Pose,
+  type Role,
+} from './mascot';
 
 export function useTheme(): Palette {
   return useColorScheme() === 'dark' ? darkPalette : lightPalette;
