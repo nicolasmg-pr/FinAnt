@@ -22,6 +22,7 @@ import { Amount } from '../../src/components/Amount';
 import { BalanceChart } from '../../src/components/BalanceChart';
 import { Card } from '../../src/components/Card';
 import { CategoryBreakdown } from '../../src/components/CategoryBreakdown';
+import { Empty } from '../../src/components/ui/Empty';
 import { ForecastChart } from '../../src/components/ForecastChart';
 import { GrainRow } from '../../src/components/trail/GrainRow';
 import { ListRow } from '../../src/components/ui/ListRow';
@@ -408,16 +409,6 @@ function periodLabels(
   });
 }
 
-function Empty({ message }: { message: string }) {
-  const theme = useTheme();
-  return (
-    <View style={styles.empty}>
-      <Feather name="inbox" size={32} color={theme.textMuted} />
-      <Text style={[type.body, styles.emptyText, { color: theme.textMuted }]}>{message}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
   hero: { gap: spacing.sm, marginBottom: spacing.sm },
@@ -435,6 +426,4 @@ const styles = StyleSheet.create({
   },
   warningText: { flexShrink: 1 },
   figures: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
-  empty: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xxl },
-  emptyText: { textAlign: 'center' },
 });
