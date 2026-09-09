@@ -42,7 +42,7 @@ function resolveCaptureRoute(
 export default function NotificationInboxScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { captures, provisionals, stale, loading, reload } = useCaptureInbox();
+  const { captures, provisionals, stale, loading, error: loadError, reload } = useCaptureInbox();
 
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [routesBySource, setRoutesBySource] = useState<
@@ -150,13 +150,22 @@ export default function NotificationInboxScreen() {
     }
   };
 
+  // "Nothing waiting" is a claim about what the read found — false the moment
+  // the read itself failed, so a load error rules it out same as loading does.
   const empty =
-    !loading && pending.length === 0 && unreadable.length === 0 && staleRows.length === 0;
+    !loading &&
+    !loadError &&
+    pending.length === 0 &&
+    unreadable.length === 0 &&
+    staleRows.length === 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <Stack.Screen options={{ title: t('notifications.inbox') }} />
       <ScrollView contentContainerStyle={styles.screen}>
+        {loadError ? (
+          <Text style={[type.body, { color: theme.expense }]}>{loadError.message}</Text>
+        ) : null}
         {empty ? <Empty message={t('notifications.empty')} /> : null}
 
         {pending.length > 0 ? (
