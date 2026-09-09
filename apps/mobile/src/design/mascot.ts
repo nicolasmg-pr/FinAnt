@@ -338,11 +338,29 @@ const FACE_VIEWBOX = '500 257 510 510';
 const WALK_FRAMES = 4;
 
 /**
+ * The alternating-tripod gait real hexapods use: legs split into two groups,
+ * taken front to back along the body, that swing in opposite phase. Every leg
+ * moving the same way at the same time reads as the whole leg assembly
+ * wobbling side to side, not as a stride — what makes a multi-legged side
+ * view read as walking is that some legs are always swinging forward while
+ * the others swing back.
+ *
+ * Taken front to back — `leg-front-2`, `leg-front-1`, `leg-mid-3`,
+ * `leg-mid-2`, `leg-mid-1`, `leg-rear` — group A is the 1st, 3rd and 5th of
+ * that order, group B the 2nd, 4th and 6th.
+ */
+const WALK_GROUP_A: ReadonlySet<string> = new Set(['leg-front-2', 'leg-mid-3', 'leg-mid-1']);
+
+/**
  * A leg's lower two points swing along x; the attachment point never moves,
  * because a leg that slides out of its socket reads as a broken drawing rather
- * than as a step.
+ * than as a step. Each group passes through a neutral frame between its two
+ * extremes rather than snapping between them, so on every frame the groups
+ * are either opposed (one group forward, the other back) or both resting at
+ * neutral together — never a hard cut.
  */
-const WALK_SWING: readonly number[] = [0, 18, 0, -18];
+const WALK_SWING_A: readonly number[] = [18, 0, -18, 0];
+const WALK_SWING_B: readonly number[] = [-18, 0, 18, 0];
 
 /**
  * Assumes every leg's `d` is `M x y L x y L x y ...`: absolute, upper-case
@@ -392,9 +410,11 @@ export function mascot(pose: Pose, frame = 0): Drawing {
         transform: OFFSET,
       };
     case 'walk': {
-      const dx = WALK_SWING[((frame % WALK_FRAMES) + WALK_FRAMES) % WALK_FRAMES] ?? 0;
+      const i = ((frame % WALK_FRAMES) + WALK_FRAMES) % WALK_FRAMES;
+      const dxFor = (id: string): number =>
+        (WALK_GROUP_A.has(id) ? WALK_SWING_A[i] : WALK_SWING_B[i]) ?? 0;
       const step = (parts: readonly Part[]): Part[] =>
-        parts.map((part) => (part.id.startsWith('leg-') ? swing(part, dx) : part));
+        parts.map((part) => (part.id.startsWith('leg-') ? swing(part, dxFor(part.id)) : part));
       return {
         parts: [...step(behind), ...coin, ...bodyParts, ...step(legsOnTop), ...face],
         viewBox: '0 0 1024 1024',
