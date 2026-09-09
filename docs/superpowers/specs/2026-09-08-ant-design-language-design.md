@@ -258,8 +258,13 @@ An earlier draft of this section also listed an `icon.svg` holding the full mark
 on its cream ground. It was dropped during implementation: two files carrying
 the same mark geometry are two files that can drift, which defeats the whole
 point of committing the SVG. The cream ground is now applied at render time by
-a `withBackground` helper, so `icon-mark.svg` is the only place the mark is
+a `withBackground` helper, so `icon-mark.svg` was the only place the mark was
 drawn.
+
+The mark's geometry has since moved into `apps/mobile/src/design/mascot.ts`,
+which is now the single source: `scripts/render-icons.ts` serialises it into
+`icon-mark.svg` and `icon-mono.svg` and rasterises the PNGs from those, so
+both SVGs are generated output rather than files to hand-edit.
 
 ### The mark
 

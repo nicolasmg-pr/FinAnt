@@ -1,6 +1,5 @@
 import Svg, { Circle, Ellipse, G, Path } from 'react-native-svg';
-import { STROKE, mascot, useTheme, type Part, type Pose, type Role } from '../../design';
-import type { Palette } from '../../design';
+import { STROKE, mascot, useTheme, type Palette, type Part, type Pose, type Role } from '../../design';
 
 /**
  * The ant, rendered from `design/mascot.ts`. This file holds no geometry: it
