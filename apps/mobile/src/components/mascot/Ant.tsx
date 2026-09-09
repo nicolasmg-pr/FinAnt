@@ -64,14 +64,25 @@ export function Ant({
     >
       <G transform={transform}>
         {parts.map((part) => {
-          const common = { key: part.id, ...paint(part) };
+          // `key` never enters the spread: React 19 warns (and, more to the
+          // point, won't reconcile correctly) when a key riding inside a
+          // spread object reaches JSX. It is passed as a literal prop on
+          // whichever node below ends up as the array element instead.
+          const style = paint(part);
           const element =
             part.kind === 'path' ? (
-              <Path {...common} d={part.d} />
+              <Path key={part.id} {...style} d={part.d} />
             ) : part.kind === 'circle' ? (
-              <Circle {...common} cx={part.cx} cy={part.cy} r={part.r} />
+              <Circle key={part.id} {...style} cx={part.cx} cy={part.cy} r={part.r} />
             ) : (
-              <Ellipse {...common} cx={part.cx} cy={part.cy} rx={part.rx} ry={part.ry} />
+              <Ellipse
+                key={part.id}
+                {...style}
+                cx={part.cx}
+                cy={part.cy}
+                rx={part.rx}
+                ry={part.ry}
+              />
             );
           return part.transform ? (
             <G key={`${part.id}-t`} transform={part.transform}>
