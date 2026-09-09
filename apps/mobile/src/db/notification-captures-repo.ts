@@ -61,18 +61,36 @@ export async function insertCapture(input: NewCapture): Promise<string | null> {
 }
 
 /**
- * Whether this notification is already on record under the same Android key
- * and the same text.
+ * Whether this notification is a repost of one already on record under the
+ * same Android key.
  *
- * Android's `sbn.key` is stable across a repost of the same notification; its
- * post time is not. So a bank updating "payment pending" into "payment
- * completed", or re-posting the identical text, arrives with a new capture
- * hash and would otherwise become a second row — and, with `auto_approve` on,
- * a second provisional movement for one payment.
+ * `sbn.key` is stable across a repost of the same notification; its post time
+ * is not, so a repost hashes differently and `INSERT OR IGNORE` would
+ * otherwise let it through as a second row — and, with `auto_approve` on, a
+ * second provisional movement for one payment.
  *
- * `pending`, `unreadable` and `accepted` are the statuses where a second row
- * would do damage. `dismissed` is excluded on purpose: the owner having thrown
- * one away is not a reason to swallow the next one silently.
+ * `pending` and `unreadable` rows still hold their text, so a repost of one of
+ * those is recognised only when the title and body are identical too. A bank
+ * genuinely re-wording a notification — "payment pending" becoming "payment
+ * completed" — fails that comparison on purpose: it lands as a second,
+ * distinct capture rather than being folded into the first, because treating
+ * a re-worded notification as a repost risks silently absorbing a real second
+ * payment into the old row.
+ *
+ * `accepted` rows have already had their title, body and parsed_json nulled by
+ * `setCaptureStatus` — the retention promise — so there is no text left to
+ * compare. Matching on `android_key` alone is what stops a repost arriving
+ * after accept from slipping past this check and writing the duplicate
+ * provisional movement this function exists to prevent.
+ *
+ * `dismissed` stays out of the key-only match, and not by oversight:
+ * `android_key` names a notification slot, which a bank can reuse for a later,
+ * unrelated payment. Matching a dismissed row on the key alone would drop that
+ * later capture without a trace — the ledger's worst failure. Letting a repost
+ * of an already-dismissed notification come back as a new capture is the
+ * safer direction: at most it resurfaces something the owner dismisses again,
+ * and the real movement still arrives through the next statement import
+ * either way.
  *
  * `IS` rather than `=` so a null title or body compares equal to itself, which
  * `=` in SQL never does.
@@ -86,9 +104,10 @@ export async function hasUnsettledCaptureFor(
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) AS count FROM notification_captures
       WHERE android_key = ?
-        AND title IS ?
-        AND body IS ?
-        AND status IN ('pending', 'unreadable', 'accepted');`,
+        AND (
+          status = 'accepted'
+          OR (status IN ('pending', 'unreadable') AND title IS ? AND body IS ?)
+        );`,
     androidKey,
     title,
     body,

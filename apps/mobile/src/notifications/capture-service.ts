@@ -41,9 +41,10 @@ export interface RawCapture {
  *
  * Four other exits besides the plain write: a notification from a disabled
  * source is dropped before anything is read; a repost — Android's own key
- * already on an unsettled row with the same text — is dropped before the
- * insert; a duplicate (same hash already stored) is dropped after the
- * `INSERT OR IGNORE` reports no row; and a `movement` verdict on a source with
+ * already on a row with matching text (`pending`, `unreadable`), or on an
+ * `accepted` row regardless of text — is dropped before the insert; a
+ * duplicate (same hash already stored) is dropped after the `INSERT OR
+ * IGNORE` reports no row; and a `movement` verdict on a source with
  * `autoApprove` set goes straight on into `acceptCapture`.
  *
  * Never logs any part of the notification.
@@ -54,11 +55,15 @@ export async function recordCapture(raw: RawCapture): Promise<void> {
   // owner disabled between the two can still reach here. The database decides.
   if (!source || !source.enabled) return;
 
-  // Android reposts. A "payment pending" that becomes "payment completed", or
-  // the same text enqueued twice, arrives as a fresh StatusBarNotification
-  // stamped with the current time, so the capture hash below cannot see it —
-  // `sbn.key` can. Checked before anything is written, because with
-  // `autoApprove` on the insert is one step from a duplicate movement.
+  // Android reposts the same notification — enqueued again, or its text
+  // updated in place — under a fresh StatusBarNotification stamped with the
+  // current time, so the capture hash below cannot see it; `sbn.key` can.
+  // Checked before anything is written, because with `autoApprove` on the
+  // insert is one step from a duplicate movement. A genuinely re-worded
+  // notification ("payment pending" becoming "payment completed") is *not*
+  // caught here: it lands as a second, distinct capture on purpose, because
+  // folding it into the old one risks silently absorbing a real second
+  // payment that happens to reuse the same notification slot.
   if (
     raw.androidKey !== null &&
     (await hasUnsettledCaptureFor(raw.androidKey, raw.title, raw.body))
