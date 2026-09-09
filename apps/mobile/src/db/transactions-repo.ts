@@ -319,6 +319,32 @@ export async function findTransactionByHash(
   return row ? toTransaction(row) : null;
 }
 
+/**
+ * The movement an import hash produced, whether or not it is still live.
+ *
+ * `findTransactionByHash` filters `deleted_at IS NULL`, but `idx_tx_hash` is a
+ * full unique index: a superseded provisional keeps its hash under it forever.
+ * So after a statement retired a provisional, re-running the write that made
+ * it inserts nothing *and* finds nothing — which is how a capture ends up
+ * settled with a null movement id, its trail lost. Following
+ * `superseded_by_id` gives back the row the bank actually booked.
+ *
+ * @returns the winning row's id, or null when this hash was never written.
+ */
+export async function resolveTransactionIdByHash(
+  accountId: string,
+  importHash: string,
+): Promise<string | null> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ id: string; superseded_by_id: string | null }>(
+    'SELECT id, superseded_by_id FROM transactions WHERE account_id = ? AND import_hash = ?;',
+    accountId,
+    importHash,
+  );
+  if (!row) return null;
+  return row.superseded_by_id ?? row.id;
+}
+
 /** Live provisional movements, for reconciliation and for the inbox. */
 export async function listProvisionalTransactions(): Promise<Transaction[]> {
   const db = await getDatabase();

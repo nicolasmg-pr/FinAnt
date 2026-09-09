@@ -18,7 +18,7 @@ import {
   getNotificationSourceByPackage,
   listNotificationRoutes,
 } from '../db/notification-sources-repo';
-import { findTransactionByHash } from '../db/transactions-repo';
+import { resolveTransactionIdByHash } from '../db/transactions-repo';
 import { ingest } from '../services/ingest';
 
 /** One notification, exactly as the native listener passes it. */
@@ -125,12 +125,25 @@ export async function recordCapture(raw: RawCapture): Promise<void> {
  * notification said is not the bank having booked it. Only a statement row can
  * settle that, through `reconcileProvisionals`.
  *
+ * The insert and the status update are two writes, not one transaction:
+ * `ingest` opens its own `withTransactionAsync` inside `insertTransactions`,
+ * and SQLite has no nested transaction to wrap that in. What makes the gap
+ * safe is that the recovery is exact rather than that the window is closed.
+ * If the process dies between them the capture stays `pending` with a null
+ * `transaction_id`, and the next accept re-runs the same draft: the unique
+ * import hash makes the insert a no-op, `resolveTransactionIdByHash` finds the
+ * row that was already written — following `superseded_by_id` if a statement
+ * has since retired it — and the status update completes. No second movement
+ * can be written, because the hash is deterministic in the capture.
+ *
  * @returns the movement's id, or null when the capture could not be routed to
  *   an account — which leaves it pending, for the owner to fix the routes.
  */
 export async function acceptCapture(captureId: string): Promise<string | null> {
   const capture = await getCapture(captureId);
   if (!capture || capture.parsed === null || capture.sourceId === null) return null;
+  // Settled already: nothing to accept a second time.
+  if (capture.status !== 'pending' || capture.transactionId !== null) return null;
 
   const routes = await listNotificationRoutes(capture.sourceId);
   const text = [capture.title, capture.body].filter(Boolean).join(' ');
@@ -145,9 +158,9 @@ export async function acceptCapture(captureId: string): Promise<string | null> {
   );
   await ingest([draft], { provisional: true });
 
-  const written = await findTransactionByHash(route.accountId, draft.importHash);
-  await setCaptureStatus(captureId, 'accepted', written?.id ?? null);
-  return written?.id ?? null;
+  const writtenId = await resolveTransactionIdByHash(route.accountId, draft.importHash);
+  await setCaptureStatus(captureId, 'accepted', writtenId);
+  return writtenId;
 }
 
 /**
@@ -158,16 +171,30 @@ export async function acceptCapture(captureId: string): Promise<string | null> {
  * the date or the account. The movement is still provisional — editing what a
  * notification said is not the bank booking it — and the capture is still
  * settled against the row that was written, so it cannot be accepted twice.
+ *
+ * The pre-check matters more here than in `acceptCapture`. An edit may change
+ * a hashed field — the amount, the date, the account — while the capture-hash
+ * discriminator stays the same, so a second run of an already-settled capture
+ * would produce a *different* import hash and therefore a second provisional
+ * movement for one notification. Re-reading the capture and refusing anything
+ * but a still-pending, unsettled row is what stops that.
+ *
+ * The insert and the status update are two writes for the same reason as in
+ * `acceptCapture`, with the same recovery.
  */
 export async function acceptEditedCapture(
   captureId: string,
   draft: DraftTransaction,
 ): Promise<string | null> {
+  const capture = await getCapture(captureId);
+  if (!capture) return null;
+  if (capture.status !== 'pending' || capture.transactionId !== null) return null;
+
   await ingest([draft], { provisional: true });
 
-  const written = await findTransactionByHash(draft.accountId, draft.importHash);
-  await setCaptureStatus(captureId, 'accepted', written?.id ?? null);
-  return written?.id ?? null;
+  const writtenId = await resolveTransactionIdByHash(draft.accountId, draft.importHash);
+  await setCaptureStatus(captureId, 'accepted', writtenId);
+  return writtenId;
 }
 
 export async function dismissCapture(captureId: string): Promise<void> {
