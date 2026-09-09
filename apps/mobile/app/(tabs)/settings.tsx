@@ -17,6 +17,7 @@ import { deleteExclusionRule, listExclusionRules } from '../../src/db/exclusion-
 import { listRules } from '../../src/db/rules-repo';
 import { applyRecategorisations, listAllTransactions } from '../../src/db/transactions-repo';
 import { currentLocale, setLocale } from '../../src/i18n';
+import NotificationCapture from '../../modules/notification-capture';
 import { spacing, type, useTheme } from '../../src/design';
 
 const LOCALE_NAMES: Record<Locale, string> = { en: 'English', es: 'Español', de: 'Deutsch' };
@@ -137,6 +138,16 @@ export default function SettingsScreen() {
       </Card>
 
       <AssistantSettings locale={INTL_LOCALE[locale]} />
+
+      {NotificationCapture.isSupported() ? (
+        <Card title={t('notifications.title')}>
+          <ListRow
+            title={t('notifications.settingsRow')}
+            trailing={<Feather name="chevron-right" size={18} color={theme.textMuted} />}
+            onPress={() => router.push('/notification-capture')}
+          />
+        </Card>
+      ) : null}
 
       <Card title={t('categories.title')}>
         <Text style={[type.body, { color: theme.textMuted }]}>{t('categories.body')}</Text>
