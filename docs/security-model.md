@@ -2,19 +2,24 @@
 
 ## What is stored, and where
 
-| Data                                  | Location                        | Protection                                                                                      |
-| ------------------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Movements, categories, rules, budgets | `finant.db` in app storage      | SQLCipher, key from the device keychain                                                         |
-| SQLCipher passphrase                  | iOS Keychain / Android Keystore | iOS `WHEN_UNLOCKED_THIS_DEVICE_ONLY`; Android non-exportable Keystore key, `allowBackup: false` |
+| Data                                        | Location                                                       | Protection                                                                                              |
+| ------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Movements, categories, rules, budgets       | `finant.db` in app storage                                     | SQLCipher, key from the device keychain                                                                 |
+| SQLCipher passphrase                        | iOS Keychain / Android Keystore                                | iOS `WHEN_UNLOCKED_THIS_DEVICE_ONLY`; Android non-exportable Keystore key, `allowBackup: false`         |
+| Notification allowlist (package names only) | Android `SharedPreferences` (`finant.capture`, key `packages`) | Not encrypted; holds no amount, narrative, account or IBAN — see "Notification capture (Android)" below |
 
 The optional assistant model file also lives in app storage, unencrypted. It is
 a public file of model weights containing nothing about the owner, and SQLCipher
 is for the ledger.
 
 There are no API credentials of any kind: the app talks to no bank, no
-aggregator and no FinAnt server. Movements enter the database only from a
-statement file the owner exports from their bank and picks from local storage,
-or from a manual entry.
+aggregator and no FinAnt server. A movement enters the database in one of
+three ways: from a statement file the owner exports from their bank and picks
+from local storage; from a manual entry; or — on Android, only if the owner
+turns the feature on and grants notification access — from a push
+notification one of their own bank apps posted on the device. See
+"Notification capture (Android)" below for what that third path can and
+cannot see.
 
 There is no FinAnt account, no server, and no cloud copy. Erasing the app erases
 the data, and so does Settings > Erase all data: it deletes the database file and
@@ -35,6 +40,65 @@ copy in the cache is the operating system's, not ours, and is not encrypted by
 FinAnt. The owner's own Downloads folder already holds the same file in
 plaintext, so this adds no exposure the export did not create — but it is why
 the app never writes a statement anywhere else and never logs a row from one.
+
+## Notification capture (Android)
+
+Android only, off until the owner turns it on in Settings: nothing is
+captured until they grant notification access in the system's own screen —
+there is no in-app permission dialog for this, unlike camera or location —
+and create at least one notification source by hand. No source is ever
+created automatically.
+
+Notification access is a broad grant. Once given, the system offers the
+listener service every notification posted on the device, from any app. What
+narrows that down to the owner's own bank apps is a single early return in
+`FinAntNotificationListenerService.onNotificationPosted`
+(`apps/mobile/modules/notification-capture/android/src/main/java/expo/modules/notificationcapture/FinAntNotificationListenerService.kt`):
+the package name is checked against the allowlist before `sbn.notification` —
+the object holding the title and body — is ever dereferenced. A message from a
+person, a 2FA code, a health app's reminder: all of them return on that line,
+with their text never read, copied or logged. This is the whole privacy
+argument for the feature, and the method is kept short enough to verify by
+reading.
+
+The allowlist itself lives in plain Android `SharedPreferences`
+(`CaptureAllowlist`, file `finant.capture`, key `packages`), not in SQLCipher,
+because the listener service runs while the app — and its database connection
+— is closed. What it holds is package names of the owner's own bank apps, and
+nothing else: no amount, no narrative, no account, no IBAN. That reveals which
+banks the owner uses to anything that can already read the app's private
+storage, which is the same thing that storage's notifications already reveal
+to it. The database stays authoritative for the allowlist; the preferences
+file is a projection, rewritten whenever the owner adds, edits or removes a
+source.
+
+Learning mode — "find my bank apps" — works the same way: while it is armed,
+the service records the package name only, never a title, a text or a post
+time, of every notification it sees, into the same preferences, and the flag
+expires by a timestamp the native code checks on every notification. Nothing
+it collects survives past the owner picking a name off the resulting list.
+
+An allowlisted notification's title and body are written into
+`notification_captures`, inside SQLCipher, alongside everything else in the
+ledger. That text is set to NULL the moment the capture is settled — accepted,
+dismissed, or recognised by a parser as `ignored` (a bank's marketing push or
+a login alert) — leaving a hash-only tombstone so Android reposting the same
+notification cannot create a second row. A capture the parsers could not read
+keeps its text until the owner dismisses it, because that text is the only
+report of what went wrong.
+
+Nothing about this feature is stored anywhere but SQLCipher and the package
+allowlist above — no separate queue, no cache file. That has one consequence
+worth stating plainly: if Android kills the app process between the
+notification arriving and the database write finishing, the capture is lost
+silently, with nothing logged and nothing retried. Nothing ends up wrong — the
+next statement import still books the real movement — but it will not have
+appeared early. A Keystore-encrypted queue would close that gap; it was left
+out because the failure it prevents is a movement arriving a few days late,
+and the code to prevent it is not free.
+
+Still zero network calls. Nothing about a notification is sent anywhere; this
+feature adds none to the one described below.
 
 ## The one network call
 

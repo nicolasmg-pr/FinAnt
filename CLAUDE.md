@@ -30,6 +30,10 @@ import is a file the owner picks by hand. Euro area, English/Spanish/German.
 - One bank export = one `ImportProfile` in `packages/importers/src/profiles/`,
   documented in `docs/import-formats.md` from a real export the owner supplies
   in `fixtures/private/` (gitignored). Never guess a bank's column layout.
+- Notification capture is Android only: its parsers live in
+  `packages/importers/src/notifications/`, documented in
+  `docs/notification-formats.md` from real notification text the owner
+  supplies — never guessed, exactly like a bank's column layout.
 - Relative imports inside packages are **extensionless**. Metro does not map
   `./money.js` onto `money.ts`.
 - Domain logic (money, categorisation, aggregates, forecast) lives in
