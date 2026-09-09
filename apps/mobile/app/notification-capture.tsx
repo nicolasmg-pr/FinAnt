@@ -45,6 +45,14 @@ interface RouteDraft {
   sourceId: string;
   choice: AccountChoice;
   discriminator: string;
+  /**
+   * The account this source's existing fallback route already points at, or
+   * null when it has none. `idx_notif_route_fallback` permits exactly one per
+   * source, so with a fallback already on record an empty discriminator is not
+   * a choice on offer — leaving it blank would come back as a raw, untranslated
+   * SQLite constraint message.
+   */
+  fallbackAccountId: string | null;
 }
 
 /** The text on a route's chip: the word it matches on, or the fallback label. */
@@ -282,12 +290,23 @@ export default function NotificationCaptureScreen() {
   const openAddRoute = (sourceId: string) => {
     const choice = firstAccountChoice(accounts, institutions);
     if (!choice) return;
+    const existing = sources.find((entry) => entry.source.id === sourceId)?.routes ?? [];
     setRouteError(null);
-    setRouteDraft({ sourceId, choice, discriminator: '' });
+    setRouteDraft({
+      sourceId,
+      choice,
+      discriminator: '',
+      fallbackAccountId: existing.find((route) => route.match === null)?.accountId ?? null,
+    });
   };
 
   const canSaveRoute =
-    routeDraft !== null && !routeDraft.choice.newAccount && !routeDraft.choice.newInstitution;
+    routeDraft !== null &&
+    !routeDraft.choice.newAccount &&
+    !routeDraft.choice.newInstitution &&
+    // A second fallback is refused by the database, so it is refused here
+    // first, where the owner can still see why.
+    !(routeDraft.fallbackAccountId !== null && routeDraft.discriminator.trim() === '');
 
   const saveRoute = async () => {
     if (!routeDraft || busy || !canSaveRoute) return;
@@ -485,8 +504,19 @@ export default function NotificationCaptureScreen() {
               label={t('notifications.routeMatch')}
               value={routeDraft.discriminator}
               onChangeText={(discriminator) => setRouteDraft({ ...routeDraft, discriminator })}
-              placeholder={t('notifications.routeFallback')}
+              // Blank means "anything else", and that route already exists.
+              placeholder={
+                routeDraft.fallbackAccountId === null ? t('notifications.routeFallback') : ''
+              }
             />
+            {routeDraft.fallbackAccountId !== null ? (
+              <Text style={[type.label, { color: theme.textMuted }]}>
+                {t('notifications.routeFallback')}
+                {' · '}
+                {accounts.find((account) => account.id === routeDraft.fallbackAccountId)?.name ??
+                  ''}
+              </Text>
+            ) : null}
           </>
         ) : null}
 
