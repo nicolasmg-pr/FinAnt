@@ -42,7 +42,15 @@ function resolveCaptureRoute(
 export default function NotificationInboxScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { captures, provisionals, stale, loading, error: loadError, reload } = useCaptureInbox();
+  const {
+    captures,
+    provisionals,
+    stale,
+    ambiguous,
+    loading,
+    error: loadError,
+    reload,
+  } = useCaptureInbox();
 
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [routesBySource, setRoutesBySource] = useState<
@@ -75,9 +83,16 @@ export default function NotificationInboxScreen() {
 
   const pending = useMemo(() => captures.filter((c) => c.status === 'pending'), [captures]);
   const unreadable = useMemo(() => captures.filter((c) => c.status === 'unreadable'), [captures]);
+  const ambiguousRows = useMemo(
+    () => provisionals.filter((tx) => ambiguous.has(tx.id)),
+    [provisionals, ambiguous],
+  );
+  // A row can be both. Ambiguity is the more specific explanation and the one
+  // the owner can act on, so it wins the card and the stale list gives it up
+  // rather than showing the same movement twice.
   const staleRows = useMemo(
-    () => provisionals.filter((tx) => stale.has(tx.id)),
-    [provisionals, stale],
+    () => provisionals.filter((tx) => stale.has(tx.id) && !ambiguous.has(tx.id)),
+    [provisionals, stale, ambiguous],
   );
 
   // One lookup per source rather than per capture: several captures from the
@@ -157,7 +172,8 @@ export default function NotificationInboxScreen() {
     !loadError &&
     pending.length === 0 &&
     unreadable.length === 0 &&
-    staleRows.length === 0;
+    staleRows.length === 0 &&
+    ambiguousRows.length === 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -205,11 +221,28 @@ export default function NotificationInboxScreen() {
           </View>
         ) : null}
 
+        {ambiguousRows.length > 0 ? (
+          <View style={styles.section}>
+            <SectionHeader label={t('notifications.ambiguous')} />
+            {ambiguousRows.map((tx) => (
+              <UnresolvedCard
+                key={tx.id}
+                transaction={tx}
+                note={t('notifications.ambiguousExplainer')}
+              />
+            ))}
+          </View>
+        ) : null}
+
         {staleRows.length > 0 ? (
           <View style={styles.section}>
             <SectionHeader label={t('notifications.provisional')} />
             {staleRows.map((tx) => (
-              <StaleCard key={tx.id} transaction={tx} />
+              <UnresolvedCard
+                key={tx.id}
+                transaction={tx}
+                note={t('notifications.provisionalStale', { days: PROVISIONAL_STALE_DAYS })}
+              />
             ))}
           </View>
         ) : null}
@@ -365,13 +398,16 @@ function UnreadableCard({
 }
 
 /**
- * A provisional the bank appears never to have booked. The inbox never
- * deletes it: tapping through to the movement is where that happens, on the
- * screen that already carries the delete confirmation.
+ * A provisional no statement has settled — either because none ever matched
+ * it, or because two of them matched one booked row equally well and
+ * reconciliation refused to guess. Same card either way; only `note` says
+ * which, because what the owner does about it is the same in both cases.
+ *
+ * The inbox never deletes it: tapping through to the movement is where that
+ * happens, on the screen that already carries the delete confirmation.
  */
-function StaleCard({ transaction }: { transaction: Transaction }) {
+function UnresolvedCard({ transaction, note }: { transaction: Transaction; note: string }) {
   const theme = useTheme();
-  const { t } = useTranslation();
   const router = useRouter();
 
   return (
@@ -387,9 +423,7 @@ function StaleCard({ transaction }: { transaction: Transaction }) {
       <Text style={[type.body, { color: theme.text }]}>
         {transaction.counterparty ?? transaction.description}
       </Text>
-      <Text style={[type.label, { color: theme.warning }]}>
-        {t('notifications.provisionalStale', { days: PROVISIONAL_STALE_DAYS })}
-      </Text>
+      <Text style={[type.label, { color: theme.warning }]}>{note}</Text>
     </Card>
   );
 }

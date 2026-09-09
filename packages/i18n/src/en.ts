@@ -252,6 +252,9 @@ export const en = {
     provisionalStale:
       'No statement has confirmed this after {{days}} days, though later movements on this account have been imported. The payment may have been declined.',
     balanceIncluding: 'including {{count}} unconfirmed',
+    ambiguous: 'Worth a look',
+    ambiguousExplainer:
+      'More than one unconfirmed movement matched a statement row equally well, so none of them was retired. Check which one the bank actually booked.',
   },
   settings: {
     rulesTitle: 'Classification rules',

@@ -255,6 +255,9 @@ export const de: Translations = {
     provisionalStale:
       'Nach {{days}} Tagen hat noch kein Kontoauszug das bestätigt, obwohl spätere Umsätze auf diesem Konto bereits importiert wurden. Die Zahlung wurde möglicherweise abgelehnt.',
     balanceIncluding: 'davon {{count}} unbestätigt',
+    ambiguous: 'Sieh dir das an',
+    ambiguousExplainer:
+      'Mehrere unbestätigte Umsätze passen gleich gut zu einer Zeile im Kontoauszug, deshalb wurde keiner davon abgelegt. Prüfe, welchen die Bank wirklich gebucht hat.',
   },
   settings: {
     rulesTitle: 'Regeln zur Zuordnung',

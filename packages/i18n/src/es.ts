@@ -256,6 +256,9 @@ export const es: Translations = {
     provisionalStale:
       'Después de {{days}} días ningún extracto lo ha confirmado, aunque ya se han importado movimientos posteriores de esta cuenta. Puede que el pago se haya rechazado.',
     balanceIncluding: 'de los cuales {{count}} sin confirmar',
+    ambiguous: 'Míralo con calma',
+    ambiguousExplainer:
+      'Más de un movimiento sin confirmar coincide igual de bien con una línea del extracto, así que no se retiró ninguno. Comprueba cuál apuntó de verdad el banco.',
   },
   settings: {
     rulesTitle: 'Reglas de clasificación',
