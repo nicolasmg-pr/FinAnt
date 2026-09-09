@@ -10,6 +10,15 @@
     binds and rebinds it on its own once the owner grants notification access,
     so the app does not need to start it and needs no BOOT_COMPLETED receiver.
   -->
+
+  <!--
+    Required by PowerManager.newWakeLock/acquire in
+    FinAntNotificationListenerService.acquireBoundedWakeLock: the device must
+    not suspend before the headless task finishes its database write. WAKE_LOCK
+    is a normal permission — no runtime prompt, declaring it is sufficient.
+  -->
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+
   <application>
     <service
       android:name="expo.modules.notificationcapture.FinAntNotificationListenerService"

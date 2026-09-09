@@ -97,8 +97,20 @@ class FinAntNotificationListenerService : NotificationListenerService() {
                 reactHost.addReactInstanceEventListener(
                     object : ReactInstanceEventListener {
                         override fun onReactContextInitialized(context: ReactContext) {
-                            HeadlessJsTaskContext.getInstance(context).startTask(config)
-                            reactHost.removeReactInstanceEventListener(this)
+                            // This runs later, invoked by the framework outside
+                            // the dynamic extent of the try above — the cold-start
+                            // path this feature exists for, since the app is
+                            // fully closed when the notification arrives. It
+                            // needs its own containment, and the listener must
+                            // come off either way or it fires again on the next
+                            // context and starts a duplicate task.
+                            try {
+                                HeadlessJsTaskContext.getInstance(context).startTask(config)
+                            } catch (throwable: Throwable) {
+                                // Swallowed on purpose: see the comment above.
+                            } finally {
+                                reactHost.removeReactInstanceEventListener(this)
+                            }
                         }
                     },
                 )
