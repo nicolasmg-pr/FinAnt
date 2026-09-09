@@ -66,11 +66,15 @@ Settings → General → VPN & Device Management → trust your developer certif
 
 ### Android
 
-Needs:
+The phone itself needs nothing installed. Everything below is built on your Mac
+(or Linux box) and the result is a single `.apk` file you copy across.
+
+Needs, on the build machine:
 
 - JDK 17 (`brew install --cask zulu@17`, or the one Android Studio bundles)
-- Android Studio, and through its SDK Manager: Android SDK Platform 36
-  (Android 16), the SDK build tools, and the platform tools
+- the Android SDK: either Android Studio, and through its SDK Manager the
+  Android SDK Platform 36 (Android 16), the SDK build tools and the platform
+  tools — or the command line tools alone
 - `ANDROID_HOME` pointing at the SDK, with `platform-tools` on `PATH`:
 
   ```bash
@@ -78,21 +82,55 @@ Needs:
   export PATH="$PATH:$ANDROID_HOME/platform-tools"
   ```
 
-On an emulator (start one from Android Studio → Device Manager first):
-
-```bash
-npm run android
-```
-
-On your own phone: enable Developer options → USB debugging, connect by cable,
-accept the debugging prompt, confirm `adb devices` lists it, then:
+#### The APK you actually install
 
 ```bash
 cd apps/mobile
-npx expo run:android --device
+npx expo prebuild --platform android     # only if android/ is missing
+cd android
+./gradlew assembleRelease
 ```
 
-No signing setup and no Google account are needed for a debug build.
+The build leaves one universal APK at
+
+```
+apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+```
+
+It carries the JavaScript bundle inside it, so it runs on its own with no dev
+server and no cable. Install it either way:
+
+- **Over cable**: `adb install -r app-release.apk`
+- **Without a cable**: put the file on the phone — AirDrop, a cable copy,
+  Syncthing, a USB stick, your own file share — open it in the phone's file
+  manager and tap it. Android asks once to allow installs from that app
+  (Settings → Apps → _the file manager_ → Install unknown apps); grant it and
+  the install goes through. Nothing leaves your machines and no Google account
+  is involved.
+
+That APK is signed with the debug keystore Expo ships in its template — the
+same well-known key on every machine, so rebuilds keep installing over each
+other. It is fine for your own phones and useless for distribution: anyone can
+produce an APK with a matching signature. A key of your own is only needed to
+publish through Google Play. Sign it yourself with
+[React Native's signing guide](https://reactnative.dev/docs/signed-apk-android),
+pointing `apps/mobile/android/gradle.properties` at your keystore and keeping
+both out of git.
+
+#### Building for development instead
+
+Working on the code is the other case: a debug build talks to the dev server on
+your machine, so a save reloads the app. Start an emulator from Android Studio →
+Device Manager, or connect a phone with Developer options → USB debugging
+enabled and confirm `adb devices` lists it, then:
+
+```bash
+npm run android                          # emulator, or the only device attached
+cd apps/mobile && npx expo run:android --device   # pick from a list
+```
+
+Both need the phone or emulator reachable from the machine that runs the dev
+server, over cable or the same network.
 
 ### After the first build
 
@@ -113,17 +151,28 @@ a build that runs on its own, bundle the JavaScript into the binary:
 
 ```bash
 cd apps/mobile
-npx expo run:ios --configuration Release
-npx expo run:android --variant release   # needs a signing key of your own
+npx expo run:ios --configuration Release        # installs on the attached iPhone
+npx expo run:android --variant release          # installs on the attached device
 ```
 
-Release Android builds are signed, so generate a keystore once and point
-`apps/mobile/android/gradle.properties` at it — keep both out of git.
+On Android, `./gradlew assembleRelease` (above) is the same build without the
+install step — take the APK it writes and put it on the phone by hand.
+
+iOS has no equivalent. Every iOS binary has to be signed by a provisioning
+profile that names the target device, so there is no file you can copy over and
+tap. With a free Apple ID the only route is the attached Mac — `expo run:ios
+--device`, or `xcrun devicectl device install app --device <name> <FinAnt.app>`
+for the same thing without opening Xcode — and the build stops launching after
+seven days, so renewing it means plugging the phone in again. A paid Apple
+Developer account buys year-long profiles and an ad hoc `.ipa` you can install
+with Apple Configurator, at the cost of registering each phone's UDID. Anything
+beyond that (TestFlight, an over-the-air install page) means handing the binary
+to a server, which this project does not have.
 
 ### The optional assistant
 
-The on-device assistant is off until you download its model from *Settings →
-Local assistant*: about 1.2 GB, fetched once from Hugging Face and checksummed
+The on-device assistant is off until you download its model from _Settings →
+Local assistant_: about 1.2 GB, fetched once from Hugging Face and checksummed
 on arrival. It is the only network request the app ever makes, it carries nothing
 about you, and everything it later answers is computed on the phone. Skip the
 download and the rest of the app works exactly the same.
@@ -131,17 +180,17 @@ download and the rest of the app works exactly the same.
 ## Importing statements
 
 There is no bank connection. Export a statement from your bank's website or app,
-then open it from *Settings → Import a file*. Everything is parsed on the device.
+then open it from _Settings → Import a file_. Everything is parsed on the device.
 
 Target banks, one import profile each:
 
-| Bank | Country |
-|---|---|
-| Trade Republic | DE |
-| ING | DE |
-| DKB | DE |
-| Raisin (WeltSparen) | DE |
-| Openbank | ES |
+| Bank                | Country |
+| ------------------- | ------- |
+| Trade Republic      | DE      |
+| ING                 | DE      |
+| DKB                 | DE      |
+| Raisin (WeltSparen) | DE      |
+| Openbank            | ES      |
 
 Also supported:
 
