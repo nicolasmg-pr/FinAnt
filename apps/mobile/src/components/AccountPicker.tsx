@@ -34,6 +34,7 @@ export function AccountPicker({
   accounts,
   value,
   onChange,
+  allowCreate = true,
 }: {
   /** Every bank on record; the accounts of the chosen one make up the second row. */
   institutions: readonly InstitutionRow[];
@@ -41,6 +42,12 @@ export function AccountPicker({
   accounts: readonly AccountRow[];
   value: AccountChoice;
   onChange: (choice: AccountChoice) => void;
+  /**
+   * Whether "new bank" / "new account" are offered at all. Off for a screen
+   * that may only point at what already exists — a visible chip that leads to
+   * a name field Save can never act on is worse than no chip.
+   */
+  allowCreate?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -86,16 +93,18 @@ export function AccountPicker({
             onChange(chooseBank(value, { institutionId: null, isNew: false }, choosable, newId))
           }
         />
-        <Chip
-          label={t('import.newBank')}
-          selected={value.newInstitution}
-          onPress={() =>
-            onChange(chooseBank(value, { institutionId: null, isNew: true }, choosable, newId))
-          }
-        />
+        {allowCreate ? (
+          <Chip
+            label={t('import.newBank')}
+            selected={value.newInstitution}
+            onPress={() =>
+              onChange(chooseBank(value, { institutionId: null, isNew: true }, choosable, newId))
+            }
+          />
+        ) : null}
       </View>
 
-      {value.newInstitution ? (
+      {allowCreate && value.newInstitution ? (
         <Field
           label={t('banks.name')}
           value={value.institutionName}
@@ -117,14 +126,16 @@ export function AccountPicker({
             onPress={() => onChange(chooseAccount(value, account.id))}
           />
         ))}
-        <Chip
-          label={t('import.newAccount')}
-          selected={value.newAccount}
-          onPress={() => onChange(chooseNewAccount(value, newId))}
-        />
+        {allowCreate ? (
+          <Chip
+            label={t('import.newAccount')}
+            selected={value.newAccount}
+            onPress={() => onChange(chooseNewAccount(value, newId))}
+          />
+        ) : null}
       </View>
 
-      {value.newAccount ? (
+      {allowCreate && value.newAccount ? (
         <Field
           label={t('import.accountName')}
           value={value.accountName}

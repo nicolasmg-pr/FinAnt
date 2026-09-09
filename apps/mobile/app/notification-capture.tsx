@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, Switch, Text, View, ScrollView } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, AppState, StyleSheet, Switch, Text, View, ScrollView } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import { Stack, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -115,6 +115,35 @@ export default function NotificationCaptureScreen() {
     }, [reload]),
   );
 
+  // The permission is granted in the Android settings app, a different
+  // Activity — leaving and returning to that does not change navigation
+  // focus, so `useFocusEffect` alone never sees it. The app going back to
+  // `active` is the signal that covers that trip.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') void reload();
+    });
+    return () => subscription.remove();
+  }, [reload]);
+
+  // Learning mode is a native, session-scoped buffer: leaving this screen
+  // mid-session (the brief's own walkthrough invites exactly that, since the
+  // owner goes off to trigger a payment) must not leave it holding packages
+  // from a run nobody will ever read. `learningRef` mirrors `learning` so the
+  // unmount cleanup below sees its last known value without re-running on
+  // every tick of the countdown.
+  const learningRef = useRef(learning);
+  useEffect(() => {
+    learningRef.current = learning;
+  }, [learning]);
+  useEffect(() => {
+    return () => {
+      if (learningRef.current) {
+        NotificationCapture.consumeLearnedPackages();
+      }
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     Promise.all([listAccounts(), listInstitutions()])
@@ -200,8 +229,16 @@ export default function NotificationCaptureScreen() {
   };
 
   const toggleAutoApprove = async (sourceId: string, autoApprove: boolean) => {
-    await updateNotificationSource(sourceId, { autoApprove });
-    await reload();
+    if (busy) return;
+    setBusy(true);
+    try {
+      await updateNotificationSource(sourceId, { autoApprove });
+      await reload();
+    } catch (cause) {
+      Alert.alert(t('notifications.autoApprove'), (cause as Error).message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const confirmDeleteSource = (source: NotificationSource) => {
@@ -211,10 +248,18 @@ export default function NotificationCaptureScreen() {
         text: t('common.delete'),
         style: 'destructive',
         onPress: () => {
+          if (busy) return;
           void (async () => {
-            await deleteNotificationSource(source.id);
-            await syncAllowedPackages();
-            await reload();
+            setBusy(true);
+            try {
+              await deleteNotificationSource(source.id);
+              await syncAllowedPackages();
+              await reload();
+            } catch (cause) {
+              Alert.alert(t('common.delete'), (cause as Error).message);
+            } finally {
+              setBusy(false);
+            }
           })();
         },
       },
@@ -222,8 +267,16 @@ export default function NotificationCaptureScreen() {
   };
 
   const removeRoute = async (routeId: string) => {
-    await deleteNotificationRoute(routeId);
-    await reload();
+    if (busy) return;
+    setBusy(true);
+    try {
+      await deleteNotificationRoute(routeId);
+      await reload();
+    } catch (cause) {
+      Alert.alert(t('notifications.routes'), (cause as Error).message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const openAddRoute = (sourceId: string) => {
@@ -261,7 +314,20 @@ export default function NotificationCaptureScreen() {
       {
         text: t('common.delete'),
         style: 'destructive',
-        onPress: () => void deleteAllCaptures(),
+        onPress: () => {
+          if (busy) return;
+          void (async () => {
+            setBusy(true);
+            try {
+              await deleteAllCaptures();
+              await reload();
+            } catch (cause) {
+              Alert.alert(t('notifications.deleteCaptures'), (cause as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          })();
+        },
       },
     ]);
   };
@@ -324,6 +390,7 @@ export default function NotificationCaptureScreen() {
               trailing={
                 <Switch
                   value={source.autoApprove}
+                  disabled={busy}
                   onValueChange={(value) => void toggleAutoApprove(source.id, value)}
                   trackColor={{ true: theme.accent }}
                 />
@@ -339,6 +406,7 @@ export default function NotificationCaptureScreen() {
                 trailing={
                   <Touchable
                     onPress={() => void removeRoute(route.id)}
+                    disabled={busy}
                     accessibilityRole="button"
                     accessibilityLabel={t('common.delete')}
                   >
@@ -350,7 +418,7 @@ export default function NotificationCaptureScreen() {
             <Button
               label={t('notifications.addRoute')}
               variant="secondary"
-              disabled={accounts.length === 0}
+              disabled={accounts.length === 0 || busy}
               onPress={() => openAddRoute(source.id)}
             />
 
@@ -358,6 +426,7 @@ export default function NotificationCaptureScreen() {
               <Button
                 label={t('common.delete')}
                 variant="danger"
+                disabled={busy}
                 onPress={() => confirmDeleteSource(source)}
               />
             </View>
@@ -368,6 +437,7 @@ export default function NotificationCaptureScreen() {
           <Button
             label={t('notifications.deleteCaptures')}
             variant="danger"
+            disabled={busy}
             onPress={confirmDeleteAllCaptures}
           />
         </Card>
@@ -391,6 +461,7 @@ export default function NotificationCaptureScreen() {
             : []
         }
         error={namingError}
+        saveDisabled={naming === null || naming.name.trim() === ''}
         onCancel={() => setNaming(null)}
         onSave={() => void saveNaming()}
       />
@@ -408,6 +479,7 @@ export default function NotificationCaptureScreen() {
               accounts={accounts}
               value={routeDraft.choice}
               onChange={(choice) => setRouteDraft({ ...routeDraft, choice })}
+              allowCreate={false}
             />
             <Field
               label={t('notifications.routeMatch')}
