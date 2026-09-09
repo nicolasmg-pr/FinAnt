@@ -21,3 +21,4 @@ export * from './provisional';
 export * from './exclusion';
 export * from './account-choice';
 export * from './networth';
+export * from './notification-routing';
