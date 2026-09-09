@@ -207,6 +207,54 @@ export const es: Translations = {
     autoExcluded_one: '{{count}} movimiento excluido de las estadísticas por una regla tuya',
     autoExcluded_other: '{{count}} movimientos excluidos de las estadísticas por reglas tuyas',
   },
+  notifications: {
+    title: 'Notificaciones bancarias',
+    settingsRow: 'Notificaciones bancarias',
+    androidOnly: 'Solo para Android. En iOS ninguna app puede leer las notificaciones.',
+    explainer:
+      'FinAnt puede leer las notificaciones que tus apps del banco muestran en este teléfono y convertirlas en movimientos. No se envía nada a ningún sitio. Un movimiento creado así queda marcado como no confirmado hasta que lo confirme el próximo extracto que importes.',
+    permissionGranted: 'Acceso a las notificaciones concedido',
+    permissionMissing: 'Acceso a las notificaciones no concedido',
+    grant: 'Abrir los ajustes de Android',
+    revokedHint:
+      'Algunos teléfonos retiran este permiso al actualizar la aplicación. Revisa aquí si dejan de llegar movimientos.',
+    learn: 'Buscar mis apps del banco',
+    learning: 'Escuchando durante {{seconds}} s. Haz un pago o abre tu app del banco.',
+    learnExplainer:
+      'FinAnt guarda solo el nombre de la app que te avisó, nunca el texto, para que puedas elegir tus bancos de una lista.',
+    learnEmpty: 'Ninguna app te avisó durante ese tiempo.',
+    sources: 'Apps del banco',
+    addSource: 'Añadir app del banco',
+    sourceName: 'Ponle un nombre a este banco',
+    autoApprove: 'Añadir movimientos sin preguntar',
+    autoApproveHint:
+      'Desactivado: la notificación te espera en la bandeja de entrada. Activado: se convierte al instante en un movimiento no confirmado.',
+    routes: 'Cuentas',
+    addRoute: 'Añadir regla de cuenta',
+    routeFallback: 'Cualquier otra cosa',
+    routeMatch: 'Cuando la notificación menciona',
+    deleteCaptures: 'Eliminar todas las notificaciones capturadas',
+    inbox: 'Bandeja de entrada',
+    reviewChip: '{{count}} por revisar',
+    pending: 'Te espera',
+    unreadable: 'No se pudo leer esto',
+    unreadableExplainer:
+      'El texto ha cambiado, o FinAnt todavía no tiene una plantilla para esta notificación. Copia el texto si quieres que se admita.',
+    copyText: 'Copiar texto',
+    accept: 'Añadir movimiento',
+    edit: 'Editar primero',
+    dismiss: 'Descartar',
+    noRoute:
+      'Ninguna regla de cuenta coincide con esta notificación. Añade una para poder aceptarla.',
+    viaFallback: 'Asignado por la regla por defecto. Comprueba que la cuenta es correcta.',
+    empty: 'No hay nada esperando.',
+    provisional: 'No confirmado',
+    provisionalExplainer:
+      'Visto en una notificación de tu banco, todavía no confirmado por un extracto.',
+    provisionalStale:
+      'Después de {{days}} días ningún extracto lo ha confirmado, aunque ya se han importado movimientos posteriores de esta cuenta. Puede que el pago se haya rechazado.',
+    balanceIncluding: 'de los cuales {{count}} sin confirmar',
+  },
   settings: {
     rulesTitle: 'Reglas de clasificación',
     rulesBody:
