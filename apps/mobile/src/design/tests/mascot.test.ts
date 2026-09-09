@@ -101,4 +101,75 @@ describe('poses', () => {
   it('walk wraps around its frame count', () => {
     expect(mascot('walk', 0)).toEqual(mascot('walk', 4));
   });
+
+  /**
+   * The previous two tests both still pass if every leg swings together: a
+   * single shared offset also "differs from" frame 1's neutral pose and also
+   * wraps at frame 4. Neither one would catch a regression that collapsed
+   * the alternating-tripod gait back into one group. This test reads the
+   * actual horizontal shift out of each leg's own path data — never a pinned
+   * `d` string, which would just teach the next geometry tweak to delete the
+   * test — and requires two named legs (one from each group, per the
+   * grouping documented next to `WALK_GROUP_A` in mascot.ts) to move in
+   * opposite directions, with at least one leg moving each way.
+   */
+  it('walk swings its two leg groups in opposite directions', () => {
+    /** Every x from an `M x y L x y L x y ...` path, in order. */
+    const xCoords = (d: string): number[] =>
+      (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number).filter((_, i) => i % 2 === 0);
+
+    const legPaths = (parts: readonly Part[]) =>
+      new Map(
+        parts
+          .filter((p): p is Extract<Part, { kind: 'path' }> => p.kind === 'path')
+          .filter((p) => p.id.startsWith('leg-'))
+          .map((p) => [p.id, p.d] as const),
+      );
+
+    const rest = legPaths(mascot('carrying').parts);
+    const legIds = [...rest.keys()];
+    expect(legIds.length).toBeGreaterThan(0);
+
+    /** Sum of how far every point on leg `id` moved horizontally at `frame`,
+     * relative to its rest position in `carrying`. Positive or negative
+     * according to which way the leg swung; zero if it did not move. */
+    const totalDx = (id: string, frame: number): number => {
+      const restD = rest.get(id);
+      const walkD = legPaths(mascot('walk', frame).parts).get(id);
+      if (restD === undefined || walkD === undefined) {
+        throw new Error(`expected a leg path named ${id} in both poses`);
+      }
+      const a = xCoords(restD);
+      const b = xCoords(walkD);
+      return a.reduce((sum, x, i) => sum + ((b[i] ?? x) - x), 0);
+    };
+
+    // The frame where the legs are furthest from rest, found by measurement
+    // rather than assumed to be a particular index, so this does not depend
+    // on which frame the gait happens to put its extremes on.
+    let extremeFrame = 0;
+    let extremeSpread = -Infinity;
+    for (let frame = 0; frame < 4; frame++) {
+      const spread = legIds.reduce((sum, id) => sum + Math.abs(totalDx(id, frame)), 0);
+      if (spread > extremeSpread) {
+        extremeSpread = spread;
+        extremeFrame = frame;
+      }
+    }
+    expect(extremeSpread).toBeGreaterThan(0);
+
+    // A leg from each side of the gait (see the grouping documented next to
+    // `WALK_GROUP_A` in mascot.ts): they must move, and they must move apart.
+    const groupA = totalDx('leg-front-2', extremeFrame);
+    const groupB = totalDx('leg-rear', extremeFrame);
+    expect(groupA).not.toBe(0);
+    expect(groupB).not.toBe(0);
+    expect(Math.sign(groupA)).not.toBe(Math.sign(groupB));
+
+    // A collapse into one group would move every leg the same way; the real
+    // gait moves at least one leg in each direction on its extreme frame.
+    const displacements = legIds.map((id) => totalDx(id, extremeFrame));
+    expect(displacements.some((dx) => dx > 0)).toBe(true);
+    expect(displacements.some((dx) => dx < 0)).toBe(true);
+  });
 });
