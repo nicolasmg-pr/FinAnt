@@ -57,6 +57,13 @@ interface AccountView {
   readonly opening: Money | null;
   /** The day the first movement was booked, for labelling `opening`. */
   readonly firstMovement: string | null;
+  /**
+   * How many of this account's movements are still unconfirmed. The balance
+   * above already includes them — this only says so, because a figure that
+   * looks final but partly rests on a notification is a claim `balance`
+   * itself must never make.
+   */
+  readonly provisionalCount: number;
 }
 
 /** Bank name, its accounts, and the sum of the balances they state. */
@@ -65,6 +72,7 @@ interface BankView {
   readonly accounts: readonly AccountView[];
   readonly total: Money | null;
   readonly movementCount: number;
+  readonly provisionalCount: number;
 }
 
 /** New bank when `id` is null, rename when it is set. A bank holds nothing else. */
@@ -94,7 +102,11 @@ function accountView(
   movements: readonly Transaction[],
   today: string,
 ): AccountView {
-  const base = { row, movementCount: movements.length };
+  const base = {
+    row,
+    movementCount: movements.length,
+    provisionalCount: movements.filter((tx) => tx.provisional).length,
+  };
   const blank = { ...base, balance: null, opening: null, firstMovement: null };
   const asserted = row.balance_minor;
   const asOf = row.balance_date;
@@ -118,6 +130,11 @@ function accountView(
     // cannot state honestly is better left blank than guessed.
     return blank;
   }
+}
+
+/** Unconfirmed movements across the accounts that actually contribute to a total. */
+function provisionalCountOf(views: readonly AccountView[]): number {
+  return views.reduce((sum, view) => sum + (view.balance ? view.provisionalCount : 0), 0);
 }
 
 /** Sum of the balances that are known. Null when none is, or when two currencies meet. */
@@ -209,6 +226,7 @@ export default function BanksScreen() {
       accounts: own,
       total: totalOf(own),
       movementCount: own.reduce((count, view) => count + view.movementCount, 0),
+      provisionalCount: provisionalCountOf(own),
     };
   });
 
@@ -438,8 +456,15 @@ export default function BanksScreen() {
                 )}
               </View>
               <Text style={[type.caption, { color: theme.textMuted }]}>
-                {t('banks.accounts', { count: bank.accounts.length })} ·{' '}
-                {t('banks.movements', { count: bank.movementCount })}
+                {[
+                  t('banks.accounts', { count: bank.accounts.length }),
+                  t('banks.movements', { count: bank.movementCount }),
+                  bank.total && bank.provisionalCount > 0
+                    ? t('notifications.balanceIncluding', { count: bank.provisionalCount })
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </Text>
             </Touchable>
 
@@ -596,6 +621,12 @@ function AccountLine({
         date: view.firstMovement,
       }),
     );
+  }
+  // The figure itself does not change for this: a provisional movement counts
+  // towards the balance exactly like any other. This only says some of what
+  // it rests on has not been confirmed by a statement yet.
+  if (view.balance && view.provisionalCount > 0) {
+    meta.push(t('notifications.balanceIncluding', { count: view.provisionalCount }));
   }
 
   return (

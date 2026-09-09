@@ -31,6 +31,7 @@ import { SegmentedControl } from '../../src/components/ui/SegmentedControl';
 import { StatTile } from '../../src/components/ui/StatTile';
 import { Touchable } from '../../src/components/ui/Touchable';
 import { Trail } from '../../src/components/trail/Trail';
+import { countOpenCaptures } from '../../src/db/notification-captures-repo';
 import { useAppData } from '../../src/hooks/use-app-data';
 import { usePayPeriod } from '../../src/hooks/use-pay-period';
 import { intlLocale } from '../../src/i18n';
@@ -49,11 +50,14 @@ export default function DashboardScreen() {
   const { transactions, accounts, loading, reload } = useAppData();
   const [granularity, setGranularity] = useState<Granularity>('month');
   const [yearView, setYearView] = useState<'projected' | 'booked'>('projected');
+  const [openCaptures, setOpenCaptures] = useState(0);
 
-  // Re-read on focus: an import happened on another screen.
+  // Re-read on focus: an import happened on another screen, or the owner just
+  // came back from clearing captures in the inbox.
   useFocusEffect(
     useCallback(() => {
       void reload();
+      void countOpenCaptures().then(setOpenCaptures);
     }, [reload]),
   );
 
@@ -66,13 +70,17 @@ export default function DashboardScreen() {
     () => summarisePeriod(transactions, period, CURRENCY),
     [transactions, period],
   );
+  // A forecast built on unconfirmed rows would double-count once the statement
+  // that books them lands, and a projection must never be dressed as a booked
+  // figure. The month's totals still include them; the projection does not.
+  const booked = useMemo(() => transactions.filter((row) => !row.provisional), [transactions]);
   const forecast = useMemo(
-    () => forecastYear(transactions, year, CURRENCY, { today }),
-    [transactions, year, today],
+    () => forecastYear(booked, year, CURRENCY, { today }),
+    [booked, year, today],
   );
-  const booked = useMemo(
-    () => bookedYear(transactions, year, CURRENCY, { today }),
-    [transactions, year, today],
+  const bookedTotals = useMemo(
+    () => bookedYear(booked, year, CURRENCY, { today }),
+    [booked, year, today],
   );
   const recurring = useMemo(() => detectRecurring(transactions, CURRENCY), [transactions]);
 
@@ -147,7 +155,7 @@ export default function DashboardScreen() {
   );
 
   // Whichever of the two the card is showing; both carry the same three totals.
-  const yearTotals = yearView === 'projected' ? forecast : booked;
+  const yearTotals = yearView === 'projected' ? forecast : bookedTotals;
 
   const savingsRate =
     summary.income.minor > 0 ? Math.round((summary.net.minor / summary.income.minor) * 100) : null;
@@ -160,8 +168,8 @@ export default function DashboardScreen() {
   // Booked months only. A month that has not happened yet is not a month that
   // failed, so the row counts what is known and stops there.
   const monthsInBlack = useMemo(
-    () => booked.months.filter((month) => month.net.minor >= 0).length,
-    [booked],
+    () => bookedTotals.months.filter((month) => month.net.minor >= 0).length,
+    [bookedTotals],
   );
 
   // Only when there is nothing at all to say. A balance the owner has
@@ -185,6 +193,7 @@ export default function DashboardScreen() {
           </View>
           <Text style={[type.title, { color: theme.text }]}>{t('nav.dashboard')}</Text>
         </View>
+        {openCaptures > 0 ? <ReviewChip count={openCaptures} /> : null}
         <Empty message={t('dashboard.noData')} />
       </ScrollView>
     );
@@ -207,6 +216,8 @@ export default function DashboardScreen() {
         </View>
         <Text style={[type.title, { color: theme.text }]}>{t('nav.dashboard')}</Text>
       </View>
+
+      {openCaptures > 0 ? <ReviewChip count={openCaptures} /> : null}
 
       {/* The hero carries no card chrome: the balance is the page, not an item
           on it. */}
@@ -320,7 +331,7 @@ export default function DashboardScreen() {
                 ? t(`dashboard.confidence.${forecast.confidence}`, {
                     months: forecast.historyMonths,
                   })
-                : t('dashboard.bookedMonths', { count: booked.months.length })
+                : t('dashboard.bookedMonths', { count: bookedTotals.months.length })
             }
           >
             {/* Was a tap anywhere on the card, explained by a hint line at the
@@ -337,11 +348,11 @@ export default function DashboardScreen() {
 
             <Animated.View key={yearView} entering={FadeIn.duration(motion.quick)}>
               <ForecastChart
-                months={yearView === 'projected' ? forecast.months : booked.months}
+                months={yearView === 'projected' ? forecast.months : bookedTotals.months}
                 labels={
                   yearView === 'projected'
                     ? monthLabels
-                    : monthLabels.slice(0, booked.months.length)
+                    : monthLabels.slice(0, bookedTotals.months.length)
                 }
               />
               <View style={styles.figures}>
@@ -358,13 +369,13 @@ export default function DashboardScreen() {
               {/* Only under the booked view: the row is a claim about months
                   that have happened, and next to a projection it would read as
                   a claim about months that have not. */}
-              {yearView === 'booked' && booked.months.length > 0 ? (
+              {yearView === 'booked' && bookedTotals.months.length > 0 ? (
                 <>
-                  <GrainRow total={booked.months.length} filled={monthsInBlack} />
+                  <GrainRow total={bookedTotals.months.length} filled={monthsInBlack} />
                   <Text style={[type.label, { color: theme.textMuted }]}>
                     {t('dashboard.monthsInBlack', {
                       count: monthsInBlack,
-                      total: booked.months.length,
+                      total: bookedTotals.months.length,
                     })}
                   </Text>
                 </>
@@ -387,6 +398,24 @@ export default function DashboardScreen() {
         </>
       )}
     </ScrollView>
+  );
+}
+
+/** The dashboard's own door into the inbox: how many captures are waiting. */
+function ReviewChip({ count }: { count: number }) {
+  const theme = useTheme();
+  const router = useRouter();
+  const { t } = useTranslation();
+  return (
+    <Touchable
+      onPress={() => router.push('/notification-inbox')}
+      accessibilityRole="button"
+      style={[styles.banner, { backgroundColor: theme.accentSoft }]}
+    >
+      <Text style={[type.body, { color: theme.accent }]}>
+        {t('notifications.reviewChip', { count })}
+      </Text>
+    </Touchable>
   );
 }
 
@@ -435,6 +464,7 @@ const styles = StyleSheet.create({
   // The chart reaches both screen edges; the screen's own padding is undone
   // for its width only.
   bleed: { marginHorizontal: -spacing.lg },
+  banner: { padding: spacing.md, borderRadius: radius.md },
   warning: {
     flexDirection: 'row',
     alignItems: 'center',

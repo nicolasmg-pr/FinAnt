@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   UNCATEGORISED_ID,
   accountChoiceNeedsName,
   importHashOf,
   isValidISODate,
+  money,
   resolveAccountChoice,
   signedAmountFor,
+  toDecimalString,
   type AccountChoice,
   type Category,
   type TransactionSide,
@@ -65,6 +67,22 @@ function today(): string {
 }
 
 /**
+ * Prefill carried from the notification inbox's "Edit first": the owner opens
+ * this same form instead of accepting the parse as-is, for the odd capture
+ * whose account or wording needs a correction before it becomes a movement.
+ * Absent for the ordinary "add a movement" entry point, where every field
+ * below keeps its plain default.
+ */
+type CaptureParams = {
+  side?: string;
+  amountMinor?: string;
+  currency?: string;
+  description?: string;
+  counterparty?: string;
+  bookingDate?: string;
+};
+
+/**
  * Adding a movement by hand.
  *
  * It goes in through `ingest()`, the same door a statement uses, so a manual
@@ -78,17 +96,43 @@ export default function NewMovementScreen() {
   const router = useRouter();
   const label = useCategoryLabel();
   const { selectable } = useCategories();
+  const params = useLocalSearchParams<CaptureParams>();
+
+  // Read once, as plain state initialisers: a param only ever seeds the form
+  // the screen opened with, and must never fight the owner's own edits on a
+  // re-render.
+  const prefillAmountMinor =
+    typeof params.amountMinor === 'string' ? Number(params.amountMinor) : NaN;
+  const hasPrefill = Number.isSafeInteger(prefillAmountMinor);
+  const prefillSide: TransactionSide = params.side === 'income' ? 'income' : 'expense';
+  const prefillCurrency = typeof params.currency === 'string' ? params.currency : 'EUR';
 
   const [institutions, setInstitutions] = useState<InstitutionRow[]>([]);
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [choice, setChoice] = useState<AccountChoice | null>(null);
 
-  const [side, setSide] = useState<TransactionSide>('expense');
-  const [reversal, setReversal] = useState(false);
-  const [dateText, setDateText] = useState(today);
-  const [amountText, setAmountText] = useState('');
-  const [description, setDescription] = useState('');
-  const [counterparty, setCounterparty] = useState('');
+  const [side, setSide] = useState<TransactionSide>(hasPrefill ? prefillSide : 'expense');
+  const [reversal, setReversal] = useState(() =>
+    hasPrefill
+      ? prefillSide === 'expense'
+        ? prefillAmountMinor > 0
+        : prefillAmountMinor < 0
+      : false,
+  );
+  const [dateText, setDateText] = useState(() =>
+    typeof params.bookingDate === 'string' && isValidISODate(params.bookingDate)
+      ? params.bookingDate
+      : today(),
+  );
+  const [amountText, setAmountText] = useState(() =>
+    hasPrefill ? toDecimalString(money(Math.abs(prefillAmountMinor), prefillCurrency)) : '',
+  );
+  const [description, setDescription] = useState(
+    typeof params.description === 'string' ? params.description : '',
+  );
+  const [counterparty, setCounterparty] = useState(
+    typeof params.counterparty === 'string' ? params.counterparty : '',
+  );
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
 
