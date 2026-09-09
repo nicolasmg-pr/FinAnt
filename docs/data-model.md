@@ -447,8 +447,12 @@ only a statement import or a manual entry produces one of those. See
 - `provisional` — `1` on a row written from a notification, `0` on every row a
   statement import or a manual entry produces. It stays `1` even after the
   owner accepts a pending capture by hand: agreeing with what a notification
-  said is not the bank having booked it. Only reconciliation, below, clears
-  it — by replacing the row, not by flipping the flag.
+  said is not the bank having booked it. `acceptEditedCapture` enforces the
+  same rule when the owner corrects the draft first — amount, date or account
+  — before saving it: the row it writes is still provisional, because editing
+  what a notification said is not the bank booking it either. Only
+  reconciliation, below, clears the flag — by replacing the row, not by
+  flipping it.
 - `superseded_by_id` — set on a provisional the moment reconciliation replaces
   it, pointing at the row that won. The provisional is soft-deleted
   (`deleted_at`) in the same write, so the trail survives from "notification

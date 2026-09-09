@@ -43,11 +43,12 @@ the app never writes a statement anywhere else and never logs a row from one.
 
 ## Notification capture (Android)
 
-Android only, off until the owner turns it on in Settings: nothing is
-captured until they grant notification access in the system's own screen —
-there is no in-app permission dialog for this, unlike camera or location —
-and create at least one notification source by hand. No source is ever
-created automatically.
+Android only, and permanently so — iOS has no API for reading another app's
+notifications, so this is not a gap a future release closes. It is also off
+until the owner turns it on in Settings: nothing is captured until they grant
+notification access in the system's own screen — there is no in-app
+permission dialog for this, unlike camera or location — and create at least
+one notification source by hand. No source is ever created automatically.
 
 Notification access is a broad grant. Once given, the system offers the
 listener service every notification posted on the device, from any app. What
@@ -157,6 +158,10 @@ Not defended against:
   key to a process running as the app.
 - Statement files the owner leaves lying in Downloads or a synced folder. FinAnt
   reads them; it cannot delete or protect them.
+- The notification allowlist, held in plain `SharedPreferences`. Anything that
+  can already read the app's private storage learns which banks the owner
+  holds accounts with, and nothing else — no amount, narrative, account or
+  IBAN is stored there.
 
 ## Rules for contributors
 
