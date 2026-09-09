@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   captureHashOf,
+  contentHashOf,
   localCalendarDay,
   parseNotification,
   type CapturedNotification,
@@ -119,6 +120,31 @@ describe('captureHashOf', () => {
       postedAtMillis: 1772000000000,
     };
     expect(captureHashOf(capture1)).not.toBe(captureHashOf(capture2));
+  });
+});
+
+describe('contentHashOf', () => {
+  it('stays the same when the post time changes, so a repost is recognised', () => {
+    // Typed variable first, same reason as the captureHashOf tests above:
+    // contentHashOf's parameter type has no bookingDate or postedAtMillis, so
+    // passing the literal inline would trip the excess-property check.
+    const reposted: CapturedNotification = {
+      ...capture,
+      postedAtMillis: capture.postedAtMillis + 60_000,
+    };
+    expect(contentHashOf(capture)).toBe(contentHashOf(reposted));
+  });
+
+  it('differs when the text differs', () => {
+    const reworded: CapturedNotification = { ...capture, body: 'EUR 12.35 at REWE' };
+    expect(contentHashOf(capture)).not.toBe(contentHashOf(reworded));
+  });
+
+  it('prevents collision when the delimiter falls at different places in title and body', () => {
+    // Same trap as captureHashOf: without length prefixes these would collide.
+    const capture1 = { packageName: 'com.example.bank', title: 'A', body: 'B|C' };
+    const capture2 = { packageName: 'com.example.bank', title: 'A|B', body: 'C' };
+    expect(contentHashOf(capture1)).not.toBe(contentHashOf(capture2));
   });
 });
 
