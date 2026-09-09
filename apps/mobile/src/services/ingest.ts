@@ -29,7 +29,8 @@ export interface IngestOptions {
 
 /**
  * The single path every movement takes into the database, whatever its origin:
- * file import or manual entry.
+ * file import, manual entry, or a captured push notification staged as
+ * provisional via `options.provisional`.
  *
  * A category that came with the file (the owner's own spreadsheet column) is
  * trusted over the rule engine — it is their classification, already correct,
@@ -95,7 +96,21 @@ export async function ingest(
   // Reconciliation runs before transfer detection: a provisional and the
   // statement row that books it must not be paired with each other, and the
   // provisional has to be retired before the matcher sees the ledger.
-  const superseded = inserted > 0 && !options.provisional ? await reconcileProvisionals() : 0;
+  //
+  // A statement's rows are already durably inserted by this point, and
+  // reconciliation is now atomic per pair — so a failure here leaves the
+  // provisionals live and the next import retries them. Failing the whole
+  // import over it would tell the owner nothing was saved when almost
+  // everything was, and this codebase does not throw away an import over
+  // one bad row.
+  let superseded = 0;
+  if (inserted > 0 && !options.provisional) {
+    try {
+      superseded = await reconcileProvisionals();
+    } catch {
+      superseded = 0;
+    }
+  }
 
   // Only a new row can complete a pair; a file full of duplicates changes nothing.
   const transfersMatched = inserted > 0 ? await detectTransfers() : 0;

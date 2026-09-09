@@ -113,19 +113,6 @@ export async function setCaptureStatus(
   );
 }
 
-/** Repoints a capture at the statement row that superseded its provisional. */
-export async function repointCapture(
-  provisionalTransactionId: string,
-  bookedTransactionId: string,
-): Promise<void> {
-  const db = await getDatabase();
-  await db.runAsync(
-    'UPDATE notification_captures SET transaction_id = ? WHERE transaction_id = ?;',
-    bookedTransactionId,
-    provisionalTransactionId,
-  );
-}
-
 export async function deleteAllCaptures(): Promise<void> {
   const db = await getDatabase();
   await db.runAsync('DELETE FROM notification_captures;');

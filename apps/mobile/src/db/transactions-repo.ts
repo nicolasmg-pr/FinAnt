@@ -337,6 +337,14 @@ export async function listProvisionalTransactions(): Promise<Transaction[]> {
  * unique indexes keep holding it, exactly as for a movement the owner deleted.
  * `superseded_by_id` records which row won, so the trail from what the owner
  * saw to what the bank booked survives.
+ *
+ * Also repoints the capture that produced each provisional, in the same
+ * transaction as the supersede — a transactions repository writes a second
+ * table here because the two rows describe one fact: that this statement row
+ * booked what the notification announced. A partial commit would leave a
+ * capture pointing at a movement that no longer exists, and nothing would
+ * ever retry it: `listProvisionalTransactions` only sees live provisionals,
+ * so an already-superseded one never comes back round for another attempt.
  */
 export async function supersedeProvisionals(
   pairs: readonly { provisionalId: string; bookedId: string }[],
@@ -356,6 +364,11 @@ export async function supersedeProvisionals(
         pair.provisionalId,
       );
       changed += result.changes;
+      await db.runAsync(
+        'UPDATE notification_captures SET transaction_id = ? WHERE transaction_id = ?;',
+        pair.bookedId,
+        pair.provisionalId,
+      );
     }
   });
   return changed;

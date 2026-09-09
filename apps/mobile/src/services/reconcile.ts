@@ -1,5 +1,4 @@
 import { addDays, matchProvisionals, PROVISIONAL_DAY_WINDOW } from '@finant/core';
-import { repointCapture } from '../db/notification-captures-repo';
 import {
   listProvisionalTransactions,
   listTransactionsBetween,
@@ -9,10 +8,13 @@ import {
 /**
  * Retires provisional movements the statements have now booked.
  *
- * Runs after every import, over the whole set of live provisionals rather than
- * only the rows just inserted: the statement that books a notification from
- * three weeks ago arrives in one import, and the provisional it supersedes was
- * written in another.
+ * Runs after every import that inserted at least one row and was not itself
+ * provisional, over the whole set of live provisionals rather than only the
+ * rows just inserted: the statement that books a notification from three
+ * weeks ago arrives in one import, and the provisional it supersedes was
+ * written in another. It is skipped for a provisional batch (a notification
+ * has nothing yet to reconcile against) and for an import that inserted
+ * nothing (a file full of duplicates changes nothing to reconcile).
  *
  * The unique indexes cannot do this job. A notification's import hash is built
  * over its own narrative and the statement's over the bank's, so the two rows
@@ -36,9 +38,9 @@ export async function reconcileProvisionals(): Promise<number> {
   const { matches } = matchProvisionals(provisionals, candidates);
   if (matches.length === 0) return 0;
 
-  const superseded = await supersedeProvisionals(matches);
-  for (const match of matches) {
-    await repointCapture(match.provisionalId, match.bookedId);
-  }
-  return superseded;
+  // supersedeProvisionals repoints each pair's capture in the same
+  // transaction as the soft delete, so this either fully commits or fully
+  // rolls back per pair — there is no loop of separate writes here to fail
+  // halfway through.
+  return supersedeProvisionals(matches);
 }
