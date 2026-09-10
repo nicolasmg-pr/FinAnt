@@ -9,7 +9,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
@@ -22,6 +22,9 @@ import { radius, spacing, type, useElevation, useMotion, useTheme } from '../../
 
 /** Past this fraction of the panel height, letting go dismisses. */
 const DISMISS_AT = 0.25;
+
+/** How much of the space above the keyboard one sheet may take. */
+const PANEL_CAP = 0.85;
 
 /**
  * The one bottom sheet. Budgets and Categories each hand-built a Modal with
@@ -36,15 +39,11 @@ export function Sheet({
   visible,
   onDismiss,
   title,
-  scroll = false,
   children,
 }: {
   visible: boolean;
   onDismiss: () => void;
   title?: string;
-  /** For a form taller than the screen. The panel caps at 85% of the viewport
-   * and its body scrolls, rather than the sheet growing past the top edge. */
-  scroll?: boolean;
   children: ReactNode;
 }) {
   const theme = useTheme();
@@ -69,7 +68,17 @@ export function Sheet({
     }
   }, [visible, screenHeight, motion, translate, fade]);
 
-  const panel = useAnimatedStyle(() => ({ transform: [{ translateY: translate.value }] }));
+  // `height` is written for `translateY`, so it runs from -keyboardHeight to 0.
+  // The panel is lifted clear of the keyboard and capped to what is left above
+  // it: a form that no longer fits scrolls inside the panel rather than
+  // keeping its lower fields under the keys. See docs/keyboard-handling.md.
+  const keyboard = useReanimatedKeyboardAnimation();
+
+  const panel = useAnimatedStyle(() => ({
+    transform: [{ translateY: translate.value }],
+    marginBottom: -keyboard.height.value,
+    maxHeight: (screenHeight + keyboard.height.value) * PANEL_CAP,
+  }));
   const backdrop = useAnimatedStyle(() => ({ opacity: fade.value }));
 
   const responder = useMemo(
@@ -117,19 +126,13 @@ export function Sheet({
           />
         </Animated.View>
 
-        {/* The library's view, not React Native's: RN's wants
-          `behavior={undefined}` on Android, which means "let adjustResize do
-          it", and adjustResize does nothing under edge-to-edge. `padding` here
-          behaves the same on both platforms, and `automaticOffset` accounts for
-          this being inside a Modal. See docs/keyboard-handling.md. */}
-        <KeyboardAvoidingView behavior="padding" automaticOffset style={styles.lift}>
+        <View style={styles.lift}>
           <Animated.View
             onLayout={(event) => {
               panelHeight.current = event.nativeEvent.layout.height;
             }}
             style={[
               styles.panel,
-              scroll ? styles.capped : null,
               { backgroundColor: theme.surface, paddingBottom: insets.bottom + spacing.lg },
               elevation,
               panel,
@@ -143,19 +146,19 @@ export function Sheet({
                 {title}
               </Text>
             ) : null}
-            {scroll ? (
-              <ScrollView
-                contentContainerStyle={styles.scrollBody}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-              >
-                {children}
-              </ScrollView>
-            ) : (
-              children
-            )}
+            {/* Always scrollable, never taller than `panel`'s cap: with the
+              keyboard up the panel only has the space above it, and a form
+              that cannot scroll inside that space leaves its lower fields
+              under the keyboard — which is what the Filters sheet did. */}
+            <ScrollView
+              contentContainerStyle={styles.scrollBody}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {children}
+            </ScrollView>
           </Animated.View>
-        </KeyboardAvoidingView>
+        </View>
       </View>
     </Modal>
   );
@@ -164,14 +167,13 @@ export function Sheet({
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
   scrim: { backgroundColor: 'rgba(0,0,0,0.4)' },
-  lift: { justifyContent: 'flex-end', pointerEvents: 'box-none' },
+  lift: { flex: 1, justifyContent: 'flex-end', pointerEvents: 'box-none' },
   panel: {
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing.lg,
     gap: spacing.md,
   },
-  capped: { maxHeight: '85%' },
   scrollBody: { gap: spacing.md, paddingBottom: spacing.sm },
   grip: { alignItems: 'center', paddingVertical: spacing.sm },
   handle: { width: 36, height: 4, borderRadius: radius.pill },

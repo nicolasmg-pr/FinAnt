@@ -328,7 +328,6 @@ export default function CategoriesScreen() {
         visible={draft !== null}
         onDismiss={() => setDraft(null)}
         title={draft?.id === null ? t('categories.add') : t('categories.edit')}
-        scroll
       >
         <Field
           label={t('categories.name')}
@@ -448,7 +447,6 @@ export default function CategoriesScreen() {
           setReplacementId(null);
         }}
         title={t('categories.reassignTitle')}
-        scroll
       >
         {removal ? (
           <>

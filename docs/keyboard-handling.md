@@ -61,10 +61,20 @@ platforms.
 - Screens whose form scrolls use `KeyboardAwareScrollView` with a `bottomOffset`
   so the caret is not flush against the keyboard. It scrolls the focused input
   into view, which is the part a plain inset cannot do.
-- `components/ui/Sheet.tsx` uses the library's `KeyboardAvoidingView` with
-  `behavior="padding"` on both platforms — React Native's own version needs
-  `behavior={undefined}` on Android, which is another name for "let
-  `adjustResize` handle it", i.e. nothing.
+- `components/ui/Sheet.tsx` reads the keyboard directly with
+  `useReanimatedKeyboardAnimation`: the panel is lifted by the keyboard height
+  and its `maxHeight` is capped to 85% of what is left above it, and its body
+  is always a `ScrollView`. Two earlier attempts are worth not repeating:
+  React Native's `KeyboardAvoidingView` wants `behavior={undefined}` on
+  Android, which is another name for "let `adjustResize` handle it", i.e.
+  nothing; and the library's own `KeyboardAvoidingView` lifted this panel far
+  past the keyboard, with `automaticOffset` measuring an offset that a
+  full-screen `Modal` does not have. Explicit height arithmetic is the thing
+  that behaved.
+- A sheet whose form is taller than the space above the keyboard scrolls
+  inside the panel. That is not optional: the Movements filter sheet used to
+  render its four inputs at full height and simply left the amount fields
+  under the keys.
 - `(tabs)/transactions.tsx` is a `FlatList`, not a form: only its filter sheet
   takes text, and that sheet is a `Sheet`.
 
@@ -75,7 +85,8 @@ platforms.
   dead ends while the app is edge-to-edge, and edge-to-edge is not optional on
   Android 15+.
 - A new screen that takes text uses `KeyboardAwareScrollView` (scrolling form)
-  or sits inside `Sheet` (short form). Do not hand-roll a keyboard listener.
+  or sits inside `Sheet` (any form: `Sheet` caps and scrolls itself). Do not
+  hand-roll a keyboard listener.
 - Verify on a device or emulator with the keyboard actually open. A form that
   looks right with the keyboard closed proves nothing.
 

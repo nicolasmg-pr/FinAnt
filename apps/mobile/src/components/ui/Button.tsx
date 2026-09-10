@@ -56,7 +56,12 @@ export function Button({
         ) : (
           <>
             {icon ? <Feather name={icon} size={16} color={foreground} /> : null}
-            <Text style={[type.heading, { color: foreground }]}>{label}</Text>
+            {/* `flexShrink` is 0 by default in React Native, so a label that
+              measures wider than the row it is in overflows and Android clips
+              it — silently, and on a word boundary: "Add a bank" was seen
+              rendering as "Add a". Shrinking instead wraps in that case, which
+              is visible and keeps every word. */}
+            <Text style={[type.heading, styles.label, { color: foreground }]}>{label}</Text>
           </>
         )}
       </View>
@@ -69,4 +74,5 @@ const styles = StyleSheet.create({
   md: { paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   lg: { paddingVertical: spacing.lg, paddingHorizontal: spacing.xl },
   content: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  label: { flexShrink: 1, textAlign: 'center' },
 });

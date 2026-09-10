@@ -489,7 +489,6 @@ export default function NotificationCaptureScreen() {
         visible={routeDraft !== null}
         onDismiss={() => setRouteDraft(null)}
         title={t('notifications.addRoute')}
-        scroll
       >
         {routeDraft ? (
           <>
