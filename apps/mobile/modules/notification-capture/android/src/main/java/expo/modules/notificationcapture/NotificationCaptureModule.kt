@@ -18,10 +18,13 @@ class NotificationCaptureModule : Module() {
         }
 
         Function("openPermissionSettings") {
-            val context = appContext.reactContext ?: return@Function
             // There is no runtime permission dialog for notification access:
             // the owner has to switch it on in system settings themselves.
-            context.startActivity(
+            //
+            // Written as a safe call rather than an early return because this
+            // overload of `Function` takes a `() -> Any?`, and Kotlin allows a
+            // valueless `return@Function` only where the return type is `Unit`.
+            appContext.reactContext?.startActivity(
                 Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
