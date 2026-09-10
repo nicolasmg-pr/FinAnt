@@ -13,22 +13,29 @@ function deviceLocale(): Locale {
   return DEFAULT_LOCALE;
 }
 
+/**
+ * i18next is initialised at import time, not inside `initI18n`.
+ *
+ * The root layout calls `useTranslation()` on its first render, which happens
+ * before any effect has run: an instance registered later leaves that render
+ * without one, and react-i18next warns and echoes the keys. Every resource is
+ * bundled, so this needs no await — only the stored language does, and that is
+ * what `initI18n` applies afterwards.
+ */
+i18n.use(initReactI18next).init({
+  resources,
+  lng: deviceLocale(),
+  fallbackLng: DEFAULT_LOCALE,
+  // React already escapes everything it renders.
+  interpolation: { escapeValue: false },
+  returnNull: false,
+});
+
+/** Applies the language stored in the database over the device's default. */
 export async function initI18n(): Promise<Locale> {
   const stored = await readSetting(SETTING_LOCALE);
   const initial = stored && isLocale(stored) ? stored : deviceLocale();
-
-  if (!i18n.isInitialized) {
-    await i18n.use(initReactI18next).init({
-      resources,
-      lng: initial,
-      fallbackLng: DEFAULT_LOCALE,
-      // React already escapes everything it renders.
-      interpolation: { escapeValue: false },
-      returnNull: false,
-    });
-  } else {
-    await i18n.changeLanguage(initial);
-  }
+  if (initial !== i18n.language) await i18n.changeLanguage(initial);
   return initial;
 }
 
