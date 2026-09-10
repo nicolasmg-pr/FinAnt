@@ -25,9 +25,11 @@ Each file: one topic. If pasted from the web, include source URL and date.
 
 ## Contents
 
-| File                | Topic                                                                                  |
-| ------------------- | -------------------------------------------------------------------------------------- |
-| `data-model.md`     | SQLite tables, dedupe indexes, money representation                                    |
-| `import-formats.md` | CSV / xlsx / camt.053 parsing, the per-bank profiles, the Presupuesto workbook         |
-| `pay-period.md`     | How the dashboard month is anchored on salary bookings, the merge window, the fallback |
-| `security-model.md` | What is stored where, and the threat model behind it                                   |
+| File                      | Topic                                                                                  |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| `data-model.md`           | SQLite tables, dedupe indexes, money representation                                    |
+| `import-formats.md`       | CSV / xlsx / camt.053 parsing, the per-bank profiles, the Presupuesto workbook         |
+| `pay-period.md`           | How the dashboard month is anchored on salary bookings, the merge window, the fallback |
+| `security-model.md`       | What is stored where, and the threat model behind it                                   |
+| `notification-formats.md` | The wording each bank's Android notifications use, per notification kind               |
+| `distribution.md`         | How a build reaches the owner's phone: APK signing and releases, and why iOS cannot    |

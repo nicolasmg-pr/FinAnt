@@ -50,7 +50,8 @@
         {
           "faceIDPermission": "FinAnt uses Face ID to unlock your financial data on this device."
         }
-      ]
+      ],
+      "./plugins/with-release-signing.js"
     ],
     "experiments": {
       "typedRoutes": true
