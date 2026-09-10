@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getDatabase } from '../src/db/database';
 import { initI18n } from '../src/i18n';
@@ -64,42 +65,51 @@ export default function RootLayout() {
     // The ask bubble is dragged with a pan gesture, and react-native-gesture-handler
     // needs this at the very root or the gesture never reaches it.
     <GestureHandlerRootView style={styles.root}>
-      <SafeAreaProvider>
-        <StatusBar style="auto" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            headerStyle: { backgroundColor: theme.background },
-            headerTitleStyle: { color: theme.text },
-            headerTintColor: theme.accent,
-            // A pushed screen shorter than the viewport otherwise shows the
-            // navigator's own scene colour under its content.
-            contentStyle: { backgroundColor: theme.background },
-            // Without this the iOS back button reads "(tabs)": the label comes
-            // from the previous route's title, and that route is a router group.
-            headerBackTitle: t('common.back'),
-          }}
-        >
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen
-            name="import"
-            options={{ presentation: 'modal', headerShown: true, title: t('import.title') }}
-          />
-          <Stack.Screen
-            name="transaction/[id]"
-            options={{ presentation: 'modal', headerShown: true }}
-          />
-          {/* Registered so it gets a header: the stack hides them by default, and
+      {/* Android is edge-to-edge, which makes the manifest's `adjustResize`
+        inert: the window keeps its full height and the keyboard covers
+        whatever is focused. This provider reads the real IME insets so the
+        forms can move out of the way. Both translucency flags are set because
+        the app already draws behind the system bars, and without them the
+        provider lays out once with bars and once without.
+        See docs/keyboard-handling.md. */}
+      <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+        <SafeAreaProvider>
+          <StatusBar style="auto" />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              headerStyle: { backgroundColor: theme.background },
+              headerTitleStyle: { color: theme.text },
+              headerTintColor: theme.accent,
+              // A pushed screen shorter than the viewport otherwise shows the
+              // navigator's own scene colour under its content.
+              contentStyle: { backgroundColor: theme.background },
+              // Without this the iOS back button reads "(tabs)": the label comes
+              // from the previous route's title, and that route is a router group.
+              headerBackTitle: t('common.back'),
+            }}
+          >
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="import"
+              options={{ presentation: 'modal', headerShown: true, title: t('import.title') }}
+            />
+            <Stack.Screen
+              name="transaction/[id]"
+              options={{ presentation: 'modal', headerShown: true }}
+            />
+            {/* Registered so it gets a header: the stack hides them by default, and
             without one this screen opens with no way back but a swipe. */}
-          <Stack.Screen
-            name="movement/new"
-            options={{ presentation: 'modal', headerShown: true }}
-          />
-          <Stack.Screen name="categories" options={{ headerShown: true }} />
-          <Stack.Screen name="notification-capture" options={{ headerShown: true }} />
-          <Stack.Screen name="notification-inbox" options={{ headerShown: true }} />
-        </Stack>
-      </SafeAreaProvider>
+            <Stack.Screen
+              name="movement/new"
+              options={{ presentation: 'modal', headerShown: true }}
+            />
+            <Stack.Screen name="categories" options={{ headerShown: true }} />
+            <Stack.Screen name="notification-capture" options={{ headerShown: true }} />
+            <Stack.Screen name="notification-inbox" options={{ headerShown: true }} />
+          </Stack>
+        </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

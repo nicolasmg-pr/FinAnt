@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { StyleSheet, Switch, Text, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
@@ -282,10 +283,15 @@ export default function NewMovementScreen() {
   };
 
   return (
-    <ScrollView
+    // Keyboard-aware rather than a plain ScrollView: this form's amount and
+    // notes fields sit low enough that the Android keyboard covers them, and
+    // edge-to-edge means the window no longer resizes to make room.
+    // See docs/keyboard-handling.md.
+    <KeyboardAwareScrollView
       style={{ backgroundColor: theme.background }}
       contentContainerStyle={styles.screen}
       keyboardShouldPersistTaps="handled"
+      bottomOffset={spacing.xl}
     >
       <Stack.Screen options={{ title: t('transactions.addManual') }} />
 
@@ -396,7 +402,7 @@ export default function NewMovementScreen() {
         loading={busy}
         onPress={() => void save()}
       />
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

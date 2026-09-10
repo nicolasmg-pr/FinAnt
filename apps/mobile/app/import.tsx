@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Feather from '@expo/vector-icons/Feather';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { useRouter } from 'expo-router';
@@ -315,10 +316,14 @@ export default function ImportScreen() {
   };
 
   return (
-    <ScrollView
+    // The account picker on this screen creates an institution and an account
+    // by name, and those inputs sit below the fold once a file is staged.
+    // See docs/keyboard-handling.md.
+    <KeyboardAwareScrollView
       style={{ backgroundColor: theme.background }}
       contentContainerStyle={{ padding: spacing.lg }}
       keyboardShouldPersistTaps="handled"
+      bottomOffset={spacing.xl}
     >
       {/* A drop zone rather than a button: picking the file is the whole
           point of this screen, so it gets the space to say so. */}
@@ -458,7 +463,7 @@ export default function ImportScreen() {
           ) : null}
         </>
       ) : null}
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

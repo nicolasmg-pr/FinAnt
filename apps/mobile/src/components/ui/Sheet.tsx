@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import {
-  KeyboardAvoidingView,
   Modal,
   PanResponder,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +9,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
@@ -118,10 +117,12 @@ export function Sheet({
           />
         </Animated.View>
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.lift}
-        >
+        {/* The library's view, not React Native's: RN's wants
+          `behavior={undefined}` on Android, which means "let adjustResize do
+          it", and adjustResize does nothing under edge-to-edge. `padding` here
+          behaves the same on both platforms, and `automaticOffset` accounts for
+          this being inside a Modal. See docs/keyboard-handling.md. */}
+        <KeyboardAvoidingView behavior="padding" automaticOffset style={styles.lift}>
           <Animated.View
             onLayout={(event) => {
               panelHeight.current = event.nativeEvent.layout.height;
