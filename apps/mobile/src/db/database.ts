@@ -9,7 +9,7 @@ import { contentHashOf } from '@finant/importers';
 import NotificationCapture from '../../modules/notification-capture';
 import { destroyDatabaseKey, getOrCreateDatabaseKey } from '../security/keys';
 import { LATEST_VERSION, MIGRATIONS } from './schema';
-import { SETTING_RETIRED_SHIPPED_RULES } from './settings-repo';
+import { SETTING_RETIRED_SHIPPED_RULES } from './settings-keys';
 
 const DATABASE_NAME = 'finant.db';
 
