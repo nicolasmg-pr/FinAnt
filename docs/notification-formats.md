@@ -29,10 +29,11 @@ fill this file are Trade Republic, ING Deutschland, DKB and Openbank España;
 Raisin posts no amount-bearing notification and is out of scope.
 
 Trade Republic is the first with any wording confirmed by the owner — recorded
-below — but it is still partial: one kind of notification is not confirmed at
-all, and even the confirmed kinds are missing a full body example. No parser
-is written from a partial record; `NOTIFICATION_PARSERS` stays empty until a
-bank's section is complete enough to test against.
+below — but it is still partial: one kind of notification has a confirmed type
+line and no confirmed body, and the package name every parser is keyed on is
+still unknown. No parser is written from a partial record;
+`NOTIFICATION_PARSERS` stays empty until a bank's section is complete enough
+to test against.
 
 ### Trade Republic
 
@@ -43,8 +44,15 @@ only — no real amount and no real name is recorded here.
 - Language: Spanish.
 - Amount format: decimal comma, `€` suffixed with no separating space (e.g.
   `12,34€` — that figure is illustrative, not from a real notification).
-- Shape: the notification carries the movement type on its own line, then a
-  second line — one sentence — with the amount and the counterparty.
+- Shape: not uniform across kinds. A transfer received and a plan execution
+  carry the movement type on its own line, then a second line — one sentence —
+  with the amount and the counterparty. A card purchase carries no movement
+  type at all: the merchant stands on the first line, and the sentence follows
+  it. Which of those lines Android reports as the title is an open question
+  below.
+- No notification carries a date. `bookingDate` therefore comes from
+  `postedAtMillis` through `localCalendarDay` — the day the notification
+  arrived on the device, which the owner confirms is the day of the movement.
 
 **Incoming transfer** — confirmed
 
@@ -60,10 +68,20 @@ only — no real amount and no real name is recorded here.
 - Body: not yet confirmed. Known only that it carries the amount spent and
   which instrument the plan bought — usually an ETF or Bitcoin.
 
-**Card purchase** — outstanding
+**Card purchase** — confirmed
 
-- Wording not yet confirmed. The owner will supply it; until then a card
-  notification from this package lands as `unreadable`.
+- Type line: none. Where the other two kinds name the movement, a card
+  purchase names the merchant: `<merchant>`, alone on its own line.
+- Body shape: `Gastaste <amount>€ en <merchant>` — the merchant repeated
+  inside the sentence, so the same name is available whichever line turns out
+  to be the title.
+  (the owner's real example filled in `<amount>` and `<merchant>`; neither is
+  reproduced here, per this repo's rule against committing a real amount or a
+  real name)
+- Sets `side` `expense` and a negative `amountMinor`, from the verb
+  `Gastaste`. Never from the sign — a card refund, if this bank posts one,
+  will be a positive amount on the same side, under wording not yet seen.
+- `counterparty` is `<merchant>`.
 
 **Open questions**
 
@@ -73,6 +91,12 @@ only — no real amount and no real name is recorded here.
   owner's transcription began with "Trade Republic", which is exactly what a
   device-rendered label looks like, so this is not settled without checking
   the raw extra on a real device.
+- Which line a card purchase reports as `EXTRA_TITLE`: the merchant, with
+  "Trade Republic" being Android's own app label ahead of it, or "Trade
+  Republic" itself, with the merchant and the sentence both inside
+  `EXTRA_TEXT` separated by a newline. The owner's transcription carries all
+  three lines and cannot settle the split; the raw extras on a real device
+  can. A parser must not assume either until then.
 - The Android package name. Unknown, and not to be guessed — this file's own
   rule, and the one `docs/import-formats.md` states for a bank's column
   layout. It has to come from `adb shell pm list packages` with the app
@@ -82,9 +106,12 @@ only — no real amount and no real name is recorded here.
 
 **Routing note.** A transfer received and a plan execution plausibly post to
 different accounts — cash versus the investment depot — so once a parser
-exists, the type line alone (`Plan de inversión ejecutado`, before the body is
-even parsed) is a natural discriminator for a `notification_routes` rule that
-sends plan executions to the depot and everything else to cash.
+exists, the type line `Plan de inversión ejecutado` (before the body is even
+parsed) is a natural discriminator for a `notification_routes` rule that sends
+plan executions to the depot and everything else to cash. It is not a
+universal discriminator, though: a card purchase has no type line, so what
+routes it is the absence of one, together with `Gastaste`. A rule keyed on the
+type line alone would leave card purchases unrouted.
 
 ## What a section records, once a bank has one
 
