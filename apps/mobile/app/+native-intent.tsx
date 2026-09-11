@@ -29,7 +29,12 @@ export function redirectSystemPath({ path }: { path: string; initial: boolean })
     // A finant:// deep link or anything else: let the router route it.
     return path;
   } catch (cause) {
-    const code = (cause as { code?: string }).code;
+    // `cause` is whatever the native side threw, so its shape is not trusted
+    // before the property read — it may not even be an object.
+    const code =
+      typeof cause === 'object' && cause !== null && 'code' in cause
+        ? (cause as { code?: unknown }).code
+        : undefined;
     return code === SHARE_TOO_LARGE ? '/import?shared=too-large' : '/import?shared=unreadable';
   }
 }

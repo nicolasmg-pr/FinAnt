@@ -10,7 +10,7 @@ import { getDatabase } from '../src/db/database';
 import { initI18n } from '../src/i18n';
 import { detectTransfers } from '../src/services/transfers';
 import { spacing, type, useTheme } from '../src/design';
-import ShareIntakeModule, { SHARE_TOO_LARGE } from '../modules/share-intake';
+import ShareIntakeModule, { SHARE_TOO_LARGE, SHARE_UNREADABLE } from '../modules/share-intake';
 import { setPendingShare, type SharedFile } from '../src/services/share-intake';
 
 /**
@@ -99,7 +99,26 @@ export default function RootLayout() {
   // never turns false again.
   useEffect(() => {
     if (!ready) return;
-    const launched = ShareIntakeModule.consumePendingShare();
+    let launched: SharedFile | null;
+    try {
+      launched = ShareIntakeModule.consumePendingShare();
+    } catch (cause) {
+      // The native copy raises a coded exception instead of returning a file
+      // when it was too large or unreadable — the same failure the warm-share
+      // path reports as an onShareFailed event, just surfaced as a thrown
+      // error here because this is a plain function call, not a listener.
+      // `cause` is whatever the native side threw, so its shape is not
+      // trusted before the property read.
+      const code =
+        typeof cause === 'object' && cause !== null && 'code' in cause
+          ? (cause as { code?: unknown }).code
+          : undefined;
+      setPendingNavigation({
+        kind: 'failed',
+        code: typeof code === 'string' ? code : SHARE_UNREADABLE,
+      });
+      return;
+    }
     if (launched) {
       setPendingShare(launched);
       setPendingNavigation({ kind: 'received', nonce: Date.now() });
