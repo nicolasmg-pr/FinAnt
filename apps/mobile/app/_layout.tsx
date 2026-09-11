@@ -10,8 +10,18 @@ import { getDatabase } from '../src/db/database';
 import { initI18n } from '../src/i18n';
 import { detectTransfers } from '../src/services/transfers';
 import { spacing, type, useTheme } from '../src/design';
-import ShareIntakeModule from '../modules/share-intake';
+import ShareIntakeModule, { SHARE_TOO_LARGE } from '../modules/share-intake';
 import { setPendingShare, type SharedFile } from '../src/services/share-intake';
+
+/**
+ * What the share effects below hand to the flush effect: either a received
+ * file (carrying the nonce that makes its route unique) or a failure code.
+ * Kept as data rather than a pre-built route string so the literal route
+ * forms — required by `typedRoutes` — are only ever written where they are
+ * pushed, in one place.
+ */
+type PendingShareNavigation =
+  { kind: 'received'; nonce: number } | { kind: 'failed'; code: string };
 
 /**
  * Startup order matters: the encrypted database must be open before i18n, which
@@ -23,6 +33,7 @@ export default function RootLayout() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [pendingNavigation, setPendingNavigation] = useState<PendingShareNavigation | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -51,22 +62,21 @@ export default function RootLayout() {
   // Android's "open with" arrive as URLs instead and are already on their way
   // there via app/+native-intent.tsx.
   //
-  // Gated on `ready`: the parse writes to the encrypted database, which the
-  // startup effect above is still opening. A share on a locked device waits
-  // here, because the key is only readable once the device is unlocked.
+  // Subscribed unconditionally, on mount: a share can arrive while the startup
+  // effect above is still opening the database, and nothing on the native side
+  // queues it if no listener is attached yet. Only the navigation waits for
+  // `ready` (see the flush effect below) — the database gate exists for the
+  // import parse, not for listening.
   useEffect(() => {
-    if (!ready) return;
-
     const open = (file: SharedFile) => {
+      // Staged the moment it arrives, regardless of `ready`: the store is just
+      // memory, and nothing reads it before the import screen mounts.
       setPendingShare(file);
-      // The parameter carries a nonce, not a constant: a second share into a
-      // running app would otherwise push the identical URL, leaving the import
+      // The nonce is Date.now(), not a constant: a second share into a running
+      // app would otherwise produce the identical route, leaving the import
       // screen's effect with an unchanged parameter and the file unread.
-      router.push(`/import?shared=${Date.now()}`);
+      setPendingNavigation({ kind: 'received', nonce: Date.now() });
     };
-
-    const launched = ShareIntakeModule.consumePendingShare();
-    if (launched) open(launched);
 
     // A share into an already-running app: singleTask hands the activity a new
     // intent, which the native module turns into these two events.
@@ -74,15 +84,44 @@ export default function RootLayout() {
     const failed = ShareIntakeModule.addListener('onShareFailed', ({ code }) => {
       // The copy never happened, so there is no file in the store — the import
       // screen reads the reason out of the route instead.
-      router.push(
-        code === 'SHARE_TOO_LARGE' ? '/import?shared=too-large' : '/import?shared=unreadable',
-      );
+      setPendingNavigation({ kind: 'failed', code });
     });
     return () => {
       received.remove();
       failed.remove();
     };
-  }, [ready, router]);
+  }, []);
+
+  // The ACTION_SEND intent that launched the app, if any. `consumePendingShare`
+  // reads and clears it natively, so it must run exactly once — gated on
+  // `ready` because the database it will be parsed into is only open once the
+  // startup effect above finishes, and never re-run afterwards since `ready`
+  // never turns false again.
+  useEffect(() => {
+    if (!ready) return;
+    const launched = ShareIntakeModule.consumePendingShare();
+    if (launched) {
+      setPendingShare(launched);
+      setPendingNavigation({ kind: 'received', nonce: Date.now() });
+    }
+  }, [ready]);
+
+  // A share that arrived (or was found waiting at launch) before the app was
+  // ready waits here instead of being dropped: pushed the moment `ready` turns
+  // true, and replaced — not queued — if a second one arrives before that.
+  useEffect(() => {
+    if (!ready || pendingNavigation === null) return;
+    if (pendingNavigation.kind === 'received') {
+      router.push(`/import?shared=${pendingNavigation.nonce}`);
+    } else {
+      router.push(
+        pendingNavigation.code === SHARE_TOO_LARGE
+          ? '/import?shared=too-large'
+          : '/import?shared=unreadable',
+      );
+    }
+    setPendingNavigation(null);
+  }, [ready, pendingNavigation, router]);
 
   if (error) {
     return (
