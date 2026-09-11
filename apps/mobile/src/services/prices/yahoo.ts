@@ -105,3 +105,53 @@ export const yahooProvider: PriceProvider = {
     return { price, currency: meta.currency ?? listing.currency };
   },
 };
+
+interface HistoryResponse {
+  chart?: {
+    result?: {
+      timestamp?: number[];
+      meta?: { currency?: string };
+      indicators?: { quote?: { close?: (number | null)[] }[] };
+    }[];
+  };
+}
+
+/** One close per month, as the provider stated it, in its own currency. */
+export interface MonthlyCloses {
+  readonly currency: CurrencyCode;
+  readonly closes: readonly { month: string; close: Decimal }[];
+}
+
+/**
+ * Monthly closes for a listing, from `since` to now.
+ *
+ * `interval=1mo` rather than a daily series and a reduction here: the chart
+ * plots month ends, so a daily series would be thirty times the payload to
+ * answer exactly the same question.
+ *
+ * The month comes from the UTC timestamp deliberately. A close is a market
+ * event, not a booking, and Yahoo stamps it at the exchange's own close — using
+ * the device's zone would shuffle a 31 December close into January for anyone
+ * east of UTC.
+ */
+export async function monthlyCloses(symbol: string, since: Date): Promise<MonthlyCloses | null> {
+  const period1 = Math.floor(since.getTime() / 1000);
+  const period2 = Math.floor(Date.now() / 1000);
+  const body = await fetchJson<HistoryResponse>(
+    `${CHART}/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1mo`,
+  );
+  const result = body?.chart?.result?.[0];
+  const stamps = result?.timestamp;
+  const values = result?.indicators?.quote?.[0]?.close;
+  if (!stamps || !values) return null;
+
+  const closes: { month: string; close: Decimal }[] = [];
+  stamps.forEach((stamp, i) => {
+    const value = values[i];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return;
+    const exact = exactFrom(value);
+    if (!exact) return;
+    closes.push({ month: new Date(stamp * 1000).toISOString().slice(0, 7), close: exact });
+  });
+  return closes.length === 0 ? null : { currency: result?.meta?.currency ?? 'EUR', closes };
+}

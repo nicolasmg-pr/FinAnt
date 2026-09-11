@@ -188,6 +188,7 @@ export default function BanksScreen() {
   const { transactions, accounts, reload } = useAppData();
   const {
     portfolio,
+    series: portfolioSeries,
     refreshing: refreshingPrices,
     offline: pricesOffline,
     refresh: refreshPrices,
@@ -546,6 +547,7 @@ export default function BanksScreen() {
 
         <PortfolioSection
           portfolio={portfolio}
+          series={portfolioSeries}
           refreshing={refreshingPrices}
           offline={pricesOffline}
           onRefresh={() => void refreshPrices({ force: true })}

@@ -6,13 +6,18 @@ import {
   decimalToNumber,
   formatDecimal,
   formatMoney,
+  monthOf,
+  yearOf,
   type AssetClass,
+  type NetWorthPoint,
   type Portfolio,
   type Position,
+  type ValuePoint,
 } from '@finant/core';
 import { intlLocale } from '../i18n';
 import { radius, spacing, type, useTheme } from '../design';
 import { Amount } from './Amount';
+import { BalanceChart } from './BalanceChart';
 import { Card } from './Card';
 import { Button } from './ui/Button';
 import { Touchable } from './ui/Touchable';
@@ -28,11 +33,13 @@ import { Touchable } from './ui/Touchable';
  */
 export function PortfolioSection({
   portfolio,
+  series,
   refreshing,
   offline,
   onRefresh,
 }: {
   portfolio: Portfolio;
+  series: readonly ValuePoint[];
   refreshing: boolean;
   offline: boolean;
   onRefresh: () => void;
@@ -89,6 +96,8 @@ export function PortfolioSection({
           />
         ) : null}
       </View>
+
+      <ValueLine series={series} locale={locale} />
 
       {portfolio.byAssetClass.length > 1 ? <Allocation portfolio={portfolio} /> : null}
 
@@ -148,6 +157,40 @@ function Figure({
         {value}
         {suffix ? ` ${suffix}` : ''}
       </Text>
+    </View>
+  );
+}
+
+/**
+ * The portfolio's worth month by month, drawn with the same chart the net-worth
+ * line uses — it is the same kind of statement about the same kind of figure,
+ * and a second chart style would imply a difference that is not there.
+ *
+ * Two months is the floor: a single point is not a line, and drawing one
+ * suggests a history that does not exist yet.
+ */
+function ValueLine({ series, locale }: { series: readonly ValuePoint[]; locale: string }) {
+  const points: NetWorthPoint[] = series.map((point) => ({
+    period: point.period,
+    kind: point.kind,
+    total: point.total,
+  }));
+  if (points.length < 2) return null;
+
+  // Thinned to roughly six labels: a month name every gridline is unreadable at
+  // phone width, and the shape of the line is what is being read here.
+  const step = Math.max(1, Math.ceil(points.length / 6));
+  const labels = series.map((point, i) =>
+    i % step === 0
+      ? new Intl.DateTimeFormat(locale, { month: 'short', year: '2-digit' }).format(
+          new Date(Date.UTC(yearOf(point.period), monthOf(point.period) - 1, 1)),
+        )
+      : '',
+  );
+
+  return (
+    <View style={styles.chart}>
+      <BalanceChart points={points} labels={labels} />
     </View>
   );
 }
@@ -268,6 +311,7 @@ const styles = StyleSheet.create({
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
+  chart: { marginTop: spacing.md },
   list: { marginTop: spacing.md },
   row: {
     flexDirection: 'row',

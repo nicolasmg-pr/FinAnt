@@ -161,10 +161,26 @@ en/es/de, so a missing key is a compile error.
 
 ## Value over time
 
-Daily history per asset into a `price_history` table, backfilled from the first
-trade, plotted alongside the existing net-worth line. By far the heaviest piece
-— it needs per-asset historical series rather than one quote each — so it lands
-last, after everything above is confirmed working.
+**Amended during implementation.** The design said daily history. The chart
+plots month ends, so a daily series is thirty times the rows and thirty times
+the payload to answer the same question; the provider serves `interval=1mo`
+directly. `price_history` holds one close per asset per month — a few hundred
+rows for a decade — and the backfill asks only for assets whose history does not
+already reach the current month.
+
+Each close is converted at _that month's_ rate, not today's. Valuing a 2024
+holding of a dollar-quoted fund at today's dollar charts an exchange-rate move
+as if it were a market move.
+
+The line reuses `BalanceChart`, the component the net-worth line already uses:
+it is the same kind of statement about the same kind of figure, and a second
+chart style would imply a difference that is not there. A month where a holding
+cannot be priced is marked `partial` rather than silently reported as a smaller
+total.
+
+Verified against the real portfolio: all six listings return 31 monthly closes
+back to 2024-03, and each series' final month matches the live quote to the
+cent.
 
 ## Boundary
 

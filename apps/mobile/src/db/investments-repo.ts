@@ -7,6 +7,7 @@ import {
   type Decimal,
   type InvestmentLeg,
   type LegKind,
+  type PriceHistoryPoint,
   type Quote,
 } from '@finant/core';
 import * as Crypto from 'expo-crypto';
@@ -127,9 +128,15 @@ export async function loadPortfolioInput(): Promise<{
   assets: Asset[];
   legs: InvestmentLeg[];
   quotes: Quote[];
+  history: PriceHistoryPoint[];
 }> {
-  const [assets, legs, quotes] = await Promise.all([listAssets(), listLegs(), listQuotes()]);
-  return { assets, legs, quotes };
+  const [assets, legs, quotes, history] = await Promise.all([
+    listAssets(),
+    listLegs(),
+    listQuotes(),
+    listPriceHistory(),
+  ]);
+  return { assets, legs, quotes, history };
 }
 
 /**
@@ -267,3 +274,56 @@ export async function saveQuotes(quotes: readonly Quote[]): Promise<void> {
 /** The scales the schema stores, so a caller need not repeat them. */
 export const STORED_SHARE_SCALE = SHARE_SCALE;
 export const STORED_PRICE_SCALE = PRICE_SCALE;
+
+interface HistoryRow {
+  asset_id: string;
+  month: string;
+  close_scaled: number;
+  close_scale: number;
+  currency: string;
+}
+
+export async function listPriceHistory(): Promise<PriceHistoryPoint[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<HistoryRow>(
+    'SELECT * FROM price_history ORDER BY asset_id, month;',
+  );
+  return rows.map((row) => ({
+    assetId: row.asset_id,
+    month: row.month,
+    close: decimal(row.close_scaled, row.close_scale),
+  }));
+}
+
+/** The newest month already stored per asset, so a backfill asks only for the gap. */
+export async function latestHistoryMonths(): Promise<Map<string, string>> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ asset_id: string; month: string }>(
+    'SELECT asset_id, MAX(month) AS month FROM price_history GROUP BY asset_id;',
+  );
+  return new Map(rows.map((row) => [row.asset_id, row.month]));
+}
+
+export async function savePriceHistory(
+  points: readonly (PriceHistoryPoint & { currency: string })[],
+): Promise<void> {
+  if (points.length === 0) return;
+  const db = await getDatabase();
+  await db.withTransactionAsync(async () => {
+    for (const point of points) {
+      await db.runAsync(
+        `INSERT INTO price_history (asset_id, month, close_scaled, close_scale, currency)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(asset_id, month) DO UPDATE SET
+           close_scaled = excluded.close_scaled,
+           close_scale = excluded.close_scale,
+           currency = excluded.currency;`,
+        point.assetId,
+        point.month,
+        point.close.scaled,
+        point.close.scale,
+        point.currency,
+      );
+    }
+  });
+}

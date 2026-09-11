@@ -1,6 +1,7 @@
 import { PRICE_SCALE, SHARE_SCALE, decimal, zeroDecimal, type Decimal } from './decimal';
+import { lastOfMonth, monthRange, yearMonthOf } from './dates';
 import { money, zero, type CurrencyCode, type Money } from './money';
-import type { ISODate } from './types';
+import type { ISODate, YearMonth } from './types';
 
 /**
  * What the owner holds, rebuilt from the trade rows their broker exported.
@@ -367,7 +368,10 @@ export function buildPortfolio(input: PortfolioInput): Portfolio {
   const classTotals = new Map<AssetClass, number>();
   for (const p of open) {
     if (!p.marketValue) continue;
-    classTotals.set(p.asset.assetClass, (classTotals.get(p.asset.assetClass) ?? 0) + p.marketValue.minor);
+    classTotals.set(
+      p.asset.assetClass,
+      (classTotals.get(p.asset.assetClass) ?? 0) + p.marketValue.minor,
+    );
   }
 
   const share = (minor: number): number => (totalValue.minor === 0 ? 0 : minor / totalValue.minor);
@@ -444,4 +448,122 @@ export function emptyPortfolio(currency: CurrencyCode): Portfolio {
 /** Re-exported so a caller can build a zero share count without the scale. */
 export function noShares(): Decimal {
   return zeroDecimal(SHARE_SCALE);
+}
+
+/**
+ * A month's closing price for one asset, already in the portfolio's currency.
+ *
+ * Converted at the rate of *that* month, not today's: valuing a 2024 holding of
+ * a dollar-quoted fund at today's dollar means charting an exchange-rate move
+ * as if it were a market move.
+ */
+export interface PriceHistoryPoint {
+  readonly assetId: string;
+  readonly month: YearMonth;
+  readonly close: Decimal;
+}
+
+export interface ValueSeriesInput {
+  readonly assets: readonly Asset[];
+  readonly legs: readonly InvestmentLeg[];
+  readonly history: readonly PriceHistoryPoint[];
+  readonly currency: CurrencyCode;
+  /** The last month to plot, normally the current one. */
+  readonly through: YearMonth;
+}
+
+export interface ValuePoint {
+  readonly period: YearMonth;
+  /** Always `actual`: this is measured history, never a projection. */
+  readonly kind: 'actual';
+  readonly total: Money;
+  /** What the shares held that month had cost by then, for the second line. */
+  readonly invested: Money;
+  /** True when some holding that month had no price and is missing from the total. */
+  readonly partial: boolean;
+}
+
+/**
+ * The portfolio's worth at the end of every month it has existed.
+ *
+ * Shares are counted from the legs booked up to that month's end, and priced at
+ * that month's close — the last close at or before it, so a month the provider
+ * has no point for carries the previous one forward rather than collapsing to
+ * zero. A month where some holding cannot be priced is marked `partial` instead
+ * of quietly reporting a smaller total than the truth.
+ */
+export function portfolioValueSeries(input: ValueSeriesInput): readonly ValuePoint[] {
+  const { currency } = input;
+  const trades = input.legs.filter((leg) => movesPosition(leg.kind));
+  if (trades.length === 0) return [];
+
+  const first = trades.reduce(
+    (earliest, leg) => (leg.bookingDate < earliest ? leg.bookingDate : earliest),
+    trades[0]!.bookingDate,
+  );
+  const months = monthRange(yearMonthOf(first), input.through);
+
+  // Closes per asset, in month order, so each month can walk forward to the
+  // last one at or before it without rescanning.
+  const closes = new Map<string, PriceHistoryPoint[]>();
+  for (const point of input.history) {
+    const bucket = closes.get(point.assetId);
+    if (bucket) bucket.push(point);
+    else closes.set(point.assetId, [point]);
+  }
+  for (const bucket of closes.values()) bucket.sort((a, b) => a.month.localeCompare(b.month));
+
+  const byAsset = new Map<string, InvestmentLeg[]>();
+  for (const leg of trades) {
+    const bucket = byAsset.get(leg.assetId);
+    if (bucket) bucket.push(leg);
+    else byAsset.set(leg.assetId, [leg]);
+  }
+
+  return months.map((month) => {
+    const end = lastOfMonth(month);
+    let totalMinor = 0;
+    let investedMinor = 0;
+    let partial = false;
+
+    for (const asset of input.assets) {
+      const legs = (byAsset.get(asset.id) ?? []).filter((leg) => leg.bookingDate <= end);
+      if (legs.length === 0) continue;
+
+      const sharesScaled = legs.reduce((acc, leg) => acc + leg.shares.scaled, 0);
+      if (sharesScaled <= 0) continue;
+      const shares = decimal(sharesScaled, SHARE_SCALE);
+
+      const walked = walk(legs);
+      investedMinor += walked.costMinor;
+
+      const close = lastCloseAtOrBefore(closes.get(asset.id), month);
+      if (!close) {
+        partial = true;
+        continue;
+      }
+      totalMinor += valueOf(shares, close, currency).minor;
+    }
+
+    return {
+      period: month,
+      kind: 'actual' as const,
+      total: money(totalMinor, currency),
+      invested: money(investedMinor, currency),
+      partial,
+    };
+  });
+}
+
+function lastCloseAtOrBefore(
+  points: readonly PriceHistoryPoint[] | undefined,
+  month: YearMonth,
+): Decimal | null {
+  if (!points) return null;
+  let found: Decimal | null = null;
+  for (const point of points) {
+    if (point.month > month) break;
+    found = point.close;
+  }
+  return found;
 }

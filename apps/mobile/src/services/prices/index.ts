@@ -2,18 +2,30 @@ import {
   QUOTE_MAX_AGE_MS,
   assetsNeedingQuote,
   convertPrice,
+  fxPairSymbol,
   normaliseQuoteCurrency,
   type Asset,
+  type PriceHistoryPoint,
   type PriceProvider,
   type Quote,
 } from '@finant/core';
-import { listAssets, listQuotes, saveQuotes, setListingSymbol } from '../../db/investments-repo';
+import {
+  latestHistoryMonths,
+  listAssets,
+  listQuotes,
+  savePriceHistory,
+  saveQuotes,
+  setListingSymbol,
+} from '../../db/investments-repo';
 import { coingeckoProvider } from './coingecko';
-import { fxRate, yahooProvider } from './yahoo';
+import { fxRate, monthlyCloses, yahooProvider } from './yahoo';
 
 export { QUOTE_MAX_AGE_MS };
 
 const PROVIDERS: readonly PriceProvider[] = [yahooProvider, coingeckoProvider];
+
+/** Further back than any personal portfolio this app will meet. */
+const TEN_YEARS_MS = 10 * 365 * 24 * 60 * 60 * 1000;
 
 export interface RefreshResult {
   readonly requested: number;
@@ -98,4 +110,87 @@ async function inPortfolioCurrency(
   // No rate means no price. A figure in the wrong currency is not a smaller
   // problem than a missing one — it is a wrong total that looks right.
   return rate ? convertPrice(raw.price, rate) : null;
+}
+
+/**
+ * Fills in the monthly closes behind the portfolio's value line.
+ *
+ * Runs after a quote refresh and only for what is missing: an asset whose
+ * history already reaches the current month is skipped entirely, so this costs
+ * one request per asset on the first run and nothing on most later ones.
+ *
+ * Each month's close is converted with *that month's* rate rather than today's.
+ * Charting a 2024 holding of a dollar-quoted fund at today's dollar would draw
+ * an exchange-rate move as if it were a market move, which is exactly the kind
+ * of wrong figure that looks right.
+ */
+export async function backfillHistory(options: { since?: Date } = {}): Promise<{
+  assetsFilled: number;
+}> {
+  const [assets, latest] = await Promise.all([listAssets(), latestHistoryMonths()]);
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const since = options.since ?? new Date(Date.now() - TEN_YEARS_MS);
+  let assetsFilled = 0;
+
+  for (const asset of assets) {
+    if (asset.archived) continue;
+    if (latest.get(asset.id) === thisMonth) continue;
+
+    const provider = PROVIDERS.find((p) => p.supports(asset));
+    // Only Yahoo serves a monthly series; a crypto holding keeps its live quote
+    // and simply has no line, rather than the chart inventing one.
+    if (!provider || provider.id !== 'yahoo') continue;
+
+    const listing = await provider.resolve(asset);
+    if (!listing) continue;
+
+    const series = await monthlyCloses(listing.symbol, since);
+    if (!series) continue;
+
+    const normalised = series.closes.map((point) =>
+      normaliseQuoteCurrency({ price: point.close, currency: series.currency }),
+    );
+    const quoteCurrency = normalised[0]?.currency ?? series.currency;
+
+    let rates: Map<string, ReturnType<typeof convertPrice>> | null = null;
+    if (quoteCurrency.toUpperCase() !== asset.currency.toUpperCase()) {
+      const fx = await monthlyCloses(fxPairSymbol(quoteCurrency, asset.currency), since);
+      if (!fx) continue;
+      rates = new Map(fx.closes.map((point) => [point.month, point.close]));
+    }
+
+    const points: (PriceHistoryPoint & { currency: string })[] = [];
+    series.closes.forEach((point, i) => {
+      const price = normalised[i]?.price ?? point.close;
+      if (!rates) {
+        points.push({
+          assetId: asset.id,
+          month: point.month,
+          close: price,
+          currency: asset.currency,
+        });
+        return;
+      }
+      const rate = rates.get(point.month);
+      // A month with no rate is left out rather than converted at a neighbour's:
+      // the series carries the last close forward, which is the honest gap.
+      if (!rate) return;
+      const converted = convertPrice(price, rate);
+      if (converted) {
+        points.push({
+          assetId: asset.id,
+          month: point.month,
+          close: converted,
+          currency: asset.currency,
+        });
+      }
+    });
+
+    if (points.length > 0) {
+      await savePriceHistory(points);
+      assetsFilled += 1;
+    }
+  }
+
+  return { assetsFilled };
 }

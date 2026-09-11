@@ -3,6 +3,7 @@ import { parseDecimalAt, decimalToString, SHARE_SCALE, PRICE_SCALE } from '../sr
 import { money } from '../src/money';
 import {
   buildPortfolio,
+  portfolioValueSeries,
   type Asset,
   type InvestmentLeg,
   type Quote,
@@ -276,5 +277,105 @@ describe('buildPortfolio', () => {
     });
     expect(p.holdings[0]!.marketValue).toBeNull();
     expect(p.assetsUnquoted).toBe(1);
+  });
+});
+
+describe('portfolioValueSeries', () => {
+  const history = (month: string, close: string, assetId = 'a-world') => ({
+    assetId,
+    month,
+    close: parseDecimalAt(close, PRICE_SCALE)!,
+  });
+
+  it('plots every month from the first trade to the month asked for', () => {
+    const series = portfolioValueSeries({
+      assets: [asset()],
+      legs: [leg('buy', '2024-04-12', '1.0000000000', -1000)],
+      history: [history('2024-04', '10.00'), history('2024-05', '12.00')],
+      currency: 'EUR',
+      through: '2024-06',
+    });
+    expect(series.map((p) => p.period)).toEqual(['2024-04', '2024-05', '2024-06']);
+  });
+
+  it('values the shares held at the end of each month', () => {
+    const series = portfolioValueSeries({
+      assets: [asset()],
+      legs: [
+        leg('buy', '2024-04-12', '1.0000000000', -1000),
+        leg('buy', '2024-05-20', '1.0000000000', -1200),
+      ],
+      history: [history('2024-04', '10.00'), history('2024-05', '12.00')],
+      currency: 'EUR',
+      through: '2024-05',
+    });
+    expect(series[0]!.total).toEqual(money(1000, 'EUR'));
+    expect(series[1]!.total).toEqual(money(2400, 'EUR'));
+  });
+
+  it('carries the last known close forward rather than dropping to zero', () => {
+    const series = portfolioValueSeries({
+      assets: [asset()],
+      legs: [leg('buy', '2024-04-12', '1.0000000000', -1000)],
+      history: [history('2024-04', '10.00')],
+      currency: 'EUR',
+      through: '2024-06',
+    });
+    expect(series[2]!.total).toEqual(money(1000, 'EUR'));
+    expect(series[2]!.partial).toBe(false);
+  });
+
+  it('marks a month partial rather than understating it when a holding has no price', () => {
+    const series = portfolioValueSeries({
+      assets: [asset(), asset({ id: 'a-btc', symbol: 'BTC', assetClass: 'crypto' })],
+      legs: [
+        leg('buy', '2024-04-12', '1.0000000000', -1000),
+        leg('buy', '2024-04-13', '1.0000000000', -2000, { assetId: 'a-btc' }),
+      ],
+      history: [history('2024-04', '10.00')],
+      currency: 'EUR',
+      through: '2024-04',
+    });
+    expect(series[0]!.partial).toBe(true);
+    expect(series[0]!.total).toEqual(money(1000, 'EUR'));
+  });
+
+  it('drops a position out of the line once it is sold', () => {
+    const series = portfolioValueSeries({
+      assets: [asset()],
+      legs: [
+        leg('buy', '2024-04-12', '1.0000000000', -1000),
+        leg('sell', '2024-05-20', '-1.0000000000', 1500),
+      ],
+      history: [history('2024-04', '10.00'), history('2024-05', '15.00')],
+      currency: 'EUR',
+      through: '2024-05',
+    });
+    expect(series[0]!.total).toEqual(money(1000, 'EUR'));
+    expect(series[1]!.total).toEqual(money(0, 'EUR'));
+  });
+
+  it('reports what was invested alongside what it is worth', () => {
+    const series = portfolioValueSeries({
+      assets: [asset()],
+      legs: [leg('buy', '2024-04-12', '1.0000000000', -1000)],
+      history: [history('2024-04', '15.00')],
+      currency: 'EUR',
+      through: '2024-04',
+    });
+    expect(series[0]!.invested).toEqual(money(1000, 'EUR'));
+    expect(series[0]!.total).toEqual(money(1500, 'EUR'));
+  });
+
+  it('is empty when nothing was ever traded', () => {
+    expect(
+      portfolioValueSeries({
+        assets: [asset()],
+        legs: [leg('dividend', '2024-06-04', '0', 73)],
+        history: [],
+        currency: 'EUR',
+        through: '2024-06',
+      }),
+    ).toEqual([]);
   });
 });

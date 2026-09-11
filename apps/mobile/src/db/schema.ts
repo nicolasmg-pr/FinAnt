@@ -462,6 +462,31 @@ export const MIGRATIONS: readonly { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    version: 12,
+    sql: `
+      -- One closing price per asset per month, already converted into the
+      -- portfolio's currency at that month's rate.
+      --
+      -- Monthly rather than daily on purpose: the chart plots month ends, so a
+      -- daily series would be thirty times the rows and thirty times the
+      -- requests to answer exactly the same question. A few hundred rows covers
+      -- a decade of a personal portfolio.
+      --
+      -- Converted on the way in, not on the way out, because the rate that
+      -- matters is the one that held that month. Valuing a 2024 holding of a
+      -- dollar-quoted fund at today's dollar charts an exchange-rate move as if
+      -- it were a market move.
+      CREATE TABLE price_history (
+        asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+        month TEXT NOT NULL,
+        close_scaled INTEGER NOT NULL,
+        close_scale INTEGER NOT NULL,
+        currency TEXT NOT NULL,
+        PRIMARY KEY (asset_id, month)
+      );
+    `,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;

@@ -1,12 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { buildPortfolio, emptyPortfolio, type Portfolio } from '@finant/core';
+import {
+  buildPortfolio,
+  emptyPortfolio,
+  portfolioValueSeries,
+  yearMonthOf,
+  type Portfolio,
+  type ValuePoint,
+} from '@finant/core';
 import { loadPortfolioInput } from '../db/investments-repo';
-import { refreshQuotes } from '../services/prices';
+import { backfillHistory, refreshQuotes } from '../services/prices';
 
 const CURRENCY = 'EUR';
 
 interface PortfolioState {
   portfolio: Portfolio;
+  /** Month-end value since the first trade. Empty until history is fetched. */
+  series: readonly ValuePoint[];
   loading: boolean;
   refreshing: boolean;
   /** True when the last refresh reached nothing. The screen says so and keeps
@@ -28,6 +37,7 @@ interface PortfolioState {
  */
 export function usePortfolio(): PortfolioState {
   const [portfolio, setPortfolio] = useState<Portfolio>(() => emptyPortfolio(CURRENCY));
+  const [series, setSeries] = useState<readonly ValuePoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [offline, setOffline] = useState(false);
@@ -44,15 +54,17 @@ export function usePortfolio(): PortfolioState {
   const reload = useCallback(async () => {
     try {
       setError(null);
-      const { assets, legs, quotes } = await loadPortfolioInput();
+      const { assets, legs, quotes, history } = await loadPortfolioInput();
       if (!mounted.current) return;
-      setPortfolio(
-        buildPortfolio({
+      const today = new Date().toISOString().slice(0, 10);
+      setPortfolio(buildPortfolio({ assets, legs, quotes, currency: CURRENCY, today }));
+      setSeries(
+        portfolioValueSeries({
           assets,
           legs,
-          quotes,
+          history,
           currency: CURRENCY,
-          today: new Date().toISOString().slice(0, 10),
+          through: yearMonthOf(today),
         }),
       );
     } catch (cause) {
@@ -67,6 +79,10 @@ export function usePortfolio(): PortfolioState {
       setRefreshing(true);
       try {
         const result = await refreshQuotes({ force: options.force });
+        // After the quotes, and never instead of them: the figure on screen
+        // matters more than the line under it, and the line is only missing
+        // months, not wrong.
+        await backfillHistory();
         // Asking about nothing is not being offline; it means every price was
         // already fresh, or every asset is priced by hand.
         if (mounted.current) {
@@ -87,5 +103,5 @@ export function usePortfolio(): PortfolioState {
     })();
   }, [reload, refresh]);
 
-  return { portfolio, loading, refreshing, offline, error, reload, refresh };
+  return { portfolio, series, loading, refreshing, offline, error, reload, refresh };
 }
