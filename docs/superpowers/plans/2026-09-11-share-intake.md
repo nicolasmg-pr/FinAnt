@@ -754,7 +754,10 @@ Inside `RootLayout`, after the existing startup effect and its `ready` state. `r
 
     const open = (file: SharedFile) => {
       setPendingShare(file);
-      router.push('/import?shared=1');
+      // The parameter carries a nonce, not a constant: a second share into a
+      // running app would otherwise push the identical URL, leaving the import
+      // screen's effect with an unchanged parameter and the file unread.
+      router.push(`/import?shared=${Date.now()}`);
     };
 
     const launched = ShareIntakeModule.consumePendingShare();
@@ -897,6 +900,8 @@ Where `reset` is the five state calls `pick` already opened with, lifted out so 
 
 - [ ] **Step 3: Track the shared copy and load it on mount**
 
+Place the effect below textually **after** `reset`, `load` and `pick`, so no lint rule sees a closure over a `const` declared under it.
+
 Add state beside the existing `useState` calls, plus the param read:
 
 ```tsx
@@ -920,6 +925,8 @@ Then the effect:
       setError(t('errors.shareUnreadable'));
       return;
     }
+    // Any other value is a nonce from _layout.tsx or the literal "1" from
+    // +native-intent.tsx; either way the file itself is in the store.
     const file = takePendingShare();
     if (!file) return;
     reset();
