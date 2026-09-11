@@ -220,6 +220,7 @@ Reads the `ACTION_SEND` intent and copies its stream into the app cache. Modelle
   - `consumePendingShare(): SharedFile | null`
   - `copyContentUri(uri: string): SharedFile`
   - `addListener(event: 'onShareReceived', listener: (file: SharedFile) => void): EventSubscription`
+  - `addListener(event: 'onShareFailed', listener: (failure: { code: string }) => void): EventSubscription`
   - `SHARE_TOO_LARGE = 'SHARE_TOO_LARGE'`, `SHARE_UNREADABLE = 'SHARE_UNREADABLE'`
 
 - [ ] **Step 1: Write the module manifest**
@@ -294,6 +295,7 @@ import java.io.File
 /** Refused rather than streamed: a mis-shared video is not a statement. */
 private const val MAX_BYTES = 25L * 1024 * 1024
 private const val SHARE_RECEIVED = "onShareReceived"
+private const val SHARE_FAILED = "onShareFailed"
 private const val CACHE_DIR = "share-intake"
 private const val FALLBACK_NAME = "statement"
 
@@ -336,7 +338,7 @@ class ShareIntakeModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("ShareIntake")
 
-        Events(SHARE_RECEIVED)
+        Events(SHARE_RECEIVED, SHARE_FAILED)
 
         Function("isSupported") { true }
 
@@ -355,10 +357,20 @@ class ShareIntakeModule : Module() {
 
         // A share into an app that is already running: singleTask means the
         // same activity receives it, so there is no second cold start to read.
+        //
+        // Nothing may escape this lambda. Expo posts it without a try/catch,
+        // and RN's ReactContext.onNewIntent catches only RuntimeException,
+        // while CodedException is a checked Exception — so a throw here would
+        // kill the process on the very path this block exists to serve.
         OnNewIntent { intent ->
             val uri = takeSharedUri(intent) ?: return@OnNewIntent
-            val file = copy(uri, intent.type)
-            sendEvent(SHARE_RECEIVED, bundleOf("uri" to file["uri"], "name" to file["name"]))
+            try {
+                val file = copy(uri, intent.type)
+                sendEvent(SHARE_RECEIVED, bundleOf("uri" to file["uri"], "name" to file["name"]))
+            } catch (cause: Throwable) {
+                val code = (cause as? CodedException)?.code ?: "SHARE_UNREADABLE"
+                sendEvent(SHARE_FAILED, bundleOf("code" to code))
+            }
         }
     }
 
@@ -453,6 +465,8 @@ export interface ShareIntake {
   /** Copies a content:// URI into the cache so it can be read as a file. */
   copyContentUri(uri: string): SharedFile;
   addListener(event: 'onShareReceived', listener: (file: SharedFile) => void): EventSubscription;
+  /** A share that could not be copied: `code` is one of the two above. */
+  addListener(event: 'onShareFailed', listener: (failure: { code: string }) => void): EventSubscription;
 }
 
 /**
@@ -724,7 +738,7 @@ The `ACTION_SEND` path has no URL, so nothing navigates on its own. The layout r
 - Modify: `apps/mobile/app/_layout.tsx` (the `RootLayout` component, around the existing startup effect at lines 24-41)
 
 **Interfaces:**
-- Consumes: `setPendingShare` (Task 1), `ShareIntakeModule.consumePendingShare` / `addListener` (Task 2).
+- Consumes: `setPendingShare` (Task 1), `ShareIntakeModule.consumePendingShare` and both `addListener` events — `onShareReceived`, `onShareFailed` (Task 2).
 - Produces: nothing new; later tasks rely only on the store.
 
 - [ ] **Step 1: Add the imports**
@@ -764,9 +778,17 @@ Inside `RootLayout`, after the existing startup effect and its `ready` state. `r
     if (launched) open(launched);
 
     // A share into an already-running app: singleTask hands the activity a new
-    // intent, which the native module turns into this event.
-    const subscription = ShareIntakeModule.addListener('onShareReceived', open);
-    return () => subscription.remove();
+    // intent, which the native module turns into these two events.
+    const received = ShareIntakeModule.addListener('onShareReceived', open);
+    const failed = ShareIntakeModule.addListener('onShareFailed', ({ code }) => {
+      // The copy never happened, so there is no file in the store — the import
+      // screen reads the reason out of the route instead.
+      router.push(code === 'SHARE_TOO_LARGE' ? '/import?shared=too-large' : '/import?shared=unreadable');
+    });
+    return () => {
+      received.remove();
+      failed.remove();
+    };
   }, [ready, router]);
 ```
 
