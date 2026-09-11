@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -10,6 +10,8 @@ import { getDatabase } from '../src/db/database';
 import { initI18n } from '../src/i18n';
 import { detectTransfers } from '../src/services/transfers';
 import { spacing, type, useTheme } from '../src/design';
+import ShareIntakeModule from '../modules/share-intake';
+import { setPendingShare, type SharedFile } from '../src/services/share-intake';
 
 /**
  * Startup order matters: the encrypted database must be open before i18n, which
@@ -18,6 +20,7 @@ import { spacing, type, useTheme } from '../src/design';
 export default function RootLayout() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const router = useRouter();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -41,6 +44,45 @@ export default function RootLayout() {
       setReady(true);
     })();
   }, []);
+
+  // A file shared into FinAnt from another app. Android's share sheet sends an
+  // ACTION_SEND intent, whose URI never reaches expo-router, so nothing has
+  // navigated yet and this is where the import screen gets opened. iOS and
+  // Android's "open with" arrive as URLs instead and are already on their way
+  // there via app/+native-intent.tsx.
+  //
+  // Gated on `ready`: the parse writes to the encrypted database, which the
+  // startup effect above is still opening. A share on a locked device waits
+  // here, because the key is only readable once the device is unlocked.
+  useEffect(() => {
+    if (!ready) return;
+
+    const open = (file: SharedFile) => {
+      setPendingShare(file);
+      // The parameter carries a nonce, not a constant: a second share into a
+      // running app would otherwise push the identical URL, leaving the import
+      // screen's effect with an unchanged parameter and the file unread.
+      router.push(`/import?shared=${Date.now()}`);
+    };
+
+    const launched = ShareIntakeModule.consumePendingShare();
+    if (launched) open(launched);
+
+    // A share into an already-running app: singleTask hands the activity a new
+    // intent, which the native module turns into these two events.
+    const received = ShareIntakeModule.addListener('onShareReceived', open);
+    const failed = ShareIntakeModule.addListener('onShareFailed', ({ code }) => {
+      // The copy never happened, so there is no file in the store — the import
+      // screen reads the reason out of the route instead.
+      router.push(
+        code === 'SHARE_TOO_LARGE' ? '/import?shared=too-large' : '/import?shared=unreadable',
+      );
+    });
+    return () => {
+      received.remove();
+      failed.remove();
+    };
+  }, [ready, router]);
 
   if (error) {
     return (
