@@ -389,6 +389,79 @@ export const MIGRATIONS: readonly { version: number; sql: string }[] = [
       ALTER TABLE notification_captures ADD COLUMN content_hash TEXT;
     `,
   },
+  {
+    version: 11,
+    sql: `
+      -- The portfolio. Two tables and a cache, and deliberately no holdings
+      -- table: what the owner holds is summed from its legs on every read.
+      -- A materialised holding is a second source of truth that drifts the
+      -- first time a movement is edited, deleted or re-imported, and a few
+      -- hundred legs cost nothing to add up.
+
+      -- One security. The owner names it: a quote payload never renames a row
+      -- behind their back, the same rule every other named entity follows.
+      -- symbol is the ISIN for a security and the ticker for a crypto pair,
+      -- and is unique because two rows for one ISIN would split a position in
+      -- half without either half looking wrong.
+      CREATE TABLE assets (
+        id TEXT PRIMARY KEY NOT NULL,
+        symbol TEXT NOT NULL,
+        name TEXT NOT NULL,
+        asset_class TEXT NOT NULL CHECK (asset_class IN ('fund', 'stock', 'crypto')),
+        currency TEXT NOT NULL,
+        -- The price provider's own ticker once resolved, e.g. 'EUNL.DE'.
+        -- NULL until a lookup succeeds; nothing is guessed from the ISIN.
+        listing_symbol TEXT,
+        -- Typed by the owner. Always beats a fetched quote, so the portfolio
+        -- still values itself with no network at all.
+        manual_price_scaled INTEGER,
+        manual_price_scale INTEGER,
+        archived INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_assets_symbol ON assets(symbol);
+
+      -- One acquisition, disposal, or asset-tagged credit, hanging off the
+      -- cash movement that paid for it. ON DELETE CASCADE because a leg
+      -- without its movement is a holding nothing paid for.
+      --
+      -- shares_scaled is signed and zero on a dividend or benefit: a dividend
+      -- row states the holding at payment time rather than shares acquired,
+      -- and a saveback credits cash that a separate purchase then spends.
+      -- cash_minor is the authoritative cost -- never price x shares.
+      CREATE TABLE investment_legs (
+        id TEXT PRIMARY KEY NOT NULL,
+        transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+        asset_id TEXT NOT NULL REFERENCES assets(id),
+        kind TEXT NOT NULL CHECK (kind IN ('buy', 'sell', 'dividend', 'benefit')),
+        booking_date TEXT NOT NULL,
+        shares_scaled INTEGER NOT NULL,
+        shares_scale INTEGER NOT NULL,
+        unit_price_scaled INTEGER NOT NULL,
+        unit_price_scale INTEGER NOT NULL,
+        cash_minor INTEGER NOT NULL,
+        fee_minor INTEGER NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      -- Dedupe is the index's job, not the importer's: re-importing the same
+      -- export must not double a position. One movement buys one asset once.
+      CREATE UNIQUE INDEX idx_legs_tx_asset ON investment_legs(transaction_id, asset_id);
+      CREATE INDEX idx_legs_asset_date ON investment_legs(asset_id, booking_date);
+
+      -- The last price seen per asset. A cache, never a ledger: the screen
+      -- renders from here offline, and as_of is shown so a stale figure is
+      -- never mistaken for a live one.
+      CREATE TABLE quotes (
+        asset_id TEXT PRIMARY KEY NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+        price_scaled INTEGER NOT NULL,
+        price_scale INTEGER NOT NULL,
+        currency TEXT NOT NULL,
+        as_of TEXT NOT NULL,
+        source TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;

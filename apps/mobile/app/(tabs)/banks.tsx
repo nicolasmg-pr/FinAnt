@@ -17,6 +17,7 @@ import {
 import { parseAmount } from '@finant/importers';
 import { Amount } from '../../src/components/Amount';
 import { Card } from '../../src/components/Card';
+import { PortfolioSection } from '../../src/components/PortfolioSection';
 import { Chip } from '../../src/components/Chip';
 import { FormSheet, type SheetField } from '../../src/components/FormSheet';
 import {
@@ -35,6 +36,7 @@ import {
   type InstitutionRow,
 } from '../../src/db/institutions-repo';
 import { useAppData } from '../../src/hooks/use-app-data';
+import { usePortfolio } from '../../src/hooks/use-portfolio';
 import { intlLocale } from '../../src/i18n';
 import { Button } from '../../src/components/ui/Button';
 import { Empty } from '../../src/components/ui/Empty';
@@ -184,6 +186,12 @@ export default function BanksScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { transactions, accounts, reload } = useAppData();
+  const {
+    portfolio,
+    refreshing: refreshingPrices,
+    offline: pricesOffline,
+    refresh: refreshPrices,
+  } = usePortfolio();
   const [institutions, setInstitutions] = useState<InstitutionRow[]>([]);
   const [bankDraft, setBankDraft] = useState<BankDraft | null>(null);
   const [accountDraft, setAccountDraft] = useState<AccountDraft | null>(null);
@@ -535,6 +543,13 @@ export default function BanksScreen() {
             ))}
           </Card>
         ) : null}
+
+        <PortfolioSection
+          portfolio={portfolio}
+          refreshing={refreshingPrices}
+          offline={pricesOffline}
+          onRefresh={() => void refreshPrices({ force: true })}
+        />
 
         <Button label={t('banks.add')} icon="plus" onPress={openNewBank} />
       </ScrollView>

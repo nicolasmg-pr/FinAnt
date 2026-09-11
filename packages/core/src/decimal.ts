@@ -121,6 +121,28 @@ export function rescale(a: Decimal, scale: number): Decimal {
   return decimal(sign * Math.round(Math.abs(a.scaled) / divisor), scale);
 }
 
+/** Exact half-up division. `denominator` must be positive. */
+function divideHalfUp(numerator: bigint, denominator: bigint): bigint {
+  const negative = numerator < 0n;
+  const magnitude = negative ? -numerator : numerator;
+  const quotient = (2n * magnitude + denominator) / (2n * denominator);
+  return negative ? -quotient : quotient;
+}
+
+/**
+ * Multiplies two decimals into a result at `scale`.
+ *
+ * Through BigInt because the intermediate product overflows a double long
+ * before either operand does: two values at scale 10 multiply to scale 20, and
+ * 10^20 is past `Number.MAX_SAFE_INTEGER` on its own. Null when the result
+ * itself would not be exact.
+ */
+export function multiplyDecimal(a: Decimal, b: Decimal, scale: number): Decimal | null {
+  const divisor = 10n ** BigInt(a.scale + b.scale - scale);
+  const scaled = Number(divideHalfUp(BigInt(a.scaled) * BigInt(b.scaled), divisor));
+  return Number.isSafeInteger(scaled) ? decimal(scaled, scale) : null;
+}
+
 export function decimalToString(a: Decimal): string {
   const sign = a.scaled < 0 ? '-' : '';
   const digits = Math.abs(a.scaled)

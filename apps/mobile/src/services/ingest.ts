@@ -102,6 +102,19 @@ export async function ingest(
       notes: draft.notes,
       excludedFromStats,
       provisional: options.provisional ?? false,
+      investment: draft.investment
+        ? {
+            symbol: draft.investment.assetSymbol,
+            name: draft.investment.assetName,
+            assetClass: draft.investment.assetClass,
+            kind: draft.investment.kind,
+            sharesScaled: draft.investment.shares.scaled,
+            sharesScale: draft.investment.shares.scale,
+            unitPriceScaled: draft.investment.unitPrice.scaled,
+            unitPriceScale: draft.investment.unitPrice.scale,
+            feeMinor: draft.investment.fee.minor,
+          }
+        : undefined,
     };
   });
 

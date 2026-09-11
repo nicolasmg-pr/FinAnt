@@ -18,8 +18,8 @@ Three things in the existing codebase do not survive contact with a trade row:
    with EUR 2,000 of purchases reads as a EUR 2,000 spending blowout and the
    forecast learns from it.
 
-And one thing in `CLAUDE.md` does not survive it either: *"no network calls at
-all. The app has no external host to talk to."* That boundary is rewritten by
+And one thing in `CLAUDE.md` does not survive it either: _"no network calls at
+all. The app has no external host to talk to."_ That boundary is rewritten by
 this feature, narrowly and explicitly (see Boundary).
 
 ## Source format
@@ -37,14 +37,14 @@ Columns that matter: `date`, `category`, `type`, `asset_class`, `name`,
 Mapped explicitly. No heuristics on narrative text — a wrong guess here
 invents or loses shares, which is the worst place in the app to be wrong.
 
-| `type` | Side | Category | Leg |
-| --- | --- | --- | --- |
-| `BUY` | expense | `investment-trade` | yes |
-| `SELL` | income | `investment-trade` | yes, negative shares |
-| `DIVIDEND` | income | `income-investment` | **no** |
-| `BENEFITS_SAVEBACK` | income | `income-investment` | **no** |
-| `STOCKPERK` | income | `income-investment` | **no** |
-| anything else | today's normal path | | no |
+| `type`              | Side                | Category            | Leg                  |
+| ------------------- | ------------------- | ------------------- | -------------------- |
+| `BUY`               | expense             | `investment-trade`  | yes                  |
+| `SELL`              | income              | `investment-trade`  | yes, negative shares |
+| `DIVIDEND`          | income              | `income-investment` | **no**               |
+| `BENEFITS_SAVEBACK` | income              | `income-investment` | **no**               |
+| `STOCKPERK`         | income              | `income-investment` | **no**               |
+| anything else       | today's normal path |                     | no                   |
 
 Two traps the real export exposes, both confirmed against it:
 
@@ -92,9 +92,11 @@ New built-in category `investment-trade`, kind `transfer`, permanent id. One
 guard changes:
 
 ```ts
-return !tx.excludedFromStats
-  && tx.categoryId !== 'transfer-internal'
-  && tx.categoryId !== 'investment-trade';
+return (
+  !tx.excludedFromStats &&
+  tx.categoryId !== 'transfer-internal' &&
+  tx.categoryId !== 'investment-trade'
+);
 ```
 
 A purchase is cash converted into an asset, not spending: net worth is
@@ -117,6 +119,26 @@ live in `apps/mobile/src/services/prices/`:
 
 A manual price per asset always overrides, so the feature degrades to fully
 offline when a provider dies or the owner prefers it.
+
+**Amended during implementation, after checking the real portfolio.** The design
+above assumed a quote would arrive in the currency the position was bought in,
+and said a price in any other currency would simply be refused. Against the six
+ISINs actually held, that assumption fails badly:
+
+- Yahoo's ISIN search returns no currency field at all, so a listing cannot be
+  chosen by currency.
+- For four of the six it returns only a London or Amsterdam listing, priced in
+  USD — and one of those, `AIAG.L`, is priced in `GBp`, pence, one lower-case
+  letter away from `GBP` and a hundred times the value.
+
+Refusing those would have left three of six holdings permanently unpriced and
+the portfolio total understated, which is the one direction a money figure must
+not err. So the feature converts: `normaliseQuoteCurrency` folds a pence quote
+into its major unit, and a rate is fetched from the same host under the pair
+symbol (`USDEUR=X`). A currency pair names no holding and identifies nobody, so
+this widens what the app fetches without widening what it discloses. Verified
+end to end: all seven held assets now price in EUR, and the pence path
+cross-checks against the same fund's Stuttgart euro listing.
 
 Quotes are cached in SQLite with an `asOf` timestamp. The screen **always
 renders from cache**, offline, with the timestamp visible. Refresh when the

@@ -278,14 +278,23 @@ export function applyProfile(
       if (kind) {
         const assetClass = inv.assetClassMap[cell(row, invIdx.assetClass)];
         const symbol = cell(row, invIdx.assetSymbol);
+        const movesPosition = movesPositionKind(kind);
         if (!assetClass || !symbol) {
-          fail('Investment row names no asset this profile can read');
+          // A cash-only row may legitimately name no security: a broker pays a
+          // reward before the owner has chosen what it buys, and the export
+          // leaves both columns blank. That is an ordinary credit, not a bad
+          // row, so it books as income with no leg and raises nothing.
+          //
+          // A purchase or disposal naming no security is a different thing
+          // entirely — there is no position to attach it to — and is reported.
+          if (movesPosition) {
+            fail('Trade row names no asset this profile can read');
+          }
         } else {
           // Only an acquisition or a disposal moves a position. A dividend
           // writes the holding at payment time into the same column, and a
           // saveback or stockperk credits cash that a separate purchase row
           // then spends: reading either as shares inflates the holding.
-          const movesPosition = kind === 'buy' || kind === 'sell';
           const shares = movesPosition
             ? parseDecimalAt(cell(row, invIdx.shares), SHARE_SCALE)
             : zeroDecimal(SHARE_SCALE);

@@ -11,8 +11,8 @@ English/Spanish/German.
 ## Stack
 
 - TypeScript 6 (strict), React 19.2, React Native 0.86, Expo SDK 57, expo-router
-- Storage: expo-sqlite with SQLCipher. No server, no account, no cloud copy, no
-  network calls.
+- Storage: expo-sqlite with SQLCipher. No server, no account, no cloud copy.
+  One outbound call only — see Boundaries.
 - Package manager: npm (workspaces)
 
 ## Commands
@@ -57,7 +57,13 @@ English/Spanish/German.
 - Parsers report unreadable rows as issues and keep going; they do not throw away
   an import over one bad row.
 - Typed contracts at every boundary; TypeScript strict, `noUncheckedIndexedAccess` on.
-- Aggregates and forecasts exclude internal transfers and rows flagged by the owner.
+- Aggregates and forecasts exclude internal transfers, investment trades, and
+  rows flagged by the owner. Buying a security converts cash into an asset; it
+  is not spending, and selling one is not income. Dividends and broker rewards
+  are income — they are new money.
+- Share counts and unit prices are `Decimal` (scaled integer), never `Money` and
+  never a float. Cost basis comes from the export's own amount column, never
+  from price x shares.
 - Forecasts state their confidence and the history they were built from. Never
   present a projection as a booked figure.
 - Translations are typed against `Resources`: a missing key is a compile error.
@@ -75,7 +81,14 @@ English/Spanish/German.
 - Never log a movement, narrative, IBAN, or any part of a statement.
 - Never commit a real bank or spreadsheet export. `fixtures/private/` is
   gitignored; test fixtures are hand-written from the documented layout.
-- No analytics, crash reporting or telemetry, and no network calls at all. The
-  app has no external host to talk to.
+- The app makes one kind of network call: a price lookup, when the owner opens
+  or refreshes the portfolio. It sends two things and nothing else — a symbol
+  the owner holds, and a currency pair such as `USDEUR=X` when the venue prices
+  in another currency. No amount, share count, balance, account, IBAN,
+  narrative or movement ever leaves the device. Still no analytics, no crash
+  reporting, no telemetry, and no other host. The privacy cost is real and
+  stated in the UI: the quote provider learns which securities the owner holds,
+  and nothing else. All of it lives in `src/services/prices/`, and `http.ts`
+  there is the only place in the app that may call `fetch`.
 - Read `docs/security-model.md` before changing anything under `src/security/`
   or `src/db/database.ts`.
