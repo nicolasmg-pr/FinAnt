@@ -38,6 +38,21 @@ export function takePendingShare(): SharedFile | null {
 }
 
 /**
+ * Reads the waiting file without clearing it. Returns null when there is
+ * none.
+ *
+ * For the startup cache sweep (`sweepShareIntakeCache`, in
+ * `share-intake-files.ts`) to tell "a file this same launch already staged"
+ * from "a leftover from a session that is over," it has to see what is
+ * pending without consuming it — `takePendingShare` would hand the file to
+ * the sweep instead of to `app/import.tsx`, which is the only place a share
+ * is meant to be read.
+ */
+export function peekPendingShare(): SharedFile | null {
+  return pending;
+}
+
+/**
  * The display name for a URL-delivered file. iOS gives a `file://` URL and no
  * metadata, so the name has to come out of the path. Android's ACTION_SEND path
  * does not use this: there the name comes from `OpenableColumns.DISPLAY_NAME`

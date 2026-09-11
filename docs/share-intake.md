@@ -275,15 +275,20 @@ in this document describes skips the Confirm button.
 handoff — no React, no database, no Expo import, so it is unit-testable under
 plain node (`apps/mobile/src/services/tests/share-intake.test.ts`, reached by
 `vitest.config.ts` alongside `src/design/tests` and `src/assistant/tests`).
-`setPendingShare` and `takePendingShare` are its whole surface, plus
-`shareNameFromUri`. State lives in a module-level variable rather than React
-state because `app/+native-intent.tsx` runs before any component is mounted and
-has nowhere else to put the file; it is deliberately not persisted anywhere —
-a share the owner never confirmed is not a statement FinAnt is holding on to.
-Two writers — `+native-intent.tsx` and `app/_layout.tsx` — and one reader,
-`app/import.tsx`. The file's own path never travels in a route parameter; the
-route only ever carries a `Date.now()` nonce (or an error code), never a URI,
-so the store is the only place a share's path exists in JS.
+`setPendingShare` and `takePendingShare` are its main surface, plus
+`shareNameFromUri` and `peekPendingShare` — the last a read that, unlike
+`takePendingShare`, does not clear the pending file; it exists solely for the
+startup cache sweep (see "Startup order" below) to see what is staged without
+taking it away from `app/import.tsx`. State lives in a module-level variable
+rather than React state because `app/+native-intent.tsx` runs before any
+component is mounted and has nowhere else to put the file; it is deliberately
+not persisted anywhere — a share the owner never confirmed is not a statement
+FinAnt is holding on to. Two writers — `+native-intent.tsx` and
+`app/_layout.tsx` — and one reader, `app/import.tsx` (the sweep, via
+`peekPendingShare`, only ever looks). The file's own path never travels in a
+route parameter; the route only ever carries a `Date.now()` nonce (or an error
+code), never a URI, so the store is the only place a share's path exists in
+JS.
 
 `app/import.tsx` reads it in a mount effect keyed on the route's `shared`
 param: `too-large` and `unreadable` render the matching error string directly,
@@ -332,33 +337,45 @@ knows it is still holding — in `sharedFile` React state. A file staged and
 then abandoned without ever reaching that state transition cleanly (the app
 process killed before the unmount cleanup runs, or a share superseded before
 `app/import.tsx` even mounted) leaves its copy behind in
-`cacheDir/share-intake` with nothing left to clean it up. `sweepShareIntakeCache`
-(also in `src/services/share-intake-files.ts`) is the backstop: it deletes that
-entire directory once, at startup, since every file in it is one FinAnt itself
-wrote and, by the time a new launch is starting, any file still there belongs
-to a session that is already over. It is called from the same startup effect
-in `app/_layout.tsx` that opens the database, awaited before `ready` is set —
-see "Startup order" below for why that ordering is what keeps it from deleting
-a file this same launch is about to stage. It is a no-op on iOS, where the
-directory it targets is never created (the module that writes to it is
-Android-only).
+`cacheDir/share-intake` with nothing left to clean it up.
+`sweepShareIntakeCache` (also in `src/services/share-intake-files.ts`) is the
+backstop: it lists that directory once, at startup, and deletes every entry
+except the one, if any, named by its optional `keepUri` argument — every file
+in it is one FinAnt itself wrote, so by the time a new launch is starting,
+anything else still there belongs to a session that is already over. It is a
+no-op on iOS, where the directory it targets is never created (the module
+that writes to it is Android-only).
+
+`keepUri` exists because the sweep cannot assume it always runs before every
+possible write into that directory — see "Startup order" below for the one
+case where it does not, and how the sweep is told to leave that file alone
+instead.
 
 ## Startup order — `app/_layout.tsx`
 
 `RootLayout` opens the encrypted database and initialises i18n before
 rendering the stack, so any screen — including the import screen a share opens
 — only ever runs against an open database. The same startup effect also awaits
-`sweepShareIntakeCache()` (see "The cache sweep at startup" above) before it
-sets `ready`. That ordering is deliberate, not incidental: the only thing that
-can write a _new_ file into `cacheDir/share-intake` on a cold start is
-`consumePendingShare()`, and that call only happens from the effect below that
-is gated on `ready`. Because the sweep is awaited before `ready` is ever set,
-it is guaranteed to finish before `consumePendingShare()` can run, so it can
-never delete a file this same launch is in the middle of staging. The other
-share-handling effect — the unconditional listener, next — cannot race it
-either: the native `OnNewIntent` event it reacts to only fires on an activity
-that is already running, which for a cold start means only after this startup
-effect, sweep included, has already finished.
+`sweepShareIntakeCache(peekPendingShare()?.uri)` (see "The cache sweep at
+startup" above) before it sets `ready`.
+
+`consumePendingShare()` cannot beat the sweep to a fresh write on an
+`ACTION_SEND` cold start: it copies lazily, only once called, from the effect
+below that is itself gated on `ready`, which cannot be true before this sweep
+has already run. So for that path `peekPendingShare()` is null and the sweep
+empties the directory outright. A `content://` "Open with" cold start is
+different, and the sweep cannot out-order it: expo-router resolves the
+initial URL — and runs `app/+native-intent.tsx`'s `redirectSystemPath` from
+inside that resolution — before `NavigationContainer` renders anything,
+which is before `RootLayout` itself mounts. `copyContentUri` has therefore
+already written its file, and `setPendingShare` has already staged it, before
+this startup effect's first line runs. `peekPendingShare()` — a read that,
+unlike `takePendingShare`, does not consume the pending file — is what tells
+the sweep to leave that one URI alone, so `app/import.tsx` can still read it
+once the stack renders. (An earlier version of this sweep reasoned instead
+that no write could ever precede it; that reasoning covered `ACTION_SEND` and
+the `OnNewIntent` listener correctly but missed this `content://` path, and
+the sweep deleted the file it had just staged.)
 
 Three further effects handle a share:
 

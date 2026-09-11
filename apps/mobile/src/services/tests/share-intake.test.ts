@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   FALLBACK_SHARE_NAME,
+  peekPendingShare,
   setPendingShare,
   shareNameFromUri,
   takePendingShare,
@@ -25,6 +26,30 @@ describe('takePendingShare', () => {
     setPendingShare({ uri: 'file:///cache/a.pdf', name: 'a.pdf' });
     setPendingShare({ uri: 'file:///cache/b.pdf', name: 'b.pdf' });
     expect(takePendingShare()?.name).toBe('b.pdf');
+  });
+});
+
+describe('peekPendingShare', () => {
+  beforeEach(() => {
+    takePendingShare();
+  });
+
+  it('is empty until something arrives', () => {
+    expect(peekPendingShare()).toBeNull();
+  });
+
+  it('returns the staged file without clearing it', () => {
+    setPendingShare({ uri: 'file:///cache/a.pdf', name: 'a.pdf' });
+    expect(peekPendingShare()).toEqual({ uri: 'file:///cache/a.pdf', name: 'a.pdf' });
+    // Still there: a second peek must see the same file as the first.
+    expect(peekPendingShare()).toEqual({ uri: 'file:///cache/a.pdf', name: 'a.pdf' });
+  });
+
+  it('leaves the file for takePendingShare to read and clear afterwards', () => {
+    setPendingShare({ uri: 'file:///cache/a.pdf', name: 'a.pdf' });
+    peekPendingShare();
+    expect(takePendingShare()).toEqual({ uri: 'file:///cache/a.pdf', name: 'a.pdf' });
+    expect(takePendingShare()).toBeNull();
   });
 });
 

@@ -11,7 +11,7 @@ import { initI18n } from '../src/i18n';
 import { detectTransfers } from '../src/services/transfers';
 import { spacing, type, useTheme } from '../src/design';
 import ShareIntakeModule, { SHARE_TOO_LARGE, SHARE_UNREADABLE } from '../modules/share-intake';
-import { setPendingShare, type SharedFile } from '../src/services/share-intake';
+import { peekPendingShare, setPendingShare, type SharedFile } from '../src/services/share-intake';
 import { sweepShareIntakeCache } from '../src/services/share-intake-files';
 
 /**
@@ -65,17 +65,21 @@ export default function RootLayout() {
       } catch (cause) {
         console.warn('Transfer matching failed at startup:', (cause as Error).message);
       }
-      // Awaited here, before `ready` flips true, so it is guaranteed to finish
-      // before the `ready`-gated effect below ever calls
-      // `consumePendingShare()` — the only thing on a cold start that can
-      // write a new file into the very directory being swept. Nothing else
-      // writes there this early: the unconditional listener effect can
-      // receive a warm share, but the native `OnNewIntent` it reacts to only
-      // fires on an activity that is already running, i.e. only after a
-      // cold start's own startup sequence — this sweep included — is behind
-      // it. Anything still in the directory at this point belongs to a
-      // session that already ended.
-      await sweepShareIntakeCache();
+      // `consumePendingShare()` (the `ready`-gated effect below) cannot beat
+      // this sweep to a fresh write — it copies lazily, only once called,
+      // strictly after this effect sets `ready` — so an ACTION_SEND cold
+      // start has nothing on disk yet and `peekPendingShare()` below is null.
+      // A `content://` "Open with" cold start is different: expo-router
+      // resolves the initial URL, and runs `app/+native-intent.tsx`'s
+      // `redirectSystemPath` from inside that resolution, *before*
+      // `NavigationContainer` renders any screen — so `copyContentUri` has
+      // already written its copy, and `setPendingShare` has already staged
+      // it, by the time this component so much as mounts. This sweep cannot
+      // out-order that; it has already happened. So the sweep is told the
+      // one URI it must leave alone — whatever is currently staged — via
+      // `peekPendingShare()`, a read that (unlike `takePendingShare`) does
+      // not consume it, leaving it for `app/import.tsx` to read later.
+      await sweepShareIntakeCache(peekPendingShare()?.uri);
       setReady(true);
     })();
   }, []);
