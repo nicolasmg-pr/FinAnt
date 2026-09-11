@@ -160,13 +160,19 @@ by `expo-file-system` at all.
 
 ## 3. Intake store — `apps/mobile/src/services/share-intake.ts`
 
-A module-level one-shot handoff, no React, no database:
+A module-level one-shot handoff, no React, no database, and no Expo import —
+so it is unit-testable under plain node:
 
 ```ts
 export function setPendingShare(file: SharedFile): void;
 export function takePendingShare(): SharedFile | null;
-export async function discardShare(file: SharedFile): Promise<void>;
+/** Last path segment of a file:// URL, percent-decoded. For iOS. */
+export function shareNameFromUri(uri: string): string;
 ```
+
+Deleting the cache copy needs `expo-file-system`, so it sits apart in
+`apps/mobile/src/services/share-intake-files.ts` as
+`discardShare(file: SharedFile): Promise<void>`, safe to call twice.
 
 Two writers: `+native-intent.tsx`, and `app/_layout.tsx` — which stores what
 `consumePendingShare()` returned at startup and what `onShareReceived`
@@ -240,9 +246,14 @@ already navigating to that route. The store makes the two paths converge, so
 
 ## Testing
 
-Parsers are unchanged, so no parser tests change. The one pure function worth a
-unit test is `extensionForMimeType`, which goes into `packages/importers`
-beside `yearFromFileName` and gets vitest coverage there.
+Parsers are unchanged, so no parser tests change.
+
+`vitest.config.ts` already reaches into the app for `src/design/tests` and
+`src/assistant/tests`, so `apps/mobile/src/services/tests` joins that list and
+the pure pieces are tested where they live: `shareNameFromUri`, and the
+one-shot semantics of the store. The MIME-to-extension fallback is *not*
+mirrored in TypeScript — the name is chosen during the native copy, so that map
+lives in Kotlin and nowhere else.
 
 The rest is native plumbing, verified by hand:
 
