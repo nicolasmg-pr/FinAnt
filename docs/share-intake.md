@@ -111,26 +111,29 @@ escape.
 
 `SHARE_TOO_LARGE` (over the 25 MB ceiling) and `SHARE_UNREADABLE` (the stream
 could not be opened or copied, for any other reason) are the only two codes the
-native module raises. Every caller that wraps the native call in its own
-try/catch turns either into the same pair of routes and the same pair of
-strings: `app/+native-intent.tsx`'s `content://` branch (`copyContentUri`) and
-`app/_layout.tsx`'s `onShareFailed` listener both push `/import?shared=too-large`
-or `/import?shared=unreadable`, which `app/import.tsx` renders as
-`errors.shareTooLarge` / `errors.shareUnreadable`.
+native module raises. Every one of the three failure surfaces wraps the native
+call in its own try/catch and turns either code into the same pair of routes,
+which `app/import.tsx` renders as `errors.shareTooLarge` /
+`errors.shareUnreadable`:
 
-One path is not wrapped: `consumePendingShare()`, called once from
-`app/_layout.tsx`'s `ready`-gated effect, has no try/catch around it. A failure
-inside it — the file was too large, or the stream could not be opened, on the
-intent that launched the app — throws a `CodedException` that nothing on the
-JS side catches. This is not hypothetical: it is exactly what the device
-verification for this feature hit. A test command's URI grant was not
-recognised by MediaProvider (a testing-harness gap, not a FinAnt defect — see
-"Verifying this by hand" below), `copy()` raised `ShareUnreadableException`
-from inside `consumePendingShare()`, and the result was a LogBox "Render Error"
-overlay rather than the friendly error card. A genuinely oversized or
-unreadable file shared through a cold `ACTION_SEND` launch — as opposed to one
-shared into a FinAnt that is already running, which does show the card — hits
-the same gap.
+- `app/+native-intent.tsx`'s `content://` branch, around `copyContentUri`.
+- `app/_layout.tsx`'s `onShareFailed` listener, for a warm `ACTION_SEND` share
+  that could not be copied.
+- `app/_layout.tsx`'s `ready`-gated effect, around `consumePendingShare()`, for
+  the `ACTION_SEND` intent that launched the app.
+
+That third path used to be the odd one out: `consumePendingShare()` had no
+try/catch around it, so a cold `ACTION_SEND` launch that was too large or
+unreadable threw a `CodedException` nothing on the JS side caught, and the
+owner saw a LogBox "Render Error" overlay instead of the friendly error card —
+exactly what the device verification for this feature hit (a test command's
+URI grant was not recognised by MediaProvider, a testing-harness gap, not a
+FinAnt defect — see "Verifying this by hand" below). Commit `9ea74a7` fixed
+it: the call is now wrapped like the other two, its code is read through the
+same guarded, unknown-shaped-`cause` check the other two use, and the result
+is routed through `pendingNavigation` exactly like a received file or a warm
+failure — see "Startup order" below. All three surfaces now reach the same two
+routes; none of them can crash the app.
 
 ## Android's "Open with", and iOS's share sheet and Files — `app/+native-intent.tsx`
 
@@ -146,15 +149,18 @@ export function redirectSystemPath({ path }: { path: string; initial: boolean })
   try {
     if (path.startsWith('content://')) {
       setPendingShare(ShareIntakeModule.copyContentUri(path));
-      return '/import?shared=1';
+      return `/import?shared=${Date.now()}`;
     }
     if (path.startsWith('file://')) {
       setPendingShare({ uri: path, name: shareNameFromUri(path) });
-      return '/import?shared=1';
+      return `/import?shared=${Date.now()}`;
     }
     return path; // a finant:// deep link or anything else: let the router route it
   } catch (cause) {
-    const code = (cause as { code?: string }).code;
+    const code =
+      typeof cause === 'object' && cause !== null && 'code' in cause
+        ? (cause as { code?: unknown }).code
+        : undefined;
     return code === SHARE_TOO_LARGE ? '/import?shared=too-large' : '/import?shared=unreadable';
   }
 }
@@ -172,8 +178,19 @@ segment, percent-decoded, because iOS gives no separate metadata the way
 This function must never throw — an exception here is a crash on launch — so
 every failure becomes a route instead, and the import screen explains it with
 the same error card a failed parse already uses. `initial` (whether this is a
-cold start) is deliberately not branched on: a cold start and a warm one both
-end on the same route, `/import?shared=1`.
+cold start) is deliberately not branched on — a cold start and a warm one are
+handled identically — but the route the two success branches return is not a
+literal string. `redirectSystemPath` is not launch-only: expo-router calls it
+for a URL that arrives while FinAnt is already running just as much as for the
+one that launched it, so a `Date.now()` nonce goes into the route on every
+call. An early version returned the literal `/import?shared=1` from both
+branches: sharing statement A, going back, then sharing statement B produced
+the identical route both times, so React Navigation popped back to the
+existing import screen without changing params, the mount effect keyed on
+`shared` in `app/import.tsx` never re-ran, and the screen kept showing A while
+B sat staged in the store — confirming A while the owner believed they had
+shared B. `app/_layout.tsx` mints a nonce the same way for the warm share it
+handles directly (see "Startup order" below).
 
 ## The MIME list and the iOS UTI list
 
@@ -182,7 +199,8 @@ platforms" below.
 
 Android declares two intent filters. `SEND` is what a share sheet offers
 against; `VIEW` (with `BROWSABLE`) is what lets a file manager's "Open with"
-find FinAnt for a `content://` or `file://` URI. Both list the same MIME set:
+find FinAnt for a `content://` or `file://` URI. The two do **not** list the
+same MIME set — `SEND` has one entry `VIEW` deliberately omits:
 
 - `application/pdf`
 - `text/csv`
@@ -191,11 +209,16 @@ find FinAnt for a `content://` or `file://` URI. Both list the same MIME set:
 - `application/xml`
 - `text/plain`
 - `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (xlsx)
-- `application/octet-stream`
+- `application/octet-stream` — **`SEND` only**
 
-`application/octet-stream` is in the list because exporting apps routinely
-mislabel a CSV or an xlsx with it. `*/*` is deliberately **not** in the list:
-offering it would put FinAnt in the share sheet for a photo, a PDF boarding
+`application/octet-stream` is in the `SEND` filter because exporting apps
+routinely mislabel a CSV or an xlsx with it when sharing one directly; it is
+left out of `VIEW` because that MIME type is also the generic fallback for
+"no idea what this is," and offering it there would make FinAnt a candidate
+"Open with" target for arbitrary unrelated files reached through a
+`content://` or `file://` URI, not just a mislabelled statement handed to it
+directly through the share sheet. `*/*` is deliberately **not** in either
+list: offering it would put FinAnt in the share sheet for a photo, a PDF boarding
 pass, anything at all, and the device verification for this feature confirmed
 the absence works both ways — `com.finant.app` is missing from
 `query-activities -a android.intent.action.SEND -t image/jpeg`, and from the
@@ -259,8 +282,8 @@ has nowhere else to put the file; it is deliberately not persisted anywhere —
 a share the owner never confirmed is not a statement FinAnt is holding on to.
 Two writers — `+native-intent.tsx` and `app/_layout.tsx` — and one reader,
 `app/import.tsx`. The file's own path never travels in a route parameter; the
-route only ever carries `?shared=1` (or a nonce, or an error code), never a
-URI, so the store is the only place a share's path exists in JS.
+route only ever carries a `Date.now()` nonce (or an error code), never a URI,
+so the store is the only place a share's path exists in JS.
 
 `app/import.tsx` reads it in a mount effect keyed on the route's `shared`
 param: `too-large` and `unreadable` render the matching error string directly,
@@ -279,22 +302,65 @@ not the file the owner still has open elsewhere — on Android they are always a
 copy the native module wrote, either from an `ACTION_SEND` (`consumePendingShare`,
 `onShareReceived`) or a `content://` "Open with" (`copyContentUri`); on iOS no
 copy is made by FinAnt's own code, and the `file://` URL is used exactly as the
-system handed it to `openURL`. Either way, `discardShare` (in
-`src/services/share-intake-files.ts`) is what deletes it, and it runs at
-exactly two moments: after a successful Confirm (`import.tsx`'s `confirm()`,
-once `ingest` returns), and when the owner leaves the import screen with a
-shared file still staged — an unmount cleanup effect keyed on `sharedFile`.
-`discardShare` is safe to call twice and safe to call on a file that is
-already gone: a failure inside it is swallowed rather than surfaced to the
-owner, and never logged, because the reason would carry the file's name. This
-cleanup is specific to a shared file; the ordinary picker's own cache copy
-(`copyToCacheDirectory: true`) is untouched, exactly as before this feature.
+system handed it to `openURL`. `discardShare` (in
+`src/services/share-intake-files.ts`) is what deletes the Android copy, and it
+runs at exactly two moments: after a successful Confirm (`import.tsx`'s
+`confirm()`, once `ingest` returns), and when a shared file in `sharedFile` is
+replaced or the owner leaves the import screen — a cleanup effect keyed on
+`[sharedFile]` that fires on every reassignment of that state, not only on
+unmount, so a second share superseding a first discards the first's copy
+immediately rather than leaving it until the screen closes.
+
+`discardShare` only ever deletes a URI it recognises as its own copy: one
+under the app's cache directory (`Paths.cache`, where the Android module
+writes), or under the app's `Documents/Inbox` (the directory iOS uses when a
+document provider hands over a duplicate instead of the original in place).
+This matters specifically for iOS: `app.json` sets
+`LSSupportsOpeningDocumentsInPlace: true`, which is exactly the key that lets
+Files hand FinAnt the owner's _original_ document rather than an `Inbox` copy,
+and `+native-intent.tsx` stores that URL verbatim with no copy of FinAnt's
+own. A URI outside both directories — an in-place iOS original — is left
+alone; `discardShare` returns without touching it. Everything else about it is
+unchanged: safe to call twice, safe to call on a file that is already gone (a
+failure inside it is swallowed rather than surfaced to the owner and never
+logged, because the reason would carry the file's name), and specific to a
+shared file — the ordinary picker's own cache copy (`copyToCacheDirectory:
+true`) is untouched, exactly as before this feature.
+
+**The cache sweep at startup.** `discardShare` only runs for a file the app
+knows it is still holding — in `sharedFile` React state. A file staged and
+then abandoned without ever reaching that state transition cleanly (the app
+process killed before the unmount cleanup runs, or a share superseded before
+`app/import.tsx` even mounted) leaves its copy behind in
+`cacheDir/share-intake` with nothing left to clean it up. `sweepShareIntakeCache`
+(also in `src/services/share-intake-files.ts`) is the backstop: it deletes that
+entire directory once, at startup, since every file in it is one FinAnt itself
+wrote and, by the time a new launch is starting, any file still there belongs
+to a session that is already over. It is called from the same startup effect
+in `app/_layout.tsx` that opens the database, awaited before `ready` is set —
+see "Startup order" below for why that ordering is what keeps it from deleting
+a file this same launch is about to stage. It is a no-op on iOS, where the
+directory it targets is never created (the module that writes to it is
+Android-only).
 
 ## Startup order — `app/_layout.tsx`
 
 `RootLayout` opens the encrypted database and initialises i18n before
 rendering the stack, so any screen — including the import screen a share opens
-— only ever runs against an open database. Three effects handle a share:
+— only ever runs against an open database. The same startup effect also awaits
+`sweepShareIntakeCache()` (see "The cache sweep at startup" above) before it
+sets `ready`. That ordering is deliberate, not incidental: the only thing that
+can write a _new_ file into `cacheDir/share-intake` on a cold start is
+`consumePendingShare()`, and that call only happens from the effect below that
+is gated on `ready`. Because the sweep is awaited before `ready` is ever set,
+it is guaranteed to finish before `consumePendingShare()` can run, so it can
+never delete a file this same launch is in the middle of staging. The other
+share-handling effect — the unconditional listener, next — cannot race it
+either: the native `OnNewIntent` event it reacts to only fires on an activity
+that is already running, which for a cold start means only after this startup
+effect, sweep included, has already finished.
+
+Three further effects handle a share:
 
 1. **Subscribe, unconditionally, on mount.** `ShareIntakeModule.addListener` is
    called for both `onShareReceived` and `onShareFailed` in an effect with no
@@ -323,8 +389,8 @@ always, navigate only once ready — is what fixed that, at the cost of the
 `pendingNavigation` state the simpler shape did not need.
 
 A share that arrived through `+native-intent.tsx` needs no `router.push` here:
-Expo Router is already navigating to `/import?shared=1` by the time this code
-runs. The store is what makes the two arrival paths converge, so
+Expo Router is already navigating to `/import?shared=<nonce>` by the time this
+code runs. The store is what makes the two arrival paths converge, so
 `app/import.tsx` cannot tell them apart and does not try to.
 
 ## Generated platforms: `app.json` is the only place to change any of this
