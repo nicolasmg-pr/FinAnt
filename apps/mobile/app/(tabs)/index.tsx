@@ -299,8 +299,13 @@ export default function DashboardScreen() {
         )}
       </View>
 
-      {/* Everything below is about movements, so it waits for one. */}
-      {transactions.length === 0 ? (
+      {/* The cards below read the month, the year and the recurring rows out of
+          the cash ledger, so they belong to the cash view alone. Under the
+          portfolio they answer a question about a different pot of money, and
+          under net worth they break that view's one promise: the total, its two
+          halves, and the line. Everything here is about movements, so it also
+          waits for one. */}
+      {view !== 'cash' ? null : transactions.length === 0 ? (
         <Empty message={t('dashboard.noData')} />
       ) : (
         <>
