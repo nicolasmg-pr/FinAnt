@@ -17,6 +17,11 @@ export interface IngestResult {
   readonly autoExcluded: number;
   /** Provisional movements a statement row in this import replaced. */
   readonly superseded: number;
+  /**
+   * Holdings attached to movements that were already in the ledger, for an
+   * owner who imported their statements before the portfolio existed.
+   */
+  readonly backfilledHoldings: number;
 }
 
 /**
@@ -120,7 +125,12 @@ export async function ingest(
 
   // Counted from what was actually written, not from what was offered: a
   // re-imported statement must not report the same exclusions a second time.
-  const { inserted, duplicates, excluded: autoExcluded } = await insertTransactions(batch);
+  const {
+    inserted,
+    duplicates,
+    excluded: autoExcluded,
+    backfilled: backfilledHoldings,
+  } = await insertTransactions(batch);
 
   // Reconciliation runs before transfer detection: a provisional and the
   // statement row that books it must not be paired with each other, and the
@@ -157,5 +167,6 @@ export async function ingest(
     transfersMatched,
     autoExcluded,
     superseded,
+    backfilledHoldings,
   };
 }
