@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  combineNetWorth,
   bookedYear,
   detectRecurring,
   forecastYear,
@@ -19,7 +19,6 @@ import {
   type Transaction,
 } from '@finant/core';
 import { Amount } from '../../src/components/Amount';
-import { BalanceChart } from '../../src/components/BalanceChart';
 import { Card } from '../../src/components/Card';
 import { CategoryBreakdown } from '../../src/components/CategoryBreakdown';
 import { Empty } from '../../src/components/ui/Empty';
@@ -28,6 +27,10 @@ import { Ant } from '../../src/components/mascot/Ant';
 import { GrainRow } from '../../src/components/trail/GrainRow';
 import { ListRow } from '../../src/components/ui/ListRow';
 import { SegmentedControl } from '../../src/components/ui/SegmentedControl';
+import { CashHero } from '../../src/components/dashboard/CashHero';
+import { NetWorthHero } from '../../src/components/dashboard/NetWorthHero';
+import { PortfolioHero } from '../../src/components/dashboard/PortfolioHero';
+import { usePortfolio } from '../../src/hooks/use-portfolio';
 import { StatTile } from '../../src/components/ui/StatTile';
 import { Touchable } from '../../src/components/ui/Touchable';
 import { Trail } from '../../src/components/trail/Trail';
@@ -39,6 +42,9 @@ import { radius, spacing, type, useMotion, useTheme } from '../../src/design';
 
 const CURRENCY = 'EUR';
 
+/** Which shape of money the hero is showing. */
+type DashboardView = 'cash' | 'portfolio' | 'netWorth';
+
 export default function DashboardScreen() {
   const theme = useTheme();
   const motion = useMotion();
@@ -46,9 +52,18 @@ export default function DashboardScreen() {
   // without the inset that title would sit under the notch.
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
-  const router = useRouter();
   const { transactions, accounts, loading, reload } = useAppData();
   const [granularity, setGranularity] = useState<Granularity>('month');
+  // Which of the three the hero is showing. Not persisted: it is one tap, and
+  // a remembered tab is a preference, not a view.
+  const [view, setView] = useState<DashboardView>('cash');
+  const {
+    portfolio,
+    series: portfolioSeries,
+    refreshing: refreshingPrices,
+    offline: pricesOffline,
+    refresh: refreshPrices,
+  } = usePortfolio();
   const [yearView, setYearView] = useState<'projected' | 'booked'>('projected');
   const [openCaptures, setOpenCaptures] = useState(0);
 
@@ -139,6 +154,22 @@ export default function DashboardScreen() {
   // owner had just left.
   const locale = intlLocale();
 
+  // Cash and holdings on one timeline. Booked months only — see combineNetWorth.
+  const combined = useMemo(
+    () => combineNetWorth(netWorth.points, portfolioSeries, CURRENCY, portfolio.totalValue),
+    [netWorth, portfolioSeries, portfolio],
+  );
+
+  const combinedLabels = useMemo(
+    () =>
+      periodLabels(
+        combined.points.map((point) => point.period),
+        granularity,
+        locale,
+      ),
+    [combined, granularity, locale],
+  );
+
   const netWorthLabels = useMemo(
     () =>
       periodLabels(
@@ -222,67 +253,49 @@ export default function DashboardScreen() {
       {/* The hero carries no card chrome: the balance is the page, not an item
           on it. */}
       <View style={styles.hero}>
+        <SegmentedControl
+          options={[
+            { value: 'cash' as const, label: t('dashboard.view.cash') },
+            { value: 'portfolio' as const, label: t('dashboard.view.portfolio') },
+            { value: 'netWorth' as const, label: t('dashboard.view.netWorth') },
+          ]}
+          value={view}
+          onChange={setView}
+        />
+
         <Text style={[type.caption, styles.heroLabel, { color: theme.textMuted }]}>
-          {t('dashboard.total')}
+          {view === 'cash'
+            ? t('dashboard.total')
+            : view === 'portfolio'
+              ? t('portfolio.title')
+              : t('dashboard.netWorthTotal')}
         </Text>
 
-        {netWorth.accountsCounted === 0 ? (
-          <Touchable onPress={() => router.push('/banks')} accessibilityRole="button">
-            <Text style={[type.body, { color: theme.textMuted }]}>{t('dashboard.noBalances')}</Text>
-            <Text style={[type.body, { color: theme.accent }]}>{t('dashboard.setBalances')}</Text>
-          </Touchable>
+        {view === 'cash' ? (
+          <CashHero
+            netWorth={netWorth}
+            labels={netWorthLabels}
+            confidence={forecast.confidence}
+            granularity={granularity}
+            onGranularityChange={setGranularity}
+            hasTransactions={transactions.length > 0}
+          />
+        ) : view === 'portfolio' ? (
+          <PortfolioHero
+            portfolio={portfolio}
+            series={portfolioSeries}
+            refreshing={refreshingPrices}
+            offline={pricesOffline}
+            onRefresh={() => void refreshPrices({ force: true })}
+          />
         ) : (
-          <>
-            <Amount value={netWorth.current} tone="neutral" size="display" />
-            <Text style={[type.caption, { color: theme.textMuted }]}>
-              {t('dashboard.asOfToday')}
-            </Text>
-
-            {netWorth.accountsSkipped > 0 ? (
-              <Touchable
-                onPress={() => router.push('/banks')}
-                accessibilityRole="button"
-                style={[styles.warning, { backgroundColor: theme.warningSoft }]}
-              >
-                <Feather name="alert-circle" size={14} color={theme.warning} />
-                <Text style={[type.label, styles.warningText, { color: theme.warning }]}>
-                  {t('dashboard.balanceMissing', { count: netWorth.accountsSkipped })}
-                </Text>
-              </Touchable>
-            ) : null}
-
-            {/* One point is a dot, not a line. */}
-            {netWorth.points.length > 1 ? (
-              <View style={styles.bleed}>
-                <BalanceChart
-                  points={netWorth.points}
-                  labels={netWorthLabels}
-                  confidence={forecast.confidence}
-                />
-              </View>
-            ) : null}
-
-            {/* The switch outlives the chart on purpose: a single year collapses
-                to one point, and hiding the switch with the chart left no way
-                back to months. */}
-            {transactions.length > 0 ? (
-              <SegmentedControl
-                options={[
-                  { value: 'month' as const, label: t('dashboard.byMonth') },
-                  { value: 'year' as const, label: t('dashboard.byYear') },
-                ]}
-                value={granularity}
-                onChange={setGranularity}
-              />
-            ) : null}
-
-            {netWorth.points.length > 1 &&
-            netWorth.points.some((point) => point.kind === 'projected') ? (
-              <Text style={[type.caption, { color: theme.textMuted }]}>
-                {t('dashboard.projectedTail')}
-              </Text>
-            ) : null}
-          </>
+          <NetWorthHero
+            worth={combined}
+            labels={combinedLabels}
+            granularity={granularity}
+            onGranularityChange={setGranularity}
+            hasTransactions={transactions.length > 0}
+          />
         )}
       </View>
 
@@ -461,18 +474,6 @@ const styles = StyleSheet.create({
   titleFace: { marginTop: -3 },
   hero: { gap: spacing.sm, marginBottom: spacing.sm },
   heroLabel: { textTransform: 'uppercase' },
-  // The chart reaches both screen edges; the screen's own padding is undone
-  // for its width only.
-  bleed: { marginHorizontal: -spacing.lg },
   banner: { padding: spacing.md, borderRadius: radius.md },
-  warning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-  },
-  warningText: { flexShrink: 1 },
   figures: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
 });

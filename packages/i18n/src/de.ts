@@ -23,6 +23,13 @@ export const de: Translations = {
     settings: 'Einstellungen',
   },
   dashboard: {
+    view: { cash: 'Guthaben', portfolio: 'Portfolio', netWorth: 'Vermögen' },
+    asOfTodayAll: 'Alles, was du hast, heute',
+    netWorthTotal: 'Vermögen',
+    netWorthHint:
+      'Deine Konten und deine Anlagen zusammen. Die Linie endet heute: ein Aktienkurs wird nicht prognostiziert.',
+    cashPart: 'Auf Konten',
+    portfolioPart: 'In Anlagen',
     title: 'Übersicht',
     thisMonth: 'Dieser Monat',
     sincePayroll: 'Seit {{date}}',

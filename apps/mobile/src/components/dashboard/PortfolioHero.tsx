@@ -14,16 +14,19 @@ import {
   type Position,
   type ValuePoint,
 } from '@finant/core';
-import { intlLocale } from '../i18n';
-import { radius, spacing, type, useTheme } from '../design';
-import { Amount } from './Amount';
-import { BalanceChart } from './BalanceChart';
-import { Card } from './Card';
-import { Button } from './ui/Button';
-import { Touchable } from './ui/Touchable';
+import { intlLocale } from '../../i18n';
+import { radius, spacing, type, useTheme } from '../../design';
+import { Amount } from '../Amount';
+import { BalanceChart } from '../BalanceChart';
+import { Button } from '../ui/Button';
+import { Empty } from '../ui/Empty';
+import { Touchable } from '../ui/Touchable';
 
 /**
- * What the owner holds, under the cash that bought it.
+ * What the owner holds, as one of the three faces of the dashboard.
+ *
+ * No card chrome, because it stands where the cash balance stands and the
+ * balance is the page rather than an item on it.
  *
  * Every figure here is derived and none of it is live: the timestamp under the
  * total is not decoration, it is the difference between a valuation and a
@@ -31,7 +34,7 @@ import { Touchable } from './ui/Touchable';
  * being quietly counted at zero, which would understate the total — the one
  * direction a money figure must not err.
  */
-export function PortfolioSection({
+export function PortfolioHero({
   portfolio,
   series,
   refreshing,
@@ -59,12 +62,14 @@ export function PortfolioSection({
     });
   }, [portfolio.quotedAsOf, locale, t]);
 
-  if (portfolio.holdings.length === 0 && portfolio.closed.length === 0) return null;
+  if (portfolio.holdings.length === 0 && portfolio.closed.length === 0) {
+    return <Empty message={t('portfolio.empty')} />;
+  }
 
   const gainTone = portfolio.totalUnrealised.minor < 0 ? 'expense' : 'income';
 
   return (
-    <Card title={t('portfolio.title')}>
+    <>
       <View style={styles.totals}>
         <Amount value={portfolio.totalValue} size="display" tone="neutral" fit />
         <Text style={[type.caption, { color: theme.textMuted }]}>{asOf}</Text>
@@ -133,7 +138,7 @@ export function PortfolioSection({
       <Text style={[type.caption, styles.privacy, { color: theme.textMuted }]}>
         {t('portfolio.privacy')}
       </Text>
-    </Card>
+    </>
   );
 }
 
@@ -311,7 +316,7 @@ const styles = StyleSheet.create({
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  chart: { marginTop: spacing.md },
+  chart: { marginTop: spacing.md, marginHorizontal: -spacing.lg },
   list: { marginTop: spacing.md },
   row: {
     flexDirection: 'row',

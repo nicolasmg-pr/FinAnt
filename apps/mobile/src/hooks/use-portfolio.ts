@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   buildPortfolio,
   emptyPortfolio,
@@ -102,6 +103,20 @@ export function usePortfolio(): PortfolioState {
       await refresh();
     })();
   }, [reload, refresh]);
+
+  // Re-read whenever the screen comes back into view.
+  //
+  // Without this the portfolio is whatever it was when the tab first mounted:
+  // an import on another screen adds the holdings to the database and the
+  // dashboard keeps showing "no investments yet" until the app is restarted,
+  // which reads as the feature being broken rather than stale. Only the
+  // database is re-read — the network is left to `refresh`, so coming back to
+  // the tab never costs a request.
+  useFocusEffect(
+    useCallback(() => {
+      void reload();
+    }, [reload]),
+  );
 
   return { portfolio, series, loading, refreshing, offline, error, reload, refresh };
 }
