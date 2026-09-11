@@ -5,6 +5,7 @@ Pod::Spec.new do |s|
   s.description    = 'iOS stub of the FinAnt notification capture module. iOS has no API for reading other apps notifications; the real implementation is Android-only.'
   s.license        = 'UNLICENSED'
   s.author         = 'Nicolas Mendez'
+  s.homepage       = 'https://docs.expo.dev/modules/'
   s.platforms      = {
     :ios => '16.4',
   }

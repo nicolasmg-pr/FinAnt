@@ -33,3 +33,4 @@ Each file: one topic. If pasted from the web, include source URL and date.
 | `security-model.md`       | What is stored where, and the threat model behind it                                   |
 | `notification-formats.md` | The wording each bank's Android notifications use, per notification kind               |
 | `distribution.md`         | How a build reaches the owner's phone: APK signing and releases, and why iOS cannot    |
+| `share-intake.md`         | How a statement shared from another app reaches the import screen, Android and iOS     |

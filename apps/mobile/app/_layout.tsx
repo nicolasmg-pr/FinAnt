@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -10,6 +10,31 @@ import { getDatabase } from '../src/db/database';
 import { initI18n } from '../src/i18n';
 import { detectTransfers } from '../src/services/transfers';
 import { spacing, type, useTheme } from '../src/design';
+import ShareIntakeModule, { SHARE_TOO_LARGE, SHARE_UNREADABLE } from '../modules/share-intake';
+import { peekPendingShare, setPendingShare, type SharedFile } from '../src/services/share-intake';
+import { sweepShareIntakeCache } from '../src/services/share-intake-files';
+
+/**
+ * What the share effects below hand to the flush effect: either a received
+ * file (carrying the nonce that makes its route unique) or a failure code.
+ * Kept as data rather than a pre-built route string so the literal route
+ * forms — required by `typedRoutes` — are only ever written where they are
+ * pushed, in one place.
+ */
+type PendingShareNavigation =
+  { kind: 'received'; nonce: number } | { kind: 'failed'; code: string };
+
+/**
+ * Anchors the stack on the tab root, so a deep link that opens straight onto
+ * `/import` (a cold-start share) still gets `(tabs)` underneath it. Without
+ * this, that cold start builds a stack containing only the import modal:
+ * `router.back()` in `app/import.tsx` has nothing to go back to, and Done
+ * strands the owner on the import screen with the rest of the app
+ * unreachable behind it.
+ */
+export const unstable_settings = {
+  anchor: '(tabs)',
+};
 
 /**
  * Startup order matters: the encrypted database must be open before i18n, which
@@ -18,8 +43,10 @@ import { spacing, type, useTheme } from '../src/design';
 export default function RootLayout() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const router = useRouter();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [pendingNavigation, setPendingNavigation] = useState<PendingShareNavigation | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -38,9 +65,110 @@ export default function RootLayout() {
       } catch (cause) {
         console.warn('Transfer matching failed at startup:', (cause as Error).message);
       }
+      // `consumePendingShare()` (the `ready`-gated effect below) cannot beat
+      // this sweep to a fresh write — it copies lazily, only once called,
+      // strictly after this effect sets `ready` — so an ACTION_SEND cold
+      // start has nothing on disk yet and `peekPendingShare()` below is null.
+      // A `content://` "Open with" cold start is different: expo-router
+      // resolves the initial URL, and runs `app/+native-intent.tsx`'s
+      // `redirectSystemPath` from inside that resolution, *before*
+      // `NavigationContainer` renders any screen — so `copyContentUri` has
+      // already written its copy, and `setPendingShare` has already staged
+      // it, by the time this component so much as mounts. This sweep cannot
+      // out-order that; it has already happened. So the sweep is told the
+      // one URI it must leave alone — whatever is currently staged — via
+      // `peekPendingShare()`, a read that (unlike `takePendingShare`) does
+      // not consume it, leaving it for `app/import.tsx` to read later.
+      await sweepShareIntakeCache(peekPendingShare()?.uri);
       setReady(true);
     })();
   }, []);
+
+  // A file shared into FinAnt from another app. Android's share sheet sends an
+  // ACTION_SEND intent, whose URI never reaches expo-router, so nothing has
+  // navigated yet and this is where the import screen gets opened. iOS and
+  // Android's "open with" arrive as URLs instead and are already on their way
+  // there via app/+native-intent.tsx.
+  //
+  // Subscribed unconditionally, on mount: a share can arrive while the startup
+  // effect above is still opening the database, and nothing on the native side
+  // queues it if no listener is attached yet. Only the navigation waits for
+  // `ready` (see the flush effect below) — the database gate exists for the
+  // import parse, not for listening.
+  useEffect(() => {
+    const open = (file: SharedFile) => {
+      // Staged the moment it arrives, regardless of `ready`: the store is just
+      // memory, and nothing reads it before the import screen mounts.
+      setPendingShare(file);
+      // The nonce is Date.now(), not a constant: a second share into a running
+      // app would otherwise produce the identical route, leaving the import
+      // screen's effect with an unchanged parameter and the file unread.
+      setPendingNavigation({ kind: 'received', nonce: Date.now() });
+    };
+
+    // A share into an already-running app: singleTask hands the activity a new
+    // intent, which the native module turns into these two events.
+    const received = ShareIntakeModule.addListener('onShareReceived', open);
+    const failed = ShareIntakeModule.addListener('onShareFailed', ({ code }) => {
+      // The copy never happened, so there is no file in the store — the import
+      // screen reads the reason out of the route instead.
+      setPendingNavigation({ kind: 'failed', code });
+    });
+    return () => {
+      received.remove();
+      failed.remove();
+    };
+  }, []);
+
+  // The ACTION_SEND intent that launched the app, if any. `consumePendingShare`
+  // reads and clears it natively, so it must run exactly once — gated on
+  // `ready` because the database it will be parsed into is only open once the
+  // startup effect above finishes, and never re-run afterwards since `ready`
+  // never turns false again.
+  useEffect(() => {
+    if (!ready) return;
+    let launched: SharedFile | null;
+    try {
+      launched = ShareIntakeModule.consumePendingShare();
+    } catch (cause) {
+      // The native copy raises a coded exception instead of returning a file
+      // when it was too large or unreadable — the same failure the warm-share
+      // path reports as an onShareFailed event, just surfaced as a thrown
+      // error here because this is a plain function call, not a listener.
+      // `cause` is whatever the native side threw, so its shape is not
+      // trusted before the property read.
+      const code =
+        typeof cause === 'object' && cause !== null && 'code' in cause
+          ? (cause as { code?: unknown }).code
+          : undefined;
+      setPendingNavigation({
+        kind: 'failed',
+        code: typeof code === 'string' ? code : SHARE_UNREADABLE,
+      });
+      return;
+    }
+    if (launched) {
+      setPendingShare(launched);
+      setPendingNavigation({ kind: 'received', nonce: Date.now() });
+    }
+  }, [ready]);
+
+  // A share that arrived (or was found waiting at launch) before the app was
+  // ready waits here instead of being dropped: pushed the moment `ready` turns
+  // true, and replaced — not queued — if a second one arrives before that.
+  useEffect(() => {
+    if (!ready || pendingNavigation === null) return;
+    if (pendingNavigation.kind === 'received') {
+      router.push(`/import?shared=${pendingNavigation.nonce}`);
+    } else {
+      router.push(
+        pendingNavigation.code === SHARE_TOO_LARGE
+          ? '/import?shared=too-large'
+          : '/import?shared=unreadable',
+      );
+    }
+    setPendingNavigation(null);
+  }, [ready, pendingNavigation, router]);
 
   if (error) {
     return (

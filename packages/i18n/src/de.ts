@@ -403,6 +403,8 @@ export const de: Translations = {
   errors: {
     generic: 'Etwas ist schiefgelaufen.',
     importFailed: 'Diese Datei konnte nicht gelesen werden.',
+    shareTooLarge: 'Diese Datei ist zu groß für einen Kontoauszug.',
+    shareUnreadable: 'Die geteilte Datei konnte nicht geöffnet werden.',
   },
   category: {
     'income-salary': 'Gehalt',

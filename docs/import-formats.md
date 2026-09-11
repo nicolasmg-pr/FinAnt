@@ -2,7 +2,9 @@
 
 Three readers (CSV, xlsx, camt.053), all entirely on-device: nothing is
 uploaded, and the app has no network access. Every movement enters FinAnt as a
-file the owner exports from their bank and picks by hand.
+file the owner exports from their bank and picks by hand — or shares into
+FinAnt from the bank's own app or a file manager, which reaches the same
+picker-fed preview by a different door; see `docs/share-intake.md`.
 
 ## Target bank exports
 
@@ -122,17 +124,17 @@ sit above the table. The header is:
 Buchung;Wertstellungsdatum;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;Saldo;Währung;Betrag;Währung
 ```
 
-| Column | Index | Mapped to |
-| --- | --- | --- |
-| `Buchung` | 0 | `bookingDate` |
-| `Wertstellungsdatum` | 1 | `valueDate` |
-| `Auftraggeber/Empfänger` | 2 | `counterparty` |
-| `Buchungstext` | 3 | `reference` |
-| `Verwendungszweck` | 4 | `description` |
-| `Saldo` | 5 | `balance` (running balance after the movement) |
-| `Währung` | 6 | — (currency of `Saldo`) |
-| `Betrag` | 7 | `amount` |
-| `Währung` | 8 | `currency` |
+| Column                   | Index | Mapped to                                      |
+| ------------------------ | ----- | ---------------------------------------------- |
+| `Buchung`                | 0     | `bookingDate`                                  |
+| `Wertstellungsdatum`     | 1     | `valueDate`                                    |
+| `Auftraggeber/Empfänger` | 2     | `counterparty`                                 |
+| `Buchungstext`           | 3     | `reference`                                    |
+| `Verwendungszweck`       | 4     | `description`                                  |
+| `Saldo`                  | 5     | `balance` (running balance after the movement) |
+| `Währung`                | 6     | — (currency of `Saldo`)                        |
+| `Betrag`                 | 7     | `amount`                                       |
+| `Währung`                | 8     | `currency`                                     |
 
 Two traps this profile exists to avoid:
 
@@ -178,7 +180,7 @@ A PDF has no tables — only glyphs at coordinates. `pdfTable` finds the header
 row by its labels, learns the column positions from where those labels sit, and
 assigns every other item to the column whose header it is nearest to. Nearest
 wins rather than a boundary between columns, because `SALDO`'s values are
-right-aligned and start *left* of their own header.
+right-aligned and start _left_ of their own header.
 
 Rows are anchored on the running balance: it is the one column a statement never
 leaves blank, while each amount column is empty on every row of the other
@@ -202,7 +204,7 @@ DATUM | TYP | BESCHREIBUNG | ZAHLUNGSEINGANG | ZAHLUNGSAUSGANG | SALDO
 ```
 
 `ZAHLUNGSEINGANG` and `ZAHLUNGSAUSGANG` are a debit/credit pair, so the side of
-the ledger comes from *which column* an amount is in and never from a sign.
+the ledger comes from _which column_ an amount is in and never from a sign.
 That is why the PDF is turned into a `CsvTable` and handed to `applyProfile`:
 the pair is already handled there, and a second implementation would be a
 second chance to get a sign wrong.
