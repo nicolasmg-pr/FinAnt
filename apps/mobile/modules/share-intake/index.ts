@@ -16,6 +16,11 @@ export interface ShareIntake {
   /** Copies a content:// URI into the cache so it can be read as a file. */
   copyContentUri(uri: string): SharedFile;
   addListener(event: 'onShareReceived', listener: (file: SharedFile) => void): EventSubscription;
+  /** A warm share (`OnNewIntent`) that was too large or unreadable to copy. */
+  addListener(
+    event: 'onShareFailed',
+    listener: (payload: { code: string }) => void
+  ): EventSubscription;
 }
 
 /**
@@ -30,6 +35,8 @@ const unavailable: ShareIntake = {
   copyContentUri: () => {
     throw new Error('Sharing into FinAnt is not available on this platform.');
   },
+  // Same no-op subscription for both onShareReceived and onShareFailed: this
+  // platform never emits either, so there is nothing to wire per event.
   addListener: () => ({ remove: () => {} }) as EventSubscription,
 };
 

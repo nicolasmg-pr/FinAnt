@@ -14,6 +14,7 @@ import java.io.File
 /** Refused rather than streamed: a mis-shared video is not a statement. */
 private const val MAX_BYTES = 25L * 1024 * 1024
 private const val SHARE_RECEIVED = "onShareReceived"
+private const val SHARE_FAILED = "onShareFailed"
 private const val CACHE_DIR = "share-intake"
 private const val FALLBACK_NAME = "statement"
 
@@ -56,7 +57,7 @@ class ShareIntakeModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("ShareIntake")
 
-        Events(SHARE_RECEIVED)
+        Events(SHARE_RECEIVED, SHARE_FAILED)
 
         Function("isSupported") { true }
 
@@ -75,10 +76,23 @@ class ShareIntakeModule : Module() {
 
         // A share into an app that is already running: singleTask means the
         // same activity receives it, so there is no second cold start to read.
+        //
+        // This lambda is invoked by ModuleHolder.post() with no surrounding
+        // try/catch, and CodedException extends checked Exception rather than
+        // RuntimeException, so RN's own ReactContext.onNewIntent — which only
+        // catches RuntimeException — does not catch it either. Every failure
+        // is caught here and reported as onShareFailed instead of escaping
+        // and killing the process.
         OnNewIntent { intent ->
-            val uri = takeSharedUri(intent) ?: return@OnNewIntent
-            val file = copy(uri, intent.type)
-            sendEvent(SHARE_RECEIVED, bundleOf("uri" to file["uri"], "name" to file["name"]))
+            try {
+                val uri = takeSharedUri(intent) ?: return@OnNewIntent
+                val file = copy(uri, intent.type)
+                sendEvent(SHARE_RECEIVED, bundleOf("uri" to file["uri"], "name" to file["name"]))
+            } catch (cause: CodedException) {
+                sendEvent(SHARE_FAILED, bundleOf("code" to cause.code))
+            } catch (cause: Throwable) {
+                sendEvent(SHARE_FAILED, bundleOf("code" to "SHARE_UNREADABLE"))
+            }
         }
     }
 
@@ -98,16 +112,24 @@ class ShareIntakeModule : Module() {
     private fun copy(uri: Uri, declaredType: String?): Map<String, String> {
         val context = appContext.reactContext ?: throw ShareUnreadableException(null)
         val resolver = context.contentResolver
-        val name = displayName(resolver, uri) ?: fallbackName(declaredType ?: resolver.getType(uri))
         val directory = File(context.cacheDir, CACHE_DIR).apply { mkdirs() }
-        // Prefixed so two shares of the same export do not overwrite each other
-        // while the first is still staged in the preview.
-        val target = File(directory, "${System.currentTimeMillis()}-$name")
+        // Only assigned once the name (and so the target file) is known, so
+        // the catch below can tell "nothing written yet" from "partial file
+        // on disk" without special-casing where in this block a throw came
+        // from — a misbehaving content provider can throw from `query` or
+        // `getType` just as easily as the stream copy can.
+        var target: File? = null
 
         try {
+            val name = displayName(resolver, uri) ?: fallbackName(declaredType ?: resolver.getType(uri))
+            // Prefixed so two shares of the same export do not overwrite each
+            // other while the first is still staged in the preview.
+            val file = File(directory, "${System.currentTimeMillis()}-$name")
+            target = file
+
             val input = resolver.openInputStream(uri) ?: throw ShareUnreadableException(null)
             input.use { source ->
-                target.outputStream().use { sink ->
+                file.outputStream().use { sink ->
                     val buffer = ByteArray(64 * 1024)
                     var written = 0L
                     while (true) {
@@ -119,13 +141,13 @@ class ShareIntakeModule : Module() {
                     }
                 }
             }
+
+            return mapOf("uri" to Uri.fromFile(file).toString(), "name" to name)
         } catch (cause: Throwable) {
-            target.delete()
+            target?.delete()
             if (cause is CodedException) throw cause
             throw ShareUnreadableException(cause)
         }
-
-        return mapOf("uri" to Uri.fromFile(target).toString(), "name" to name)
     }
 
     private fun displayName(resolver: ContentResolver, uri: Uri): String? {
