@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summariseMonth, summarisePeriod } from '../src/aggregate';
+import { countsTowardStats, summariseMonth, summarisePeriod } from '../src/aggregate';
 import type { Period } from '../src/period';
 import { syntheticYear, tx } from './factory';
 
@@ -75,5 +75,27 @@ describe('summarisePeriod', () => {
     const s = summarisePeriod(txs, period, EUR);
     expect(s.expenses.minor).toBe(10_000);
     expect(s.transactionCount).toBe(1);
+  });
+});
+
+describe('investments and the monthly totals', () => {
+  const base = { date: '2025-03-04', description: 'Core MSCI World USD (Acc)' };
+
+  it('keeps a share purchase out of spending', () => {
+    expect(
+      countsTowardStats(tx({ ...base, amount: -35.48, categoryId: 'investment-trade' })),
+    ).toBe(false);
+  });
+
+  it('keeps a disposal out of income', () => {
+    expect(
+      countsTowardStats(tx({ ...base, amount: 16.05, categoryId: 'investment-trade' })),
+    ).toBe(false);
+  });
+
+  it('still counts a dividend, which is new money', () => {
+    expect(
+      countsTowardStats(tx({ ...base, amount: 0.73, categoryId: 'income-investment' })),
+    ).toBe(true);
   });
 });

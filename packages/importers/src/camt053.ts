@@ -137,6 +137,8 @@ export function parseCamt053(xml: string, context: { accountId: string }): Camt0
       const externalId = text(tx?.['Refs']?.['EndToEndId']) || text(entry?.['AcctSvcrRef']) || null;
 
       transactions.push({
+        // This export states no securities.
+        investment: null,
         accountId: context.accountId,
         bookingDate,
         valueDate: date(entry?.['ValDt']),

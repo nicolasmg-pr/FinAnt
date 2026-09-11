@@ -77,12 +77,18 @@ export const BUILT_IN_CATEGORIES: readonly Category[] = [
   cat('savings', 'Savings & investments', 'expense', '#455A64', 'piggy-bank'),
   cat('cash', 'Cash withdrawals', 'expense', '#90A4AE', 'banknote'),
   cat('transfer-internal', 'Internal transfer', 'transfer', '#B0BEC5', 'arrow-left-right'),
+  // Buying a security converts cash into an asset; it is not spending, and
+  // selling one is not income. Kind `transfer` for the same reason the line
+  // above is: the money stayed the owner's, so no total may move.
+  cat('investment-trade', 'Investment trade', 'transfer', '#3F51B5', 'candlestick-chart'),
 
   cat('uncategorised', 'Uncategorised', 'expense', '#9E9E9E', 'help-circle'),
 ];
 
 export const UNCATEGORISED_ID = 'uncategorised';
 export const INTERNAL_TRANSFER_ID = 'transfer-internal';
+export const INVESTMENT_TRADE_ID = 'investment-trade';
+export const INVESTMENT_INCOME_ID = 'income-investment';
 
 export const CATEGORY_BY_ID: ReadonlyMap<string, Category> = new Map(
   BUILT_IN_CATEGORIES.map((c) => [c.id, c]),

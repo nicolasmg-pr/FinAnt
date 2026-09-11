@@ -1,4 +1,6 @@
 export * from './money';
+export * from './decimal';
+export * from './investments';
 export * from './axis';
 export * from './types';
 export * from './dates';

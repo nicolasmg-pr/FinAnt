@@ -1,8 +1,17 @@
 import {
+  INVESTMENT_INCOME_ID,
+  INVESTMENT_TRADE_ID,
+  PRICE_SCALE,
+  SHARE_SCALE,
   importHashOf,
   money,
+  parseDecimalAt,
   sideFromAmount,
+  zeroDecimal,
+  type AssetClass,
   type CurrencyCode,
+  type Decimal,
+  type LegKind,
   type Money,
   type TransactionSide,
   type TransactionSource,
@@ -32,6 +41,52 @@ export interface ProfileColumns {
   readonly category?: ColumnRef;
   readonly notes?: ColumnRef;
   readonly balance?: ColumnRef;
+  /** The bank's own row id, when the export carries one. Primary dedupe key. */
+  readonly externalId?: ColumnRef;
+  /**
+   * Used when the description cell is empty. A broker leaves it blank on its
+   * own trade rows, where the security's name is the only thing worth showing.
+   */
+  readonly descriptionFallback?: ColumnRef;
+  /** Present only on an export that states its trades in columns. */
+  readonly investment?: InvestmentColumns;
+}
+
+/**
+ * Where an export states the security behind a row.
+ *
+ * Declared per profile, never guessed. A bank that does not write these columns
+ * simply has no investments in it: pattern-matching a narrative for an ISIN
+ * would invent or lose shares, which is the worst place in this app to be
+ * wrong. Same rule as every other column layout — documented from a real
+ * export, never inferred. See docs/import-formats.md.
+ */
+export interface InvestmentColumns {
+  /** ISIN for a security, ticker for a crypto pair. */
+  readonly assetSymbol: ColumnRef;
+  readonly assetName: ColumnRef;
+  readonly assetClass: ColumnRef;
+  readonly shares: ColumnRef;
+  readonly unitPrice?: ColumnRef;
+  readonly fee?: ColumnRef;
+  /** The column whose value says what kind of row this is. */
+  readonly kind: ColumnRef;
+  /** The file's own vocabulary, mapped. A value absent here is not a trade. */
+  readonly kindMap: Readonly<Record<string, LegKind>>;
+  readonly assetClassMap: Readonly<Record<string, AssetClass>>;
+}
+
+/** The security half of a row, ready to become an `InvestmentLeg`. */
+export interface DraftInvestmentLeg {
+  readonly kind: LegKind;
+  readonly assetSymbol: string;
+  readonly assetName: string;
+  readonly assetClass: AssetClass;
+  /** Signed; zero on a dividend or benefit, which acquire nothing. */
+  readonly shares: Decimal;
+  readonly unitPrice: Decimal;
+  /** Always a positive magnitude. */
+  readonly fee: Money;
 }
 
 export interface ImportProfile {
@@ -72,6 +127,8 @@ export interface DraftTransaction {
   readonly externalId: string | null;
   readonly importHash: string;
   readonly notes: string | null;
+  /** Null on every row of an export that states no securities. */
+  readonly investment: DraftInvestmentLeg | null;
 }
 
 export interface ImportIssue {
@@ -112,6 +169,11 @@ export function resolveColumn(header: readonly string[], ref: ColumnRef): number
   return -1;
 }
 
+/** The leg kinds that move a position; the rest only carry cash. */
+function movesPositionKind(kind: LegKind): boolean {
+  return kind === 'buy' || kind === 'sell';
+}
+
 function cell(row: readonly string[], index: number): string {
   return index >= 0 ? (row[index] ?? '').trim() : '';
 }
@@ -143,7 +205,20 @@ export function applyProfile(
     debit: profile.columns.debit ? resolveColumn(header, profile.columns.debit) : -1,
     credit: profile.columns.credit ? resolveColumn(header, profile.columns.credit) : -1,
     currency: profile.columns.currency ? resolveColumn(header, profile.columns.currency) : -1,
+    externalId: profile.columns.externalId ? resolveColumn(header, profile.columns.externalId) : -1,
   };
+  const inv = profile.columns.investment;
+  const invIdx = inv
+    ? {
+        kind: resolveColumn(header, inv.kind),
+        assetSymbol: resolveColumn(header, inv.assetSymbol),
+        assetName: resolveColumn(header, inv.assetName),
+        assetClass: resolveColumn(header, inv.assetClass),
+        shares: resolveColumn(header, inv.shares),
+        unitPrice: inv.unitPrice ? resolveColumn(header, inv.unitPrice) : -1,
+        fee: inv.fee ? resolveColumn(header, inv.fee) : -1,
+      }
+    : null;
 
   const transactions: DraftTransaction[] = [];
   const issues: ImportIssue[] = [];
@@ -196,14 +271,60 @@ export function applyProfile(
       return;
     }
 
+    let investment: DraftInvestmentLeg | null = null;
+    let investmentCategoryId: string | null = null;
+    if (inv && invIdx) {
+      const kind = inv.kindMap[cell(row, invIdx.kind)];
+      if (kind) {
+        const assetClass = inv.assetClassMap[cell(row, invIdx.assetClass)];
+        const symbol = cell(row, invIdx.assetSymbol);
+        if (!assetClass || !symbol) {
+          fail('Investment row names no asset this profile can read');
+        } else {
+          // Only an acquisition or a disposal moves a position. A dividend
+          // writes the holding at payment time into the same column, and a
+          // saveback or stockperk credits cash that a separate purchase row
+          // then spends: reading either as shares inflates the holding.
+          const movesPosition = kind === 'buy' || kind === 'sell';
+          const shares = movesPosition
+            ? parseDecimalAt(cell(row, invIdx.shares), SHARE_SCALE)
+            : zeroDecimal(SHARE_SCALE);
+          const unitPrice =
+            parseDecimalAt(cell(row, invIdx.unitPrice), PRICE_SCALE) ?? zeroDecimal(PRICE_SCALE);
+          if (!shares) {
+            // The cash movement is real and stays; only the leg is lost, and
+            // the portfolio reports the gap rather than inventing a lot.
+            fail('Unreadable share count; the movement was kept but the holding is incomplete');
+          } else {
+            const feeAmount = parseAmount(cell(row, invIdx.fee), currency, separator);
+            investment = {
+              kind,
+              assetSymbol: symbol,
+              assetName: cell(row, invIdx.assetName) || symbol,
+              assetClass,
+              shares,
+              unitPrice,
+              fee: money(Math.abs(feeAmount?.minor ?? 0), currency),
+            };
+          }
+        }
+        investmentCategoryId = movesPositionKind(kind) ? INVESTMENT_TRADE_ID : INVESTMENT_INCOME_ID;
+      }
+    }
+
     const description =
       cell(row, idx.description) ||
+      optionalCell(row, header, profile.columns.descriptionFallback) ||
       optionalCell(row, header, profile.columns.counterparty) ||
       '(no description)';
     const rawCategory = optionalCell(row, header, profile.columns.category);
-    const suggestedCategoryId = rawCategory
-      ? (profile.categoryMap?.[rawCategory] ?? profile.categoryMap?.[fold(rawCategory)] ?? null)
-      : null;
+    // A trade's category is decided by its own vocabulary, not by the coarse
+    // cash/trading label the file puts in its category column.
+    const suggestedCategoryId =
+      investmentCategoryId ??
+      (rawCategory
+        ? (profile.categoryMap?.[rawCategory] ?? profile.categoryMap?.[fold(rawCategory)] ?? null)
+        : null);
 
     transactions.push({
       accountId: context.accountId,
@@ -216,7 +337,7 @@ export function applyProfile(
       reference: optionalCell(row, header, profile.columns.reference) || null,
       suggestedCategoryId,
       source: 'file-import',
-      externalId: null,
+      externalId: cell(row, idx.externalId) || null,
       importHash: importHashOf({
         accountId: context.accountId,
         bookingDate,
@@ -224,6 +345,7 @@ export function applyProfile(
         description,
       }),
       notes: optionalCell(row, header, profile.columns.notes) || null,
+      investment,
     });
   });
 

@@ -123,6 +123,8 @@ export function importWorkbook(
         occurrences.set(key, seen + 1);
 
         transactions.push({
+          // This export states no securities.
+          investment: null,
           accountId: context.accountId,
           bookingDate,
           valueDate: null,

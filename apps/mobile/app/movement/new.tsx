@@ -232,6 +232,8 @@ export default function NewMovementScreen() {
         accountId: current.accountId,
         bookingDate: dateText,
         valueDate: null,
+        // A hand-entered movement names no security.
+        investment: null,
         amount: signed,
         side,
         description: text,
