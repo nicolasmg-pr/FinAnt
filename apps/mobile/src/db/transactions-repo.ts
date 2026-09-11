@@ -67,15 +67,22 @@ export interface NewTransaction {
  * Returns how many rows were new — the number the import screen reports.
  * `excluded` counts only the rows that were actually inserted with the flag
  * set, so a re-imported statement does not report the same exclusions twice.
+ *
+ * A holding is the exception to that rule: it is attached whether or not the
+ * movement was new, so re-importing a statement the owner already has fills in
+ * the positions behind it. `backfilled` counts those.
  */
 export async function insertTransactions(batch: readonly NewTransaction[]): Promise<{
   inserted: number;
   duplicates: number;
   excluded: number;
+  /** Legs attached to movements that were already in the ledger. */
+  backfilled: number;
 }> {
   const db = await getDatabase();
   let inserted = 0;
   let excluded = 0;
+  let backfilled = 0;
   const now = new Date().toISOString();
 
   await db.withTransactionAsync(async () => {
@@ -110,17 +117,29 @@ export async function insertTransactions(batch: readonly NewTransaction[]): Prom
       if (result.changes > 0) {
         inserted += 1;
         if (tx.excludedFromStats) excluded += 1;
-        // Only for a row that was actually new. A re-imported statement must
-        // not double a position, and the leg's unique index is the second
-        // guard rather than the only one.
-        if (tx.investment) {
+      }
+
+      // Deliberately outside the `inserted` branch.
+      //
+      // A movement that is already in the ledger still needs its leg. Anyone
+      // who imported their statements before this feature existed has every
+      // trade as a plain expense and no position at all, and re-importing the
+      // same file would insert nothing — leaving the portfolio permanently
+      // empty for exactly the owner who has the most history to show.
+      //
+      // Doing this twice is safe: the leg's unique index on
+      // (transaction_id, asset_id) is what makes it idempotent, which is why
+      // the guard can be an index rather than a branch.
+      if (tx.investment) {
+        const transactionId = result.changes > 0 ? id : await existingTransactionId(db, tx);
+        if (transactionId) {
           const assetId = await upsertAssetOn(db, {
             symbol: tx.investment.symbol,
             name: tx.investment.name,
             assetClass: tx.investment.assetClass,
             currency: tx.currency,
           });
-          await insertLegOn(db, id, {
+          await insertLegOn(db, transactionId, {
             assetId,
             kind: tx.investment.kind,
             bookingDate: tx.bookingDate,
@@ -130,12 +149,41 @@ export async function insertTransactions(batch: readonly NewTransaction[]): Prom
             feeMinor: tx.investment.feeMinor,
             currency: tx.currency,
           });
+          backfilled += result.changes > 0 ? 0 : 1;
         }
       }
     }
   });
 
-  return { inserted, duplicates: batch.length - inserted, excluded };
+  return { inserted, duplicates: batch.length - inserted, excluded, backfilled };
+}
+
+/**
+ * The row a duplicate collided with.
+ *
+ * The bank's own id first, because that is the index the insert was refused by
+ * when the export carries one; the content hash second, for a file that does
+ * not. A soft-deleted row is skipped — it is not in the ledger, so a holding
+ * must not hang off it.
+ */
+async function existingTransactionId(
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  tx: NewTransaction,
+): Promise<string | null> {
+  if (tx.externalId) {
+    const row = await db.getFirstAsync<{ id: string }>(
+      'SELECT id FROM transactions WHERE account_id = ? AND external_id = ? AND deleted_at IS NULL;',
+      tx.accountId,
+      tx.externalId,
+    );
+    if (row) return row.id;
+  }
+  const row = await db.getFirstAsync<{ id: string }>(
+    'SELECT id FROM transactions WHERE account_id = ? AND import_hash = ? AND deleted_at IS NULL;',
+    tx.accountId,
+    tx.importHash,
+  );
+  return row?.id ?? null;
 }
 
 /** Every movement in a closed date range, newest first. */
