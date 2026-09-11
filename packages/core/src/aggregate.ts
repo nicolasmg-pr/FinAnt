@@ -1,6 +1,6 @@
 import { inDateRange } from './dates';
 import { money, type CurrencyCode, type Money } from './money';
-import { UNCATEGORISED_ID } from './categories';
+import { INTERNAL_TRANSFER_ID, INVESTMENT_TRADE_ID, UNCATEGORISED_ID } from './categories';
 import type { Period } from './period';
 import type { ISODate, Transaction, TransactionSide, YearMonth } from './types';
 
@@ -38,11 +38,25 @@ export interface PeriodSummary extends SummaryFigures {
 
 /**
  * Transactions that must not reach any chart: internal moves between the
- * owner's own accounts, and anything they flagged by hand. Counting a
- * savings transfer as an expense makes every net figure a lie.
+ * owner's own accounts, purchases and disposals of securities, and anything
+ * they flagged by hand. Counting a savings transfer as an expense makes every
+ * net figure a lie.
+ *
+ * A share purchase is the same lie in a different costume. The cash leaves the
+ * account, so it looks like spending, but net worth has not moved — it is the
+ * same money in a different form, and the holding it bought is counted on the
+ * portfolio side. A month with EUR 2,000 of purchases would otherwise read as a
+ * EUR 2,000 spending blowout, and the forecast would learn from it.
+ *
+ * Dividends, savebacks and stockperks are not excluded. They are genuinely new
+ * money and belong in income.
  */
 export function countsTowardStats(tx: Transaction): boolean {
-  return !tx.excludedFromStats && tx.categoryId !== 'transfer-internal';
+  return (
+    !tx.excludedFromStats &&
+    tx.categoryId !== INTERNAL_TRANSFER_ID &&
+    tx.categoryId !== INVESTMENT_TRADE_ID
+  );
 }
 
 /**

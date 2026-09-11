@@ -227,6 +227,8 @@ function draftFrom(
     accountId,
     bookingDate,
     valueDate: null,
+    // A push notification never carries a share count.
+    investment: null,
     amount: money(movement.amountMinor, movement.currency),
     side: movement.side,
     description: movement.description,

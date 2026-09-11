@@ -227,6 +227,95 @@ reconcile**, which verifies every date, amount, sign and row boundary at once.
 The one remaining row is reported as an issue: its date cell absorbs the
 heading of the section that follows it on the last page.
 
+## Trade Republic — transactions (.csv)
+
+Profile `trade-republic-csv`. The only export FinAnt reads that states the
+security behind a row, and therefore the only one a portfolio can be rebuilt
+from.
+
+Documented from a real export the owner supplied; that file lives in
+`fixtures/private/` and is gitignored. Every test fixture is hand-written from
+what is written here.
+
+### The table
+
+One header row, row 0, no preamble. Comma-delimited, every field quoted, dot
+decimal separator, twenty-three columns:
+
+| Column                                            | Used as                          | Notes                                                                            |
+| ------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------- |
+| `datetime`                                        | —                                | A UTC instant. Never used: it moves a 1 March booking into February west of UTC. |
+| `date`                                            | `bookingDate`                    | Plain `YYYY-MM-DD`. This is the booking date.                                    |
+| `account_type`                                    | —                                | `DEFAULT` throughout the export seen.                                            |
+| `category`                                        | —                                | `CASH` or `TRADING`. Too coarse to file a movement by; `type` decides.           |
+| `type`                                            | leg kind                         | The row vocabulary. See below.                                                   |
+| `asset_class`                                     | `assetClass`                     | `FUND`, `STOCK`, `CRYPTO`. Blank on a cash row.                                  |
+| `name`                                            | asset name, description fallback | The security's name.                                                             |
+| `symbol`                                          | `assetSymbol`                    | ISIN for a security, ticker for crypto.                                          |
+| `shares`                                          | `shares`                         | Always ten decimals. Signed: negative on a disposal.                             |
+| `price`                                           | `unitPrice`                      | Six or ten decimals. Reference only — never the basis.                           |
+| `amount`                                          | `amount`                         | Signed, two decimals. The authoritative figure.                                  |
+| `fee`                                             | leg `fee`                        | Signed, stored as a magnitude.                                                   |
+| `tax`                                             | —                                | Blank in the export seen.                                                        |
+| `currency`                                        | `currency`                       | `EUR` throughout.                                                                |
+| `original_amount`, `original_currency`, `fx_rate` | —                                | Set on foreign-card rows.                                                        |
+| `description`                                     | `description`                    | Blank on most trade rows; falls back to `name`.                                  |
+| `transaction_id`                                  | `externalId`                     | The broker's own id. Primary dedupe key.                                         |
+| `counterparty_name`                               | `counterparty`                   |                                                                                  |
+| `counterparty_iban`                               | —                                | Never stored.                                                                    |
+| `payment_reference`                               | `reference`                      |                                                                                  |
+| `mcc_code`                                        | —                                |                                                                                  |
+
+### Row vocabulary
+
+`type` decides everything. A value not in this table falls through to the
+ordinary cash path with no leg at all.
+
+| `type`                                                  | Side    | Category            | Leg | Shares read?  |
+| ------------------------------------------------------- | ------- | ------------------- | --- | ------------- |
+| `BUY`                                                   | expense | `investment-trade`  | yes | yes           |
+| `SELL`                                                  | income  | `investment-trade`  | yes | yes, negative |
+| `DIVIDEND`                                              | income  | `income-investment` | yes | **no**        |
+| `BENEFITS_SAVEBACK`                                     | income  | `income-investment` | yes | **no**        |
+| `STOCKPERK`                                             | income  | `income-investment` | yes | **no**        |
+| `CARD_TRANSACTION`, `TRANSFER_*`, `INTEREST_PAYMENT`, … | by sign | by rule engine      | no  | —             |
+
+### Three traps, all confirmed against a real export
+
+These are the reasons the vocabulary is mapped explicitly rather than guessed.
+
+1. **A `DIVIDEND` row writes the holding at the time of payment into `shares`.**
+   It is not an acquisition. Reading it as one silently inflates the position —
+   and a wrong share count looks exactly like a right one.
+2. **`BENEFITS_SAVEBACK` and `STOCKPERK` credit cash with an asset named but
+   `shares` blank.** The broker books a separate `BUY` moments later that
+   carries the shares. Counting the credit as an acquisition double-counts the
+   position and the income.
+3. **`description` is blank on most trade rows.** Without a fallback to `name`,
+   every purchase in the ledger reads `(no description)`.
+
+### Precision
+
+Share counts and unit prices are `Decimal` — a scaled integer at ten decimal
+places, defined in `packages/core/src/decimal.ts`. They are not `Money`:
+rounding `0.7618080000` shares to cents misstates a holding.
+
+Past roughly 900,719 units a scaled integer stops being exact, so parsing
+refuses and the row becomes an import issue. The cash movement is still kept —
+only the leg is lost — so the balance stays right and the portfolio reports the
+gap rather than inventing a lot.
+
+Cost basis comes from `amount`, never from `price * shares`. `amount` is already
+exact; multiplying two scaled decimals invents rounding error in the one figure
+that has to be right.
+
+### Verifying a change to this profile
+
+`npm test` covers the vocabulary, the two blank-share traps, the ceiling, and a
+mixed file. To check against the real export, run
+`npm run inspect:csv -- fixtures/private/<file>.csv`, which prints the column
+layout without printing any movement.
+
 ## camt.053 (ISO 20022)
 
 `src/camt053.ts`. Every SEPA bank can produce camt.053, so it covers any

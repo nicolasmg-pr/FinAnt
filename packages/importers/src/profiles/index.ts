@@ -5,11 +5,11 @@ import { detectProfile, findHeaderRow, type ImportProfile } from '../profile';
 import type { PdfTableSpec } from '../pdf/table';
 import { GENERIC_CSV } from './generic';
 import { ING_UMSATZANZEIGE } from './ing';
-import { TRADE_REPUBLIC_PDF, TRADE_REPUBLIC_PDF_TABLE } from './trade-republic';
+import { TRADE_REPUBLIC_CSV, TRADE_REPUBLIC_PDF, TRADE_REPUBLIC_PDF_TABLE } from './trade-republic';
 
 export { GENERIC_CSV };
 export { ING_UMSATZANZEIGE };
-export { TRADE_REPUBLIC_PDF, TRADE_REPUBLIC_PDF_TABLE };
+export { TRADE_REPUBLIC_CSV, TRADE_REPUBLIC_PDF, TRADE_REPUBLIC_PDF_TABLE };
 export { PRESUPUESTO_XLSX } from './presupuesto';
 
 /**
@@ -17,7 +17,11 @@ export { PRESUPUESTO_XLSX } from './presupuesto';
  * The `PresupuestoYYYY.xlsx` tracker is a workbook profile, not a CSV one, and
  * is applied directly rather than detected from a header row.
  */
-export const BUILT_IN_PROFILES: readonly ImportProfile[] = [ING_UMSATZANZEIGE, GENERIC_CSV];
+export const BUILT_IN_PROFILES: readonly ImportProfile[] = [
+  TRADE_REPUBLIC_CSV,
+  ING_UMSATZANZEIGE,
+  GENERIC_CSV,
+];
 
 /** How far into a file the header may sit. ING's preamble is thirteen lines. */
 const HEADER_SEARCH_DEPTH = 40;

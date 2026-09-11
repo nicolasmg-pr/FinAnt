@@ -1,6 +1,9 @@
 import * as Crypto from 'expo-crypto';
 import {
   INTERNAL_TRANSFER_ID,
+  decimal,
+  type AssetClass,
+  type LegKind,
   type Recategorisation,
   type Transaction,
   type TransactionSide,
@@ -8,6 +11,7 @@ import {
   type YearMonth,
 } from '@finant/core';
 import { getDatabase } from './database';
+import { insertLegOn, upsertAssetOn } from './investments-repo';
 import { toTransaction, type TransactionRow } from './mappers';
 
 /** Ids per `IN (...)`. Well under SQLCipher's compiled variable limit, with
@@ -40,6 +44,22 @@ export interface NewTransaction {
   excludedFromStats: boolean;
   /** True only for a movement whose sole evidence is a push notification. */
   provisional: boolean;
+  /**
+   * The security this movement bought, sold or paid out, when the export named
+   * one. Written in the same database transaction as the movement, so a leg
+   * never outlives the cash that explains it.
+   */
+  investment?: {
+    symbol: string;
+    name: string;
+    assetClass: AssetClass;
+    kind: LegKind;
+    sharesScaled: number;
+    sharesScale: number;
+    unitPriceScaled: number;
+    unitPriceScale: number;
+    feeMinor: number;
+  };
 }
 
 /**
@@ -60,13 +80,14 @@ export async function insertTransactions(batch: readonly NewTransaction[]): Prom
 
   await db.withTransactionAsync(async () => {
     for (const tx of batch) {
+      const id = newId();
       const result = await db.runAsync(
         `INSERT OR IGNORE INTO transactions (
            id, account_id, booking_date, value_date, amount_minor, currency, side,
            description, counterparty, reference, category_id, category_source,
            source, external_id, import_hash, notes, excluded_from_stats, provisional, created_at
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-        newId(),
+        id,
         tx.accountId,
         tx.bookingDate,
         tx.valueDate,
@@ -89,6 +110,27 @@ export async function insertTransactions(batch: readonly NewTransaction[]): Prom
       if (result.changes > 0) {
         inserted += 1;
         if (tx.excludedFromStats) excluded += 1;
+        // Only for a row that was actually new. A re-imported statement must
+        // not double a position, and the leg's unique index is the second
+        // guard rather than the only one.
+        if (tx.investment) {
+          const assetId = await upsertAssetOn(db, {
+            symbol: tx.investment.symbol,
+            name: tx.investment.name,
+            assetClass: tx.investment.assetClass,
+            currency: tx.currency,
+          });
+          await insertLegOn(db, id, {
+            assetId,
+            kind: tx.investment.kind,
+            bookingDate: tx.bookingDate,
+            shares: decimal(tx.investment.sharesScaled, tx.investment.sharesScale),
+            unitPrice: decimal(tx.investment.unitPriceScaled, tx.investment.unitPriceScale),
+            cashMinor: tx.amountMinor,
+            feeMinor: tx.investment.feeMinor,
+            currency: tx.currency,
+          });
+        }
       }
     }
   });
