@@ -298,8 +298,10 @@ export default function ImportScreen() {
       setError(t('errors.shareUnreadable'));
       return;
     }
-    // Any other value is a nonce from _layout.tsx or the literal "1" from
-    // +native-intent.tsx; either way the file itself is in the store.
+    // Any other value is a nonce — from _layout.tsx, or from
+    // +native-intent.tsx, which mints one too so a second shared file (this
+    // route is not launch-only) still changes `shared` and re-runs this
+    // effect; either way the file itself is in the store.
     const file = takePendingShare();
     if (!file) return;
     reset();
@@ -362,6 +364,12 @@ export default function ImportScreen() {
     }
   };
 
+  // Not unmount-only: a cleanup keyed on `[sharedFile]` also runs every time
+  // `sharedFile` is reassigned, before the effect for the new value. That is
+  // load-bearing here — it is what discards the first share's cache copy the
+  // moment a second one replaces it in `sharedFile`, not only when the owner
+  // eventually leaves the screen. Do not simplify this to "runs on unmount":
+  // that would stop discarding a superseded share and leak its cache copy.
   useEffect(
     () => () => {
       if (sharedFile) void discardShare(sharedFile);

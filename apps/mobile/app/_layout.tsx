@@ -12,6 +12,7 @@ import { detectTransfers } from '../src/services/transfers';
 import { spacing, type, useTheme } from '../src/design';
 import ShareIntakeModule, { SHARE_TOO_LARGE, SHARE_UNREADABLE } from '../modules/share-intake';
 import { setPendingShare, type SharedFile } from '../src/services/share-intake';
+import { sweepShareIntakeCache } from '../src/services/share-intake-files';
 
 /**
  * What the share effects below hand to the flush effect: either a received
@@ -22,6 +23,18 @@ import { setPendingShare, type SharedFile } from '../src/services/share-intake';
  */
 type PendingShareNavigation =
   { kind: 'received'; nonce: number } | { kind: 'failed'; code: string };
+
+/**
+ * Anchors the stack on the tab root, so a deep link that opens straight onto
+ * `/import` (a cold-start share) still gets `(tabs)` underneath it. Without
+ * this, that cold start builds a stack containing only the import modal:
+ * `router.back()` in `app/import.tsx` has nothing to go back to, and Done
+ * strands the owner on the import screen with the rest of the app
+ * unreachable behind it.
+ */
+export const unstable_settings = {
+  anchor: '(tabs)',
+};
 
 /**
  * Startup order matters: the encrypted database must be open before i18n, which
@@ -52,6 +65,17 @@ export default function RootLayout() {
       } catch (cause) {
         console.warn('Transfer matching failed at startup:', (cause as Error).message);
       }
+      // Awaited here, before `ready` flips true, so it is guaranteed to finish
+      // before the `ready`-gated effect below ever calls
+      // `consumePendingShare()` — the only thing on a cold start that can
+      // write a new file into the very directory being swept. Nothing else
+      // writes there this early: the unconditional listener effect can
+      // receive a warm share, but the native `OnNewIntent` it reacts to only
+      // fires on an activity that is already running, i.e. only after a
+      // cold start's own startup sequence — this sweep included — is behind
+      // it. Anything still in the directory at this point belongs to a
+      // session that already ended.
+      await sweepShareIntakeCache();
       setReady(true);
     })();
   }, []);
