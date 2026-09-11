@@ -405,6 +405,8 @@ export const es: Translations = {
   errors: {
     generic: 'Algo ha salido mal.',
     importFailed: 'No se ha podido leer ese archivo.',
+    shareTooLarge: 'Ese archivo es demasiado grande para ser un extracto.',
+    shareUnreadable: 'No se ha podido abrir el archivo compartido.',
   },
   category: {
     'income-salary': 'Nómina',

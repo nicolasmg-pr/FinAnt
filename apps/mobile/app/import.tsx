@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { accountChoiceNeedsName, resolveAccountChoice, type AccountChoice } from '@finant/core';
 import {
@@ -44,6 +44,8 @@ import {
 } from '../src/db/institutions-repo';
 import { readSetting, SETTING_LAST_IMPORT_ACCOUNT, writeSetting } from '../src/db/settings-repo';
 import { ingest, type IngestResult } from '../src/services/ingest';
+import { takePendingShare, type SharedFile } from '../src/services/share-intake';
+import { discardShare } from '../src/services/share-intake-files';
 import { radius, spacing, type, useMotion, useTheme } from '../src/design';
 
 /**
@@ -200,6 +202,7 @@ export default function ImportScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
   const router = useRouter();
+  const { shared } = useLocalSearchParams<{ shared?: string }>();
   const [file, setFile] = useState<ParsedFile | null>(null);
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [institutions, setInstitutions] = useState<InstitutionRow[]>([]);
@@ -212,6 +215,8 @@ export default function ImportScreen() {
   // renders. Rows the parser could not read are part of the outcome and have to
   // survive the screen changing state.
   const [setAside, setSetAside] = useState(0);
+  // Held so the cache copy can be deleted once it has been imported or dropped.
+  const [sharedFile, setSharedFile] = useState<SharedFile | null>(null);
 
   // Parsed for the chosen account, so the hashes in the preview are the ones stored.
   const staged = useMemo(
@@ -222,28 +227,22 @@ export default function ImportScreen() {
   // Every row the file offered, however it ended up.
   const carried = result ? result.inserted + result.duplicates + setAside : 0;
 
-  const pick = async (forcedProfile?: ImportProfile) => {
+  const reset = () => {
     setError(null);
     setResult(null);
     setSetAside(0);
     setFile(null);
     setChoice(null);
-    const picked = await DocumentPicker.getDocumentAsync({
-      type: [
-        XLSX_MIME,
-        'text/csv',
-        'text/comma-separated-values',
-        'text/xml',
-        'application/xml',
-        'text/plain',
-        'application/pdf',
-        '*/*',
-      ],
-      copyToCacheDirectory: true,
-    });
-    if (picked.canceled || !picked.assets[0]) return;
+  };
 
-    const asset = picked.assets[0];
+  /**
+   * Reads a file that is already in hand and stages it for confirmation.
+   *
+   * Shared by the two ways a file arrives: the picker below, and another app
+   * sharing one in (see src/services/share-intake.ts). Both end on the same
+   * preview, and neither writes anything until the owner confirms.
+   */
+  const load = async (asset: { uri: string; name: string }, forcedProfile?: ImportProfile) => {
     setBusy(true);
     try {
       // "My records" must exist before any other account can be offered or
@@ -267,6 +266,49 @@ export default function ImportScreen() {
       setBusy(false);
     }
   };
+
+  const pick = async (forcedProfile?: ImportProfile) => {
+    reset();
+    const picked = await DocumentPicker.getDocumentAsync({
+      type: [
+        XLSX_MIME,
+        'text/csv',
+        'text/comma-separated-values',
+        'text/xml',
+        'application/xml',
+        'text/plain',
+        'application/pdf',
+        '*/*',
+      ],
+      copyToCacheDirectory: true,
+    });
+    if (picked.canceled || !picked.assets[0]) return;
+    await load(picked.assets[0], forcedProfile);
+  };
+
+  // A file another app shared with FinAnt. It is already staged in the store by
+  // the time this screen mounts, so there is nothing to pick.
+  useEffect(() => {
+    if (!shared) return;
+    if (shared === 'too-large') {
+      setError(t('errors.shareTooLarge'));
+      return;
+    }
+    if (shared === 'unreadable') {
+      setError(t('errors.shareUnreadable'));
+      return;
+    }
+    // Any other value is a nonce from _layout.tsx or the literal "1" from
+    // +native-intent.tsx; either way the file itself is in the store.
+    const file = takePendingShare();
+    if (!file) return;
+    reset();
+    setSharedFile(file);
+    void load(file);
+    // Runs for the share that opened this screen. `load` and `reset` are
+    // recreated on every render, and neither closes over anything this needs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shared]);
 
   const confirm = async () => {
     if (!file || !staged || !choice || needsName) return;
@@ -308,12 +350,24 @@ export default function ImportScreen() {
       setResult(await ingest(staged.transactions));
       setFile(null);
       setChoice(null);
+      if (sharedFile) {
+        // Imported: the copy the share left in the cache has served its purpose.
+        await discardShare(sharedFile);
+        setSharedFile(null);
+      }
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
       setBusy(false);
     }
   };
+
+  useEffect(
+    () => () => {
+      if (sharedFile) void discardShare(sharedFile);
+    },
+    [sharedFile],
+  );
 
   return (
     // The account picker on this screen creates an institution and an account

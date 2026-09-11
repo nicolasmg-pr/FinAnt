@@ -398,6 +398,8 @@ export const en = {
   errors: {
     generic: 'Something went wrong.',
     importFailed: 'That file could not be read.',
+    shareTooLarge: 'That file is too large to be a statement.',
+    shareUnreadable: 'That shared file could not be opened.',
   },
   category: {
     'income-salary': 'Salary',
