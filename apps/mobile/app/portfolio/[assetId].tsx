@@ -6,7 +6,7 @@ import { PRICE_SCALE, formatDecimal, formatMoney, parseDecimalAt } from '@finant
 import { Amount } from '../../src/components/Amount';
 import { Card } from '../../src/components/Card';
 import { FormSheet } from '../../src/components/FormSheet';
-import { formatPrice } from '../../src/components/PortfolioSection';
+import { formatPrice } from '../../src/components/dashboard/PortfolioHero';
 import { Button } from '../../src/components/ui/Button';
 import { Empty } from '../../src/components/ui/Empty';
 import { renameAsset, setManualPrice } from '../../src/db/investments-repo';

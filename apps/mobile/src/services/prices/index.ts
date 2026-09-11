@@ -17,7 +17,7 @@ import {
   saveQuotes,
   setListingSymbol,
 } from '../../db/investments-repo';
-import { coingeckoProvider } from './coingecko';
+import { coinMonthlyCloses, coingeckoProvider } from './coingecko';
 import { fxRate, monthlyCloses, yahooProvider } from './yahoo';
 
 export { QUOTE_MAX_AGE_MS };
@@ -137,14 +137,15 @@ export async function backfillHistory(options: { since?: Date } = {}): Promise<{
     if (latest.get(asset.id) === thisMonth) continue;
 
     const provider = PROVIDERS.find((p) => p.supports(asset));
-    // Only Yahoo serves a monthly series; a crypto holding keeps its live quote
-    // and simply has no line, rather than the chart inventing one.
-    if (!provider || provider.id !== 'yahoo') continue;
+    if (!provider) continue;
 
     const listing = await provider.resolve(asset);
     if (!listing) continue;
 
-    const series = await monthlyCloses(listing.symbol, since);
+    const series =
+      provider.id === 'coingecko'
+        ? await coinMonthlyCloses(listing.symbol, asset.currency)
+        : await monthlyCloses(listing.symbol, since);
     if (!series) continue;
 
     const normalised = series.closes.map((point) =>

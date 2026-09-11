@@ -22,6 +22,13 @@ export const en = {
     settings: 'Settings',
   },
   dashboard: {
+    view: { cash: 'Cash', portfolio: 'Portfolio', netWorth: 'Net worth' },
+    asOfTodayAll: 'Everything you hold, today',
+    netWorthTotal: 'Net worth',
+    netWorthHint:
+      'Your accounts and your holdings together. The line stops at today: a share price is not forecast.',
+    cashPart: 'In accounts',
+    portfolioPart: 'In holdings',
     title: 'Overview',
     thisMonth: 'This month',
     sincePayroll: 'Since {{date}}',

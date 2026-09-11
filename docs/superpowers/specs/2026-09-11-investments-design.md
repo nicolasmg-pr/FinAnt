@@ -153,10 +153,14 @@ by asset and by asset class. Dividend totals per asset and per year.
 
 ## UI
 
-A portfolio block inside the existing Banks tab — that screen already answers
-"what do I hold", and this keeps holdings beside the cash that bought them
-without a sixth tab. Per-asset detail at `app/portfolio/[assetId].tsx`.
-Portfolio value joins the net-worth total. Strings typed against `Resources` in
+**Superseded.** The portfolio first landed as a block inside the Banks tab.
+It now lives on the dashboard behind a three-way selector — Cash, Portfolio,
+Net worth — which swaps only the hero; the month's income, categories and
+recurring cards stay below whichever is chosen. Per-asset detail remains at
+`app/portfolio/[assetId].tsx`. The Net worth view adds cash and holdings on one
+line via `combineNetWorth`, booked months only: the cash forecast can project
+because it is built from the owner's own recurring movements, and nothing here
+can forecast a share price. Strings typed against `Resources` in
 en/es/de, so a missing key is a compile error.
 
 ## Value over time

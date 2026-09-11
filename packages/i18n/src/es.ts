@@ -23,6 +23,13 @@ export const es: Translations = {
     settings: 'Ajustes',
   },
   dashboard: {
+    view: { cash: 'Efectivo', portfolio: 'Cartera', netWorth: 'Patrimonio' },
+    asOfTodayAll: 'Todo lo que tienes, hoy',
+    netWorthTotal: 'Patrimonio',
+    netWorthHint:
+      'Tus cuentas y tus inversiones juntas. La línea acaba hoy: el precio de una acción no se proyecta.',
+    cashPart: 'En cuentas',
+    portfolioPart: 'En inversiones',
     title: 'Resumen',
     thisMonth: 'Este mes',
     sincePayroll: 'Desde el {{date}}',

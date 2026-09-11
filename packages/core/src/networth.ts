@@ -1,6 +1,7 @@
 import { balanceAt, type BalanceAnchor } from './balance';
 import { lastOfMonth, monthRange, yearMonthOf, yearOf } from './dates';
 import { money, zero, type CurrencyCode, type Money } from './money';
+import type { ValuePoint } from './investments';
 import type { ISODate, Transaction, YearMonth } from './types';
 
 /**
@@ -155,4 +156,93 @@ function byYear(points: readonly NetWorthPoint[]): NetWorthPoint[] {
     out.push({ period: year, kind: point.kind, total: point.total });
   }
   return out;
+}
+
+/** Cash and holdings on one timeline, with each half still legible. */
+export interface CombinedWorth {
+  /** Booked months only. Never a projection — see below. */
+  readonly points: readonly NetWorthPoint[];
+  /** Everything held today: cash plus the portfolio's market value. */
+  readonly current: Money;
+  readonly cashCurrent: Money;
+  readonly portfolioCurrent: Money;
+}
+
+/**
+ * Adds what the portfolio is worth to what the accounts hold.
+ *
+ * The cash series is the spine: it reaches back to the first movement, which is
+ * further than the first trade, and a period it does not cover is a period with
+ * no total to draw. Before the first trade the portfolio contributes nothing,
+ * which is not an approximation — the owner held none of it yet.
+ *
+ * **The projected tail is dropped.** The cash line can be projected because the
+ * forecast is built from the owner's own recurring movements; a share price
+ * cannot. The only way to extend the combined line would be to hold the
+ * portfolio flat, and "flat" is a claim about the market dressed up as
+ * arithmetic. The line stops where the facts do.
+ *
+ * At year granularity the portfolio is taken at that year's last month on record,
+ * which is the holding standing at the year's end — the same rule the cash
+ * series already uses for a year point.
+ */
+export function combineNetWorth(
+  cash: readonly NetWorthPoint[],
+  portfolio: readonly ValuePoint[],
+  currency: CurrencyCode,
+  /**
+   * What the holdings are worth right now, when the caller knows it.
+   *
+   * The monthly series cannot answer that on its own: it is built from a
+   * price history, and an asset whose history the provider will not serve is
+   * missing from it while still being very much held. Passing today's real
+   * figure keeps the headline honest — and keeps it equal to the one the
+   * portfolio view shows, which is the same money.
+   */
+  portfolioNow?: Money,
+): CombinedWorth {
+  const booked = cash.filter((point) => point.kind === 'actual');
+  const months = [...portfolio].sort((a, b) => a.period.localeCompare(b.period));
+
+  const cashCurrent = booked[booked.length - 1]?.total ?? zero(currency);
+  const portfolioCurrent = portfolioNow ?? months[months.length - 1]?.total ?? zero(currency);
+
+  const lastPeriod = booked[booked.length - 1]?.period;
+  const points = booked.map((point) => {
+    // The final point is today, so it takes today's figure for the same reason
+    // the headline does; every earlier one is a month close from the history.
+    const holding =
+      point.period === lastPeriod ? portfolioCurrent.minor : valueAt(months, point.period);
+    return {
+      period: point.period,
+      kind: 'actual' as const,
+      total: money(point.total.minor + holding, currency),
+    };
+  });
+
+  return {
+    points,
+    current: money(cashCurrent.minor + portfolioCurrent.minor, currency),
+    cashCurrent,
+    portfolioCurrent,
+  };
+}
+
+/**
+ * The portfolio's value at the close of a period, in minor units.
+ *
+ * `period` is `YYYY-MM` at month granularity and `YYYY` at year granularity;
+ * both are answered by the same prefix comparison, because a month string
+ * sorts inside its own year. The last point at or before the period is carried
+ * forward, so a month the provider has no close for keeps the previous one
+ * rather than dropping the holding out of the line.
+ */
+function valueAt(months: readonly ValuePoint[], period: string): number {
+  const end = period.length === 4 ? `${period}-12` : period;
+  let found = 0;
+  for (const point of months) {
+    if (point.period > end) break;
+    found = point.total.minor;
+  }
+  return found;
 }
