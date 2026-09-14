@@ -6,16 +6,18 @@ import {
   attachBackupSql,
   BACKUP_FORMAT,
   BACKUP_META_TABLE,
+  BACKUP_TABLES,
   createMetaTableSql,
   detachBackupSql,
   EXCLUDED_TABLES,
   exportBackupSql,
   formatRecoveryCode,
+  openBackupSql,
 } from '@finant/core';
 import * as SQLite from 'expo-sqlite';
 import { DATABASE_NAME } from '../db/database';
 import { getOrCreateDatabaseKey } from '../security/keys';
-import { LATEST_VERSION } from '../db/schema';
+import { LATEST_VERSION, MIGRATIONS } from '../db/schema';
 import { SETTING_LAST_BACKUP_AT, writeSetting } from '../db/settings-repo';
 
 export type BackupErrorCode =
@@ -125,4 +127,111 @@ export async function createBackup(): Promise<{ code: string; createdAt: string 
     // free space. It has been shared by now; it has no reason to stay.
     if (file.exists) file.delete();
   }
+}
+
+export type BackupPreview = {
+  /**
+   * POSIX path of the working copy in cache, ready for ATTACH — Task 7 merges
+   * from this path.
+   */
+  readonly path: string;
+  /**
+   * `file://` form of the same working copy, for expo-file-system.
+   * `discardBackup` needs this rather than rebuilding a URI from `path`:
+   * `file://${path}` drops the percent-encoding a space or a non-ASCII
+   * character in a cache path would carry, which would leave the copy
+   * unresolvable and stranded in cache.
+   */
+  readonly uri: string;
+  readonly appVersion: string;
+  readonly schemaVersion: number;
+  readonly createdAt: string;
+  readonly counts: Readonly<Record<string, number>>;
+};
+
+/**
+ * Opens a picked file, brings it up to the current schema, and reports what is
+ * in it — without touching the live database.
+ *
+ * Nothing is written until `mergeBackup` runs, which is the whole point: a
+ * restore that writes before showing what it is about to write is a leap, and
+ * this is the one feature whose entire job is to be trustworthy under stress.
+ */
+export async function inspectBackup(uri: string, code: string): Promise<BackupPreview> {
+  const working = new File(Paths.cache, `restore-${Date.now()}.finantbackup`);
+  await new File(uri).copy(working);
+
+  let db: SQLite.SQLiteDatabase | null = null;
+  try {
+    db = await SQLite.openDatabaseAsync(working.name, {}, posixPath(Paths.cache.uri));
+    // Must be the first statement on the connection: SQLCipher reads the
+    // header with it, and any query before it fails on an encrypted file.
+    await db.execAsync(openBackupSql(code));
+
+    let meta: {
+      format: string;
+      app_version: string;
+      schema_version: number;
+      created_at: string;
+    } | null;
+    try {
+      meta = await db.getFirstAsync(
+        `SELECT format, app_version, schema_version, created_at FROM ${BACKUP_META_TABLE};`,
+      );
+    } catch {
+      // Either the key is wrong (SQLCipher reports "file is not a database")
+      // or the file opened but has no meta table. The first query is where
+      // both surface, so they are told apart by a second, cheaper probe.
+      throw (await opensAtAll(db))
+        ? new BackupError('not-a-backup')
+        : new BackupError('wrong-code');
+    }
+    if (!meta || meta.format !== BACKUP_FORMAT) throw new BackupError('not-a-backup');
+    if (meta.schema_version > LATEST_VERSION) throw new BackupError('too-new');
+
+    for (const migration of MIGRATIONS) {
+      if (migration.version <= meta.schema_version) continue;
+      const sql = migration.sql;
+      await db.withTransactionAsync(async () => {
+        await db?.execAsync(sql);
+      });
+      await db.execAsync(`PRAGMA user_version = ${migration.version};`);
+    }
+
+    const counts: Record<string, number> = {};
+    for (const table of BACKUP_TABLES) {
+      const row = await db.getFirstAsync<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table};`);
+      counts[table] = row?.n ?? 0;
+    }
+
+    return {
+      path: posixPath(working.uri),
+      uri: working.uri,
+      appVersion: meta.app_version,
+      schemaVersion: LATEST_VERSION,
+      createdAt: meta.created_at,
+      counts,
+    };
+  } catch (error) {
+    if (working.exists) working.delete();
+    throw error;
+  } finally {
+    await db?.closeAsync();
+  }
+}
+
+/** True if the connection is readable at all — i.e. the key was right. */
+async function opensAtAll(db: SQLite.SQLiteDatabase): Promise<boolean> {
+  try {
+    await db.getFirstAsync('SELECT count(*) FROM sqlite_master;');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Drops the working copy when the owner backs out of a preview. */
+export async function discardBackup(preview: BackupPreview): Promise<void> {
+  const file = new File(preview.uri);
+  if (file.exists) file.delete();
 }

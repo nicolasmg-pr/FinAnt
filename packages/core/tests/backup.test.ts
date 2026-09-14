@@ -9,6 +9,7 @@ import {
   isValidRecoveryCode,
   mergeTableSql,
   normaliseRecoveryCode,
+  openBackupSql,
 } from '../src/backup';
 
 const BYTES = Uint8Array.from([
@@ -195,5 +196,13 @@ describe('SQL builders', () => {
 
   it('detaches', () => {
     expect(detachBackupSql()).toBe('DETACH DATABASE backup;');
+  });
+
+  it('opens a backup file with the code as a passphrase', () => {
+    expect(openBackupSql(CODE)).toBe(`PRAGMA key = '${CODE}';`);
+  });
+
+  it('refuses to open with a malformed code', () => {
+    expect(() => openBackupSql("'; DROP TABLE accounts; --")).toThrow();
   });
 });

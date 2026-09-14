@@ -129,6 +129,19 @@ function quote(literal: string): string {
 }
 
 /**
+ * `PRAGMA key` in passphrase form, for opening a backup file on its own
+ * connection. Must be the first statement on that connection: SQLCipher reads
+ * the header with it, and any query issued before it fails with "file is not a
+ * database" on an encrypted file.
+ */
+export function openBackupSql(code: string): string {
+  if (!isValidRecoveryCode(code)) {
+    throw new Error('refusing to open with a malformed recovery code');
+  }
+  return `PRAGMA key = '${normaliseRecoveryCode(code)}';`;
+}
+
+/**
  * Attaches the backup file with the recovery code as a **passphrase**.
  *
  * Passphrase form, not the `x'...'` raw-key form the live database uses, so
