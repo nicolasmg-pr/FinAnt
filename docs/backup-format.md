@@ -36,9 +36,10 @@ CREATE TABLE backup_meta (
 `backup_meta` is the only way to tell a FinAnt backup from any other file. A
 SQLCipher database is indistinguishable from random bytes until something opens it
 with the right key, so there is no header to sniff and no extension worth trusting
-— identification happens after decryption, never before. A file that opens with the
-typed code but has no `backup_meta` table is treated as not a FinAnt backup at all,
-not as one that merely failed to read.
+— identification happens after decryption, never before. What a reader should do
+with a file that opens under the typed code but carries no `backup_meta` table is
+restore's job, not a property of the file format itself — see "Restore: designed,
+not yet built" below for where that is headed.
 
 ## The `sqlcipher_export()` / `user_version` gotcha
 
@@ -92,10 +93,12 @@ confirmation that one is sitting somewhere safe.
 
 ## Recovery code
 
-125 bits of randomness — `Crypto.getRandomBytes(16)`, three of the 128 bits dropped
-so the length comes out even — rendered in Crockford base32:
-`0123456789ABCDEFGHJKMNPQRSTVWXYZ`. Four letters are missing from that alphabet on
-purpose. `I`, `L` and `O` are omitted because they are what a handwritten code gets
+125 bits of randomness — `Crypto.getRandomBytes(16)` — rendered in Crockford
+base32: `0123456789ABCDEFGHJKMNPQRSTVWXYZ`. Sixteen bytes carry 128 bits, and
+twenty-five base32 characters hold 125 of them; the remaining three are dropped
+rather than padded into a twenty-sixth character, because a code whose last
+character could only ever take four of thirty-two possible values invites the
+reader to wonder why. Four letters are missing from that alphabet on purpose. `I`, `L` and `O` are omitted because they are what a handwritten code gets
 transcribed wrong — mistaken for `1` or `0` — and `U` is omitted so a run of random
 characters can never spell something unfortunate. The result is five groups of
 five, hyphen-separated: `K7F2M-9XQ4B-...`.
@@ -152,15 +155,37 @@ indexes that already guard against importing the same statement row twice —
 import_hash)`. A restore therefore reuses exactly the dedupe machinery an import
 already needed; it does not add a second one.
 
-The merge runs in one transaction with `PRAGMA defer_foreign_keys = ON`, table by
-table in manifest order — foreign-key parents before children. Deferring
-enforcement to commit, rather than turning it off, means a single orphaned row
-anywhere in the backup rolls back the whole restore cleanly instead of leaving the
-database half-merged. That guarantee assumes both sides of every table have the
-same columns, which restore does not merely assume but asserts: `PRAGMA table_info`
-is compared for `main` and `backup` on every manifest table before the merge
-starts, which is what makes `SELECT *` — a positional copy — safe to use here at
-all.
+`mergeTableSql()` and the statement above are real, present in
+`packages/core/src/backup.ts` today and covered by
+`packages/core/tests/backup.test.ts`. What calls it is not: there is no
+`restoreBackup()` in `apps/mobile/src/services/backup.ts` and no screen that
+reads a picked file, asks for a code, or writes anything back into the live
+database. The rest of this section is what that call is designed to do once it
+exists, not a description of code that runs today.
+
+### Restore: designed, not yet built
+
+Everything below is the shape restore is designed to take — from
+`docs/superpowers/specs/2026-09-14-backup-restore-design.md` — kept here so the
+reasoning is on record and this document does not have to be reconstructed from
+scratch once the orchestration lands. None of it should be read as describing
+what the app does today; it will be rewritten to state it as current fact once
+verified against real code.
+
+The design runs the merge in one transaction with `PRAGMA defer_foreign_keys =
+ON`, table by table in manifest order — foreign-key parents before children.
+Deferring enforcement to commit, rather than turning it off, is meant to make a
+single orphaned row anywhere in the backup roll back the whole restore cleanly
+instead of leaving the database half-merged. That is only safe once both sides of
+every table have the same columns, which the design has restore assert rather
+than assume: `PRAGMA table_info` compared for `main` and `backup` on every
+manifest table before the merge starts, which is what would make `SELECT *` — a
+positional copy — safe to use here.
+
+The same design has restore treat a file that opens under the typed code but
+carries no `backup_meta` table as not a FinAnt backup at all — distinct from a
+wrong code, which fails before `backup_meta` is ever reached, and distinct from a
+`schema_version` newer than this build knows how to read.
 
 ## Table manifest
 
