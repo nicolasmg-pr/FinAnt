@@ -116,7 +116,7 @@ describe('BACKUP_TABLES', () => {
     investment_legs: ['transactions', 'assets'],
     quotes: ['assets'],
     price_history: ['assets'],
-    notification_routes: ['notification_sources'],
+    notification_routes: ['notification_sources', 'accounts'],
     rules: ['categories'],
     budgets: ['categories'],
   };
