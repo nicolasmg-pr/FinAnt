@@ -64,17 +64,20 @@ export async function createBackup(): Promise<{ code: string; createdAt: string 
   // opened with the wrong key and fail as "file is not a database".
   if (file.exists) file.delete();
 
-  // Its own connection, never the app's. Without useNewConnection expo-sqlite
-  // returns the cached handle the UI is reading through, and DETACH then fails
-  // with "database is locked". Confirmed by the probe in Task 1.
   const key = await getOrCreateDatabaseKey();
-  const db = await SQLite.openDatabaseAsync(DATABASE_NAME, { useNewConnection: true });
-  await db.execAsync(`PRAGMA key = "x'${key}'";`);
   const path = posixPath(file.uri);
 
   try {
-    await db.execAsync(attachBackupSql(path, code));
+    // Its own connection, never the app's. Without useNewConnection expo-sqlite
+    // returns the cached handle the UI is reading through, and DETACH then fails
+    // with "database is locked". Confirmed by the probe in Task 1.
+    const db = await SQLite.openDatabaseAsync(DATABASE_NAME, { useNewConnection: true });
+    let attached = false;
     try {
+      await db.execAsync(`PRAGMA key = "x'${key}'";`);
+      await db.execAsync(attachBackupSql(path, code));
+      attached = true;
+
       await db.execAsync(exportBackupSql());
       for (const table of EXCLUDED_TABLES) {
         await db.execAsync(`DELETE FROM backup.${table};`);
@@ -93,7 +96,20 @@ export async function createBackup(): Promise<{ code: string; createdAt: string 
         createdAt,
       );
     } finally {
-      await db.execAsync(detachBackupSql());
+      // A failed DETACH must not stop the connection from closing — closing
+      // releases the attached file regardless of whether DETACH ran — and it
+      // must not replace whatever error the block above was already
+      // throwing, so it is caught and dropped here rather than left to
+      // propagate. DETACH is skipped outright when ATTACH itself never
+      // succeeded, since DETACHing a schema that was never attached is
+      // itself an error that would mask the real one.
+      if (attached) {
+        try {
+          await db.execAsync(detachBackupSql());
+        } catch {
+          // Best-effort only: closeAsync() below still releases the file.
+        }
+      }
       await db.closeAsync();
     }
 
