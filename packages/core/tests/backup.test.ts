@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   attachBackupSql,
   BACKUP_TABLES,
+  deleteRetiredShippedRulesSql,
   detachBackupSql,
   EXCLUDED_TABLES,
   exportBackupSql,
@@ -10,7 +11,12 @@ import {
   mergeTableSql,
   normaliseRecoveryCode,
   openBackupSql,
+  pristineShippedRuleIds,
+  reseedPristineCategoriesSql,
+  reseedPristineRulesSql,
+  type StoredRuleRow,
 } from '../src/backup';
+import type { CategoryRule } from '../src/types';
 
 const BYTES = Uint8Array.from([
   0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
@@ -109,8 +115,9 @@ describe('isValidRecoveryCode', () => {
 });
 
 describe('BACKUP_TABLES', () => {
-  // INSERT OR IGNORE runs with foreign keys on, so a child inserted before its
-  // parent fails the whole restore.
+  // Deferred foreign keys mean a child could in fact arrive before its parent
+  // and still commit; keeping the order right is what stops the merge relying
+  // on that deferral being in force.
   const PARENTS: Readonly<Record<string, readonly string[]>> = {
     accounts: ['institutions'],
     transactions: ['accounts', 'categories'],
@@ -204,5 +211,204 @@ describe('SQL builders', () => {
 
   it('refuses to open with a malformed code', () => {
     expect(() => openBackupSql("'; DROP TABLE accounts; --")).toThrow();
+  });
+});
+
+describe('pristineShippedRuleIds', () => {
+  const shipped: CategoryRule[] = [
+    {
+      id: 'r-salary',
+      categoryId: 'income-salary',
+      priority: 400,
+      enabled: true,
+      learned: false,
+      match: { kind: 'word', field: 'any', value: 'nomina' },
+    },
+    {
+      id: 'r-groceries',
+      categoryId: 'food-groceries',
+      priority: 200,
+      enabled: true,
+      learned: false,
+      match: { kind: 'word', field: 'any', value: 'mercadona' },
+    },
+  ];
+
+  const seeded = (rule: CategoryRule): StoredRuleRow => ({
+    id: rule.id,
+    categoryId: rule.categoryId,
+    priority: rule.priority,
+    enabled: rule.enabled,
+    learned: rule.learned,
+    matchJson: JSON.stringify(rule.match),
+  });
+
+  it('names a row still exactly as the app seeded it', () => {
+    expect(pristineShippedRuleIds(shipped, shipped.map(seeded))).toEqual([
+      'r-salary',
+      'r-groceries',
+    ]);
+  });
+
+  it('leaves a rule the owner disabled to the device', () => {
+    const live = shipped.map(seeded);
+    const row = live[0];
+    expect(row).toBeDefined();
+    if (!row) return;
+    expect(pristineShippedRuleIds(shipped, [{ ...row, enabled: false }, ...live.slice(1)])).toEqual(
+      ['r-groceries'],
+    );
+  });
+
+  it('leaves a rule the owner re-pointed at another category to the device', () => {
+    const live = shipped.map(seeded);
+    const row = live[1];
+    expect(row).toBeDefined();
+    if (!row) return;
+    expect(
+      pristineShippedRuleIds(shipped, [...live.slice(0, 1), { ...row, categoryId: 'food-other' }]),
+    ).toEqual(['r-salary']);
+  });
+
+  it('leaves a rule whose priority or match text was edited to the device', () => {
+    const [salary, groceries] = shipped.map(seeded);
+    expect(salary).toBeDefined();
+    expect(groceries).toBeDefined();
+    if (!salary || !groceries) return;
+    expect(
+      pristineShippedRuleIds(shipped, [
+        { ...salary, priority: 900 },
+        { ...groceries, matchJson: '{"kind":"word","field":"any","value":"lidl"}' },
+      ]),
+    ).toEqual([]);
+  });
+
+  // A learned rule carries the owner's own re-categorisation, whatever id it
+  // happens to hold.
+  it('leaves a row marked learned to the device', () => {
+    const live = shipped.map(seeded);
+    const row = live[0];
+    expect(row).toBeDefined();
+    if (!row) return;
+    expect(pristineShippedRuleIds(shipped, [{ ...row, learned: true }])).toEqual([]);
+  });
+
+  it('says nothing about a rule the database does not have', () => {
+    expect(pristineShippedRuleIds(shipped, [])).toEqual([]);
+  });
+
+  it('ignores a rule the owner created', () => {
+    const live = shipped.map(seeded);
+    const row = live[0];
+    expect(row).toBeDefined();
+    if (!row) return;
+    expect(pristineShippedRuleIds(shipped, [...live, { ...row, id: 'user-1234' }])).toEqual([
+      'r-salary',
+      'r-groceries',
+    ]);
+  });
+});
+
+describe('reseedPristineCategoriesSql', () => {
+  // The live schema's own column order, as PRAGMA table_info reports it.
+  const COLUMNS = [
+    'id',
+    'label_key',
+    'name',
+    'kind',
+    'parent_id',
+    'color',
+    'icon',
+    'built_in',
+    'archived',
+    'position',
+    'customised',
+  ];
+
+  const sql = reseedPristineCategoriesSql(COLUMNS);
+
+  // The seeded row loses: a fresh install writes the shipped taxonomy before
+  // any restore can run, so INSERT OR IGNORE alone would revert every rename
+  // and recolour the owner ever made.
+  it('takes every column but the id from the backup', () => {
+    expect(sql).toContain(
+      '(label_key, name, kind, parent_id, color, icon, built_in, archived, position, customised) = ',
+    );
+    expect(sql).toContain('SELECT b.label_key, b.name,');
+    // The id is the join key, never a value the backup writes over.
+    expect(sql).not.toContain('SET (id,');
+    expect(sql).not.toContain('SELECT b.id,');
+  });
+
+  // The owner-edited row wins: `customised` is the flag editCategory() sets and
+  // syncBuiltInCategories() already reads for this exact question.
+  it('refuses to touch a row the owner edited or created', () => {
+    expect(sql).toContain('c.built_in = 1');
+    expect(sql).toContain('c.customised = 0');
+  });
+
+  // Archiving is the one edit that leaves `customised` at 0, so it has to be
+  // named separately — and naming it is also what lets an archived category in
+  // the backup come back archived on a phone that reseeded it visible.
+  it('treats an archived live row as the owner’s work', () => {
+    expect(sql).toContain('c.archived = 0');
+  });
+
+  it('only touches rows the backup actually has', () => {
+    expect(sql).toContain('EXISTS (SELECT 1 FROM backup.categories AS b WHERE b.id = c.id)');
+  });
+
+  it('refuses a column name it does not recognise as one', () => {
+    expect(() => reseedPristineCategoriesSql(['id', 'name; DROP TABLE accounts; --'])).toThrow();
+  });
+
+  it('refuses a column list with no id to join on', () => {
+    expect(() => reseedPristineCategoriesSql(['name', 'color'])).toThrow();
+  });
+
+  it('refuses a column list with nothing to write', () => {
+    expect(() => reseedPristineCategoriesSql(['id'])).toThrow();
+  });
+});
+
+describe('reseedPristineRulesSql', () => {
+  const COLUMNS = [
+    'id',
+    'category_id',
+    'priority',
+    'enabled',
+    'learned',
+    'match_json',
+    'created_at',
+  ];
+
+  it('names only the rules it was given', () => {
+    const sql = reseedPristineRulesSql(COLUMNS, ['r-salary', 'r-internal']);
+    expect(sql).toContain("c.id IN ('r-salary', 'r-internal')");
+    expect(sql).toContain('UPDATE main.rules AS c SET');
+  });
+
+  it('refuses an id this release does not ship', () => {
+    expect(() => reseedPristineRulesSql(COLUMNS, ['user-1234'])).toThrow();
+  });
+
+  it('refuses to build a statement that would match every rule', () => {
+    expect(() => reseedPristineRulesSql(COLUMNS, [])).toThrow();
+  });
+});
+
+describe('deleteRetiredShippedRulesSql', () => {
+  it('deletes exactly the tombstoned ids', () => {
+    expect(deleteRetiredShippedRulesSql(['r-salary'])).toBe(
+      "DELETE FROM main.rules WHERE id IN ('r-salary');",
+    );
+  });
+
+  it('refuses an id this release does not ship', () => {
+    expect(() => deleteRetiredShippedRulesSql(['user-1234'])).toThrow();
+  });
+
+  it('refuses an empty list rather than deleting every rule', () => {
+    expect(() => deleteRetiredShippedRulesSql([])).toThrow();
   });
 });

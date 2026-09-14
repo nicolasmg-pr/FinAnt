@@ -1,3 +1,6 @@
+import { isShippedRuleId } from './default-rules';
+import type { CategoryRule } from './types';
+
 /**
  * Crockford base32. `I`, `L`, `O` and `U` are absent on purpose: the first
  * three are the ones a handwritten code gets transcribed wrong, and `U` is
@@ -88,9 +91,13 @@ const ATTACHED = 'backup';
 /**
  * Every table a backup carries, foreign-key parents first.
  *
- * The order is the merge order and it is load-bearing: the restore runs with
- * foreign keys on, so a child row inserted before its parent fails the whole
- * transaction. `backup-coverage.test.ts` asserts that this list plus
+ * The order is the merge order, and it is belt-and-braces rather than the
+ * mechanism: the restore runs with `PRAGMA defer_foreign_keys = ON`, so every
+ * foreign key is checked at commit and not at the statement, which is exactly
+ * what lets one transaction hold a child that arrives before its parent. What
+ * the order buys is a readable failure and no reliance on that deferral being
+ * in force — see `docs/backup-format.md`, "One transaction, and why the
+ * connection needs two pragmas, not one". `backup-coverage.test.ts` asserts that this list plus
  * `EXCLUDED_TABLES` accounts for every table the migrations create, so a table
  * added later cannot be silently left out of the backup.
  */
@@ -197,4 +204,189 @@ export function mergeTableSql(table: string): string {
 
 export function detachBackupSql(): string {
   return `DETACH DATABASE ${ATTACHED};`;
+}
+
+/**
+ * A live `rules` row, as the merge reads it back before writing anything.
+ *
+ * Only the columns that decide whether the owner has touched a rule are here.
+ * `created_at` is deliberately absent: a seeded rule carries the moment the app
+ * first launched on *this* phone, which is never equal to the backup's and says
+ * nothing about whether the owner changed anything.
+ */
+export interface StoredRuleRow {
+  readonly id: string;
+  readonly categoryId: string;
+  readonly priority: number;
+  readonly enabled: boolean;
+  readonly learned: boolean;
+  readonly matchJson: string;
+}
+
+/**
+ * Which live rules are still exactly the rule this release seeds, untouched.
+ *
+ * The device-wins rule protects the owner's work. A row the app wrote to itself
+ * at first launch — `syncDefaultRules()` in `db/database.ts`, which runs on
+ * every open and therefore before any restore can — is not the owner's work,
+ * and letting it beat the backup silently reverts every rule edit the owner
+ * ever made the moment they restore onto a fresh install.
+ *
+ * `rules` carries no `customised` flag, so "untouched" is established by
+ * comparison instead: a seeded row's category, priority, enabled and learned
+ * flags and serialised match are all written straight from `DEFAULT_RULES`, so
+ * a row that still equals its shipped definition in every one of them is one
+ * nothing has edited. `match_json` is compared as the exact string
+ * `JSON.stringify` produced, which errs the safe way: a serialisation that
+ * differs only in key order reads as edited, and an edited rule is one the
+ * device keeps.
+ */
+export function pristineShippedRuleIds(
+  shipped: readonly CategoryRule[],
+  live: readonly StoredRuleRow[],
+): string[] {
+  const byId = new Map(live.map((row) => [row.id, row]));
+  const pristine: string[] = [];
+  for (const rule of shipped) {
+    const row = byId.get(rule.id);
+    if (row === undefined) continue;
+    if (
+      row.categoryId === rule.categoryId &&
+      row.priority === rule.priority &&
+      row.enabled === rule.enabled &&
+      row.learned === rule.learned &&
+      row.matchJson === JSON.stringify(rule.match)
+    ) {
+      pristine.push(rule.id);
+    }
+  }
+  return pristine;
+}
+
+/** A column name is interpolated, so it has to look like one. */
+const COLUMN_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Writes the backup's row over a live row that is still in its seeded state.
+ *
+ * The shape is an `UPDATE` from the attached file rather than a `DELETE` and a
+ * re-`INSERT`: deleting a category would take the owner's live rows with it —
+ * `transactions.category_id` is `ON DELETE SET NULL`, `rules` and `budgets`
+ * cascade — and no restore may ever cost a categorisation.
+ *
+ * `columns` comes from `PRAGMA table_info` on the live side, which
+ * `assertColumnsMatch` has already proved identical to the backup's, so the
+ * statement never names a column one side lacks and never has to be updated by
+ * hand when a migration adds one. Every name is still checked against
+ * `COLUMN_PATTERN` before interpolation, the same way the table name is
+ * checked against the manifest.
+ */
+function reseedSql(table: string, columns: readonly string[], predicate: string): string {
+  if (!BACKUP_TABLES.includes(table)) {
+    throw new Error('refusing to reseed a table outside the backup manifest');
+  }
+  if (!columns.includes('id')) {
+    throw new Error('refusing to reseed a table without an id column');
+  }
+  for (const column of columns) {
+    if (!COLUMN_PATTERN.test(column)) {
+      throw new Error('refusing to reseed with an unrecognised column name');
+    }
+  }
+  const writable = columns.filter((column) => column !== 'id');
+  if (writable.length === 0) {
+    throw new Error('refusing to reseed a table with nothing but an id');
+  }
+
+  const selected = writable.map((column) => `b.${column}`).join(', ');
+  // A one-column row value is not worth relying on across SQLite versions, so
+  // the single-column form is spelled out instead.
+  const assignment =
+    writable.length === 1
+      ? `${writable[0] ?? ''} = (SELECT ${selected} FROM ${ATTACHED}.${table} AS b WHERE b.id = c.id)`
+      : `(${writable.join(', ')}) = (SELECT ${selected} FROM ${ATTACHED}.${table} AS b WHERE b.id = c.id)`;
+
+  return (
+    `UPDATE main.${table} AS c SET ${assignment} ` +
+    `WHERE ${predicate} ` +
+    `AND EXISTS (SELECT 1 FROM ${ATTACHED}.${table} AS b WHERE b.id = c.id);`
+  );
+}
+
+/**
+ * The backup wins over a built-in category the owner has never touched.
+ *
+ * A fresh install seeds every shipped category before a restore can run, so
+ * `INSERT OR IGNORE` alone would reinstate the shipped name, colour and icon
+ * over the owner's renamed, recoloured, rearranged taxonomy — permanently,
+ * since `syncBuiltInCategories()` only ever writes shipped values back.
+ *
+ * Three conditions decide that a live row is the app's own seed rather than
+ * the owner's work, and each one is a way the owner leaves a mark:
+ *
+ * - `built_in = 1` — a category the owner created is theirs, id collision or
+ *   not, and is never overwritten;
+ * - `customised = 0` — the flag `editCategory()` sets and
+ *   `syncBuiltInCategories()` already reads for exactly this question;
+ * - `archived = 0` — archiving is the one edit that does *not* set
+ *   `customised` (`archiveCategory()` writes only `archived`), so a hidden
+ *   category would otherwise look pristine and be unhidden by a backup taken
+ *   before the owner hid it. Requiring it also settles `archived` in the other
+ *   direction on purpose: a row that is pristine here takes the backup's
+ *   `archived` with everything else, which is what brings back a category the
+ *   owner archived on the phone they lost.
+ */
+export function reseedPristineCategoriesSql(columns: readonly string[]): string {
+  return reseedSql('categories', columns, 'c.built_in = 1 AND c.customised = 0 AND c.archived = 0');
+}
+
+/** `'a', 'b'` — for an `IN` list of ids the caller has already vouched for. */
+function idList(ids: readonly string[]): string {
+  return ids.map((id) => `'${quote(id)}'`).join(', ');
+}
+
+/**
+ * The backup wins over the shipped rules a fresh install seeded to itself.
+ *
+ * `ids` must come from `pristineShippedRuleIds()`: they are the rules this
+ * build ships whose live row still matches the shipped definition exactly. A
+ * rule the owner disabled, re-pointed or wrote themselves is not in that list
+ * and keeps the phone's version, which is device-wins as intended.
+ */
+export function reseedPristineRulesSql(columns: readonly string[], ids: readonly string[]): string {
+  if (ids.length === 0) {
+    throw new Error('refusing to reseed rules without naming any');
+  }
+  for (const id of ids) {
+    if (!isShippedRuleId(id)) {
+      throw new Error('refusing to reseed a rule this release does not ship');
+    }
+  }
+  return reseedSql('rules', columns, `c.id IN (${idList(ids)})`);
+}
+
+/**
+ * Removes shipped rules a fresh install seeded that the backup says the owner
+ * had deleted.
+ *
+ * The tombstone list lives in `settings` (`retiredShippedRules`), so it only
+ * arrives with the restore — by which time `syncDefaultRules()` has long since
+ * reinstalled every rule it names. Without this, a shipped rule the owner
+ * deliberately deleted comes back and stays back, filing movements under a
+ * category they rejected.
+ *
+ * Only rules still in their seeded state are removed, for the same reason the
+ * reseed above only overwrites those: if the row has been edited it is the
+ * owner's, whatever an older tombstone says about it.
+ */
+export function deleteRetiredShippedRulesSql(ids: readonly string[]): string {
+  if (ids.length === 0) {
+    throw new Error('refusing to delete rules without naming any');
+  }
+  for (const id of ids) {
+    if (!isShippedRuleId(id)) {
+      throw new Error('refusing to delete a rule this release does not ship');
+    }
+  }
+  return `DELETE FROM main.rules WHERE id IN (${idList(ids)});`;
 }
