@@ -33,6 +33,13 @@ describe('formatRecoveryCode', () => {
   it('refuses fewer than sixteen bytes', () => {
     expect(() => formatRecoveryCode(Uint8Array.from([1, 2, 3]))).toThrow();
   });
+
+  // This value is frozen by every backup file created with this encoder.
+  // A change to the bit-packing algorithm would silently render every existing
+  // backup unrecoverable. Do not alter this assertion casually.
+  it('produces the known-answer value for the fixture', () => {
+    expect(formatRecoveryCode(BYTES)).toBe('008J4-CT4AN-K7F24-SNAXW-SQFEZ');
+  });
 });
 
 describe('normaliseRecoveryCode', () => {
