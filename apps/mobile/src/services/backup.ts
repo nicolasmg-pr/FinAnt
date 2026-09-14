@@ -15,12 +15,14 @@ import {
   EXCLUDED_TABLES,
   exportBackupSql,
   formatRecoveryCode,
+  mergeRetiredShippedRuleIds,
   mergeTableSql,
   openBackupSql,
   parseRetiredShippedRules,
   pristineShippedRuleIds,
   reseedPristineCategoriesSql,
   reseedPristineRulesSql,
+  serialiseRetiredShippedRules,
   type StoredRuleRow,
 } from '@finant/core';
 import * as SQLite from 'expo-sqlite';
@@ -423,14 +425,26 @@ export async function mergeBackup(
       attached = true;
 
       const columns = await assertColumnsMatch(db);
-      // Both reads happen before the transaction opens, and both read the
-      // *live* side: which shipped rules this phone is still holding exactly
-      // as it seeded them, and which ones the backup's phone had deleted.
-      // Neither is a decision the merge can make from inside the loop, since
-      // the loop's own inserts would change the answer.
+      // All three reads happen before the transaction opens: which shipped
+      // rules this phone is still holding exactly as it seeded them, which
+      // ones the backup's phone had deleted, and the device's own tombstone
+      // setting before anything from the backup merges into it. None of these
+      // is a decision the merge can make from inside the loop below, since the
+      // loop's own inserts would change the answer.
       const pristineRules = pristineShippedRuleIds(DEFAULT_RULES, await liveRules(db));
-      const retiredRules = (await retiredShippedRulesFromBackup(db)).filter((id) =>
+      const backupRetiredRulesRaw = await rawRetiredShippedRulesFromBackup(db);
+      const deviceRetiredRulesRaw = await rawRetiredShippedRulesFromDevice(db);
+      const retiredRules = parseRetiredShippedRules(backupRetiredRulesRaw).filter((id) =>
         pristineRules.includes(id),
+      );
+      // The tombstone setting itself is a union, not a device-wins pick — see
+      // `mergeRetiredShippedRuleIds()` and "Table manifest" in
+      // docs/backup-format.md. Computed here, alongside the other two
+      // pre-transaction reads it depends on, and written inside the
+      // transaction below once `settings` has had its plain merge pass.
+      const mergedRetiredRules = mergeRetiredShippedRuleIds(
+        deviceRetiredRulesRaw,
+        backupRetiredRulesRaw,
       );
       // foreign_keys defaults OFF on a fresh connection — database.ts turns it
       // on for the app's own connection, once, and this is a different
@@ -447,6 +461,22 @@ export async function mergeBackup(
           const before = await countRows(db, `main.${table}`);
           await db.execAsync(mergeTableSql(table));
           added[table] = (await countRows(db, `main.${table}`)) - before;
+        }
+
+        // `retiredShippedRules` is a tombstone list, not a preference: the
+        // plain `INSERT OR IGNORE` pass just above already applied device-wins
+        // to it like every other row in `settings`, which is wrong for a fact
+        // that accumulates rather than one side's choice. Corrected here to
+        // the union computed before the transaction opened. A no-op, and no
+        // row-count change, when neither side ever tombstoned anything or the
+        // union already matches what is on the phone.
+        if (mergedRetiredRules.length > 0) {
+          await db.runAsync(
+            `INSERT INTO main.settings (key, value) VALUES (?, ?)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
+            SETTING_RETIRED_SHIPPED_RULES,
+            serialiseRetiredShippedRules(mergedRetiredRules),
+          );
         }
 
         // `INSERT OR IGNORE` above skipped every row whose id this phone
@@ -468,7 +498,15 @@ export async function mergeBackup(
         }
         if (retiredRules.length > 0) {
           await db.execAsync(deleteRetiredShippedRulesSql(retiredRules));
-          added['rules'] = (added['rules'] ?? 0) - retiredRules.length;
+          // Deliberately left out of `added['rules']`. That count is rows
+          // *added* by this restore, and every one of these rows was already
+          // on the phone before the merge ran — reinstalled by
+          // `syncDefaultRules()` at launch, since the device had no tombstone
+          // of its own for it yet — so removing it again here is a
+          // correction, not a subtraction from a count of new rows. Folding
+          // it in used to let `added['rules']` go negative and print a false
+          // "-2 rows added" on the one screen a recovery has to be trusted;
+          // see "What the restore reports" in docs/backup-format.md.
         }
       });
     } finally {
@@ -560,17 +598,31 @@ async function liveRules(db: SQLite.SQLiteDatabase): Promise<StoredRuleRow[]> {
 }
 
 /**
- * The shipped rules the backup's phone had deleted.
+ * The backup's own `retiredShippedRules` setting, in the raw stored form —
+ * `null` if the backup never wrote one.
  *
  * Read straight from the attached file rather than waiting for `settings` to
  * merge: by the time the tombstone lands in `main.settings` the rules it names
  * have already been reinstated by `syncDefaultRules()` at launch, and nothing
  * would ever look at it again.
  */
-async function retiredShippedRulesFromBackup(db: SQLite.SQLiteDatabase): Promise<string[]> {
+async function rawRetiredShippedRulesFromBackup(db: SQLite.SQLiteDatabase): Promise<string | null> {
   const row = await db.getFirstAsync<{ value: string }>(
     'SELECT value FROM backup.settings WHERE key = ?;',
     SETTING_RETIRED_SHIPPED_RULES,
   );
-  return parseRetiredShippedRules(row?.value ?? null);
+  return row?.value ?? null;
+}
+
+/**
+ * The device's own `retiredShippedRules` setting, in the raw stored form —
+ * `null` if this phone has never tombstoned a shipped rule — read before the
+ * restore's merge can touch it.
+ */
+async function rawRetiredShippedRulesFromDevice(db: SQLite.SQLiteDatabase): Promise<string | null> {
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM main.settings WHERE key = ?;',
+    SETTING_RETIRED_SHIPPED_RULES,
+  );
+  return row?.value ?? null;
 }

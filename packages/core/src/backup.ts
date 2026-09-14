@@ -1,4 +1,4 @@
-import { isShippedRuleId } from './default-rules';
+import { isShippedRuleId, parseRetiredShippedRules } from './default-rules';
 import type { CategoryRule } from './types';
 
 /**
@@ -389,4 +389,54 @@ export function deleteRetiredShippedRulesSql(ids: readonly string[]): string {
     }
   }
   return `DELETE FROM main.rules WHERE id IN (${idList(ids)});`;
+}
+
+/**
+ * Unions two tombstone lists rather than letting either replace the other.
+ *
+ * Every other row in `settings` is a preference, and `INSERT OR IGNORE` — the
+ * device's own row wins outright — is the right rule for a preference.
+ * `retiredShippedRules` is not one: each id in it is a fact, "a shipped rule
+ * was deleted, somewhere," and two devices' facts do not conflict, they
+ * accumulate. Letting `INSERT OR IGNORE` pick a side here would mean a phone
+ * that already has its own tombstone list silently keeps only its own ids,
+ * dropping every id the backup alone remembers — and the merge deletes those
+ * rules from `rules` in the same restore, so the very next launch's
+ * `syncDefaultRules()` reinstalls them, quietly undoing the restore's own
+ * deletion. See "Table manifest" in `docs/backup-format.md`.
+ *
+ * Either input may be `null` or malformed — the same tolerance
+ * `parseRetiredShippedRules` gives a corrupt setting, so a bad value on
+ * either side costs at most re-installing an already-deleted rule once, never
+ * a failed restore. Deduplicated, and deterministic: the device's own ids keep
+ * their stored order first, then any id the backup names that the device does
+ * not already have is appended in the backup's order — so the same two inputs
+ * always produce the same list, which is what makes writing it back a no-op
+ * the second time.
+ */
+export function mergeRetiredShippedRuleIds(
+  deviceValue: string | null,
+  backupValue: string | null,
+): string[] {
+  const device = parseRetiredShippedRules(deviceValue);
+  const backup = parseRetiredShippedRules(backupValue);
+  const seen = new Set(device);
+  const merged = [...device];
+  for (const id of backup) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    merged.push(id);
+  }
+  return merged;
+}
+
+/**
+ * Serialises a tombstone list exactly the way `parseRetiredShippedRules`
+ * reads it back — a plain JSON array of strings, the same shape `deleteRule()`
+ * writes in `apps/mobile/src/db/rules-repo.ts`. Kept beside
+ * `mergeRetiredShippedRuleIds()` so the write side of the round trip is never
+ * updated without the read side in the same change.
+ */
+export function serialiseRetiredShippedRules(ids: readonly string[]): string {
+  return JSON.stringify(ids);
 }

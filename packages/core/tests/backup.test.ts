@@ -8,14 +8,17 @@ import {
   exportBackupSql,
   formatRecoveryCode,
   isValidRecoveryCode,
+  mergeRetiredShippedRuleIds,
   mergeTableSql,
   normaliseRecoveryCode,
   openBackupSql,
   pristineShippedRuleIds,
   reseedPristineCategoriesSql,
   reseedPristineRulesSql,
+  serialiseRetiredShippedRules,
   type StoredRuleRow,
 } from '../src/backup';
+import { parseRetiredShippedRules } from '../src/default-rules';
 import type { CategoryRule } from '../src/types';
 
 const BYTES = Uint8Array.from([
@@ -410,5 +413,78 @@ describe('deleteRetiredShippedRulesSql', () => {
 
   it('refuses an empty list rather than deleting every rule', () => {
     expect(() => deleteRetiredShippedRulesSql([])).toThrow();
+  });
+});
+
+describe('mergeRetiredShippedRuleIds', () => {
+  it('keeps an id only the device has tombstoned', () => {
+    expect(mergeRetiredShippedRuleIds(JSON.stringify(['r-salary']), null)).toEqual(['r-salary']);
+  });
+
+  it('keeps an id only the backup has tombstoned', () => {
+    expect(mergeRetiredShippedRuleIds(null, JSON.stringify(['r-salary']))).toEqual(['r-salary']);
+  });
+
+  // The disaster Finding 2 describes: a fresh phone tombstones one rule, then
+  // restores a backup naming three different ones. INSERT OR IGNORE would
+  // keep only the device's one id; the union must keep all four.
+  it('unions ids that differ on both sides, device ids first', () => {
+    expect(
+      mergeRetiredShippedRuleIds(
+        JSON.stringify(['r-cash']),
+        JSON.stringify(['r-salary', 'r-fees', 'r-taxes']),
+      ),
+    ).toEqual(['r-cash', 'r-salary', 'r-fees', 'r-taxes']);
+  });
+
+  it('does not duplicate an id both sides tombstoned', () => {
+    expect(
+      mergeRetiredShippedRuleIds(
+        JSON.stringify(['r-salary', 'r-cash']),
+        JSON.stringify(['r-cash', 'r-salary']),
+      ),
+    ).toEqual(['r-salary', 'r-cash']);
+  });
+
+  it('is empty when neither side has tombstoned anything', () => {
+    expect(mergeRetiredShippedRuleIds(null, null)).toEqual([]);
+  });
+
+  // parseRetiredShippedRules treats a corrupt setting as no tombstones, never
+  // as a reason to fail the restore — the merge must be exactly as tolerant.
+  it('treats malformed input on either side as no tombstones there', () => {
+    expect(mergeRetiredShippedRuleIds('not json', JSON.stringify(['r-salary']))).toEqual([
+      'r-salary',
+    ]);
+    expect(mergeRetiredShippedRuleIds(JSON.stringify(['r-salary']), '{"not":"an array"}')).toEqual([
+      'r-salary',
+    ]);
+  });
+
+  it('is idempotent: merging the result with either input again changes nothing', () => {
+    const merged = mergeRetiredShippedRuleIds(
+      JSON.stringify(['r-cash']),
+      JSON.stringify(['r-salary', 'r-fees']),
+    );
+    const serialised = serialiseRetiredShippedRules(merged);
+    expect(mergeRetiredShippedRuleIds(serialised, JSON.stringify(['r-salary', 'r-fees']))).toEqual(
+      merged,
+    );
+    expect(mergeRetiredShippedRuleIds(serialised, null)).toEqual(merged);
+  });
+});
+
+describe('serialiseRetiredShippedRules', () => {
+  it('round-trips through parseRetiredShippedRules exactly', () => {
+    const ids = ['r-salary', 'r-cash', 'r-fees'];
+    expect(parseRetiredShippedRules(serialiseRetiredShippedRules(ids))).toEqual(ids);
+  });
+
+  it('round-trips an empty list', () => {
+    expect(parseRetiredShippedRules(serialiseRetiredShippedRules([]))).toEqual([]);
+  });
+
+  it('writes a plain JSON array of strings, the shape deleteRule() writes', () => {
+    expect(serialiseRetiredShippedRules(['r-salary'])).toBe('["r-salary"]');
   });
 });

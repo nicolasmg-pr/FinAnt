@@ -223,7 +223,9 @@ merge, after the inserts:
   by which time the launch-time install has already put the rule back. The merge
   reads that list straight out of the attached file and deletes the rules it
   names, but only those still in their seeded state. A rule the owner has since
-  edited is theirs, whatever an older tombstone says.
+  edited is theirs, whatever an older tombstone says. The setting itself is
+  merged as a union of both phones' tombstones rather than `INSERT OR IGNORE`
+  picking a side — see "Table manifest" below for why, and why it has to be.
 
 An `UPDATE` from the attached file, never a `DELETE` and re-`INSERT`: deleting a
 category would take the owner's own rows with it — `transactions.category_id` is
@@ -234,6 +236,23 @@ added by a future migration is carried across without anyone editing a list.
 
 Restoring twice is still a no-op the second time: the first run has already made
 the live row equal to the backup's, so the same `UPDATE` writes the same values.
+
+### What the restore reports
+
+`mergeBackup()` returns a count of rows added, per table, and `app/backup.tsx`
+sums those into the one number it shows the owner: "N rows added." That figure
+counts rows this restore inserted — the difference in row count around each
+table's `INSERT OR IGNORE` — and nothing else. The deletion just above, of a
+shipped rule the backup's phone had retired, is deliberately not folded into
+it: those rows were never added by this restore. Every one of them was already
+on the phone before the merge ran, reinstalled by `syncDefaultRules()` at
+launch because the device held no tombstone of its own for it yet, so removing
+it again here corrects the table rather than un-adding something this restore
+just added. An earlier version subtracted the deleted count from
+`added['rules']` anyway, which meant restoring a backup that retired more
+shipped rules than it added could show the owner a negative count — "-2 rows
+added" — on the one screen a recovery has to be trusted enough not to invite
+that question at all.
 
 ## Restore
 
@@ -394,10 +413,10 @@ exclusion_rules, transactions, assets, investment_legs, quotes,
 price_history, notification_sources, notification_routes, settings
 ```
 
-`settings` merges the same way as every other table — `INSERT OR IGNORE`, no
-seeded-row exception — which is why the phone's own locale, currency and app-lock
-choice survive a restore instead of being overwritten by whatever the backup's
-phone had set.
+`settings` merges the same way as every other table for every row but one —
+`INSERT OR IGNORE`, no seeded-row exception — which is why the phone's own
+locale, currency and app-lock choice survive a restore instead of being
+overwritten by whatever the backup's phone had set.
 
 That is deliberate, and it was re-checked against the fresh-install problem
 above, because a settings row the app wrote to itself would deserve the same
@@ -410,9 +429,29 @@ the owner deliberately created on _this_ phone, minutes ago, and device-wins is
 exactly right for it — the language they just chose should not be replaced by the
 language their old phone was in.
 
-The one settings row the merge does act on is `retiredShippedRules`, and not by
-overwriting it: it is read out of the backup to find shipped rules the owner had
-deleted, as described under the merge rule above.
+**`retiredShippedRules` is the one exception, and on purpose.** It is not a
+preference like the rest of the table — it is a tombstone list, and device-wins
+is the wrong rule for a tombstone. A row the phone already holds is not "the
+owner's choice, which beat the backup's" the way a locale is; it is only
+whichever rule this phone happened to have deleted first. If `INSERT OR IGNORE`
+were left to decide it the way it decides every other row, a fresh phone that
+had already tombstoned one rule of its own would keep only that one id the
+moment it restored a backup naming three different ones — and the merge
+deletes those three rules from `rules` in the very same restore (the bullet
+above), so the next launch's `syncDefaultRules()` finds no tombstone for them
+and reinstalls all three, silently reverting the restore's own deletion with
+nothing on screen to say so.
+
+So `mergeBackup()` reads both the phone's own value and the backup's, before
+the transaction opens, and — after the plain per-table pass above has run —
+writes back their **union**: `mergeRetiredShippedRuleIds()` in
+`packages/core/src/backup.ts` merges the two id lists, deduplicated, device's
+own ids first; `serialiseRetiredShippedRules()` writes them back in exactly the
+JSON-array-of-strings shape `parseRetiredShippedRules()` reads, the same shape
+`deleteRule()` writes in `apps/mobile/src/db/rules-repo.ts`. Two devices'
+tombstones do not conflict; they only ever accumulate, so the union is safe to
+write unconditionally and is a no-op — same value back — when neither side
+named anything the other did not already have.
 
 ## What a merge cannot represent
 
