@@ -297,6 +297,46 @@ export const de: Translations = {
       'Diese Regel löschen? Künftige Importe zählen diese Buchungen wieder mit. Die bereits ausgeschlossenen bleiben ausgeschlossen.',
     about: 'Über die App',
   },
+  backup: {
+    title: 'Backup',
+    subtitle:
+      'Eine verschlüsselte Kopie von allem, was in FinAnt steckt, in einer Datei, die du behältst. Dein Telefon ist der einzige Ort, an dem diese Daten existieren — ein Backup ist die einzige Möglichkeit, den Verlust zu überstehen.',
+    lastBackup: 'Letztes Backup: {{date}}',
+    never: 'Du hast noch nie ein Backup erstellt.',
+    create: 'Backup erstellen',
+    creating: 'Backup wird vorbereitet…',
+    codeTitle: 'Dein Wiederherstellungscode',
+    codeBody:
+      'Schreib ihn jetzt auf oder speichere ihn in deinem Passwort-Manager. Nur er öffnet das Backup, FinAnt bewahrt keine Kopie davon auf, und ohne ihn ist die Datei wertlos.',
+    codeCopied: 'Kopiert.',
+    codeConfirm: 'Ich habe diesen Code gespeichert',
+    share: 'Datei speichern',
+    restore: 'Aus einem Backup wiederherstellen',
+    pickFile: 'Backup-Datei auswählen',
+    enterCode: 'Wiederherstellungscode',
+    enterCodeHint: 'Der Code, der beim Erstellen des Backups angezeigt wurde.',
+    previewTitle: 'Dieses Backup',
+    previewMade: 'Erstellt am {{date}} mit FinAnt {{version}}',
+    previewRows: '{{count}} Zeile',
+    previewRows_other: '{{count}} Zeilen',
+    previewBody:
+      'Die Wiederherstellung ergänzt, was auf deinem Telefon fehlt. Nichts, was schon da ist, wird geändert oder entfernt — du kannst sie also gefahrlos zweimal ausführen.',
+    confirmRestore: 'Wiederherstellen',
+    restoring: 'Wird wiederhergestellt…',
+    doneTitle: 'Wiederhergestellt',
+    doneNothing: 'Alles aus diesem Backup war schon vorhanden.',
+    doneAdded: '{{count}} Zeile hinzugefügt.',
+    doneAdded_other: '{{count}} Zeilen hinzugefügt.',
+    errorWrongCode: 'Dieser Wiederherstellungscode passt nicht zu dieser Datei.',
+    errorNotABackup: 'Diese Datei ist kein FinAnt-Backup.',
+    errorTooNew:
+      'Dieses Backup wurde mit einer neueren Version von FinAnt erstellt. Aktualisiere die App und versuch es erneut.',
+    errorSchemaMismatch:
+      'Dieses Backup passt nicht zu dieser Version von FinAnt. Es wurde nichts geändert.',
+    errorSharingUnavailable:
+      'Dieses Gerät kann keine Dateien teilen, daher kann das Backup nicht gespeichert werden.',
+    errorFailed: 'Das Backup konnte nicht abgeschlossen werden. Es wurde nichts geändert.',
+  },
   budgets: {
     title: 'Budgets',
     monthlyLimit: 'Monatslimit',
