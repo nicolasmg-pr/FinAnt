@@ -12,6 +12,7 @@ import {
   EXCLUDED_TABLES,
   exportBackupSql,
   formatRecoveryCode,
+  mergeTableSql,
   openBackupSql,
 } from '@finant/core';
 import * as SQLite from 'expo-sqlite';
@@ -234,4 +235,100 @@ async function opensAtAll(db: SQLite.SQLiteDatabase): Promise<boolean> {
 export async function discardBackup(preview: BackupPreview): Promise<void> {
   const file = new File(preview.uri);
   if (file.exists) file.delete();
+}
+
+/**
+ * Merges a previewed backup into the live database, insert-only.
+ *
+ * Runs as one transaction with deferred foreign keys, so an orphan row in the
+ * backup produces a single clean rollback at commit rather than aborting
+ * halfway down the manifest and leaving a partial restore behind.
+ *
+ * Returns rows added per table. A second run of the same file returns zeroes,
+ * which is the cheapest evidence that "device wins" holds.
+ */
+export async function mergeBackup(
+  preview: BackupPreview,
+  code: string,
+): Promise<Readonly<Record<string, number>>> {
+  const added: Record<string, number> = {};
+
+  try {
+    const key = await getOrCreateDatabaseKey();
+    // Its own connection, never the app's, for the same reason as the export:
+    // without useNewConnection expo-sqlite returns the cached handle the UI is
+    // reading through, and DETACH then fails with "database is locked".
+    // Confirmed by the probe in Task 1. Rows committed here are visible to the
+    // app's connection immediately afterwards.
+    const db = await SQLite.openDatabaseAsync(DATABASE_NAME, { useNewConnection: true });
+    let attached = false;
+    try {
+      await db.execAsync(`PRAGMA key = "x'${key}'";`);
+      await db.execAsync(attachBackupSql(preview.path, code));
+      attached = true;
+
+      await assertColumnsMatch(db);
+      // foreign_keys defaults OFF on a fresh connection — database.ts turns it
+      // on for the app's own connection, once, and this is a different
+      // connection entirely. defer_foreign_keys only changes *when* a foreign
+      // key check runs; with enforcement itself off there is nothing to defer,
+      // and an orphan row would insert silently instead of rolling back at
+      // commit. Both statements must run here, before the transaction opens:
+      // neither pragma may be changed once one is under way, and SQLite clears
+      // defer_foreign_keys automatically at the end of every transaction.
+      await db.execAsync('PRAGMA foreign_keys = ON;');
+      await db.execAsync('PRAGMA defer_foreign_keys = ON;');
+      await db.withTransactionAsync(async () => {
+        for (const table of BACKUP_TABLES) {
+          const before = await countRows(db, `main.${table}`);
+          await db.execAsync(mergeTableSql(table));
+          added[table] = (await countRows(db, `main.${table}`)) - before;
+        }
+      });
+    } finally {
+      // Same shape as createBackup's cleanup: a failed DETACH must not stop
+      // the connection from closing, and must not replace whatever error the
+      // block above was already throwing, so it is caught and dropped here.
+      // DETACH is skipped outright when ATTACH itself never succeeded.
+      if (attached) {
+        try {
+          await db.execAsync(detachBackupSql());
+        } catch {
+          // Best-effort only: closeAsync() below still releases the file.
+        }
+      }
+      await db.closeAsync();
+    }
+    return added;
+  } finally {
+    await discardBackup(preview);
+  }
+}
+
+async function countRows(db: SQLite.SQLiteDatabase, qualified: string): Promise<number> {
+  const row = await db.getFirstAsync<{ n: number }>(`SELECT COUNT(*) AS n FROM ${qualified};`);
+  return row?.n ?? 0;
+}
+
+/**
+ * Refuses the merge unless both sides declare identical columns for every
+ * manifest table.
+ *
+ * `inspectBackup` migrated the file to the current schema, so this should
+ * always hold — which is exactly why it is asserted rather than assumed. It is
+ * the precondition that lets the merge use `SELECT *`, and `SELECT *` across
+ * mismatched columns would write values into the wrong fields silently.
+ */
+async function assertColumnsMatch(db: SQLite.SQLiteDatabase): Promise<void> {
+  for (const table of BACKUP_TABLES) {
+    const [mine, theirs] = await Promise.all([
+      db.getAllAsync<{ name: string }>(`PRAGMA main.table_info(${table});`),
+      db.getAllAsync<{ name: string }>(`PRAGMA backup.table_info(${table});`),
+    ]);
+    const a = mine.map((column) => column.name).join(',');
+    const b = theirs.map((column) => column.name).join(',');
+    if (a !== b || a === '') {
+      throw new BackupError('schema-mismatch');
+    }
+  }
 }
