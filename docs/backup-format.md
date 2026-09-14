@@ -72,6 +72,24 @@ simulator rather than guessed:
   shape independent of that bug: an export taken through a second connection cannot
   observe a change that is mid-write on the first one.
 
+## What "Last backup" actually records
+
+`createBackup()` writes `lastBackupAt` once `Sharing.shareAsync()` resolves — and on
+iOS that call is backed by `UIActivityViewController`, whose completion handler fires
+when the sheet closes, not when the file has gone anywhere. An owner who picks "Save
+to Files" and an owner who swipes the sheet away without picking anything produce the
+same resolved promise. There is no other callback to reach for: `UIActivityViewController`
+does not report which activity ran or whether it succeeded, only that presentation is
+over, and that is true regardless of what FinAnt does with the result.
+
+So the date on the backup screen is not proof that a backup file exists anywhere the
+owner can find it again — it is a record of the last time they got as far as opening
+the share sheet. Read plainly, "Last backup: today" can be true of an owner who has no
+backup at all, because they dismissed the sheet the moment it appeared. That is a
+property of the platform API, not a defect this feature could close by trying harder:
+treat the date as a reminder of when the owner last attempted a backup, never as
+confirmation that one is sitting somewhere safe.
+
 ## Recovery code
 
 125 bits of randomness — `Crypto.getRandomBytes(16)`, three of the 128 bits dropped
