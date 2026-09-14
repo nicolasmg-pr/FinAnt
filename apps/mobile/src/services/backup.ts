@@ -160,14 +160,29 @@ export type BackupPreview = {
  */
 export async function inspectBackup(uri: string, code: string): Promise<BackupPreview> {
   const working = new File(Paths.cache, `restore-${Date.now()}.finantbackup`);
-  await new File(uri).copy(working);
 
   let db: SQLite.SQLiteDatabase | null = null;
   try {
+    // copy() is a native, non-atomic file operation. It stays inside this try
+    // so a throw partway through — disk full, permission revoked mid-copy —
+    // still hits the catch below and deletes whatever partial file it left,
+    // rather than stranding it under a name nothing else can ever find.
+    await new File(uri).copy(working);
+
     db = await SQLite.openDatabaseAsync(working.name, {}, posixPath(Paths.cache.uri));
     // Must be the first statement on the connection: SQLCipher reads the
     // header with it, and any query before it fails on an encrypted file.
-    await db.execAsync(openBackupSql(code));
+    let openSql: string;
+    try {
+      openSql = openBackupSql(code);
+    } catch {
+      // A malformed code fails the pattern check before SQLCipher ever sees
+      // it. From the owner's side that is the same event as a code that
+      // reaches SQLCipher and fails to decrypt: they typed it wrong, so it
+      // gets the same BackupError and the same sentence on screen.
+      throw new BackupError('wrong-code');
+    }
+    await db.execAsync(openSql);
 
     let meta: {
       format: string;
@@ -217,7 +232,14 @@ export async function inspectBackup(uri: string, code: string): Promise<BackupPr
     if (working.exists) working.delete();
     throw error;
   } finally {
-    await db?.closeAsync();
+    // Same reasoning as the DETACH guard in createBackup(): a failed close
+    // must not replace whatever error (a wrong recovery code, most often)
+    // the block above was already throwing.
+    try {
+      await db?.closeAsync();
+    } catch {
+      // Best-effort only.
+    }
   }
 }
 
