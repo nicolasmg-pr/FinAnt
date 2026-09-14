@@ -13,7 +13,10 @@ which owns expo-sqlite, expo-file-system and expo-sharing.
 ## The file
 
 A backup is an ordinary SQLCipher database, produced by SQLCipher's own
-`sqlcipher_export()` and named `finant-backup-YYYY-MM-DD.finantbackup`. It is keyed
+`sqlcipher_export()` and named `finant-backup-YYYY-MM-DD.finantbackup`, dated in
+the owner's own time zone rather than UTC — a backup taken at 00:30 in Madrid
+belongs to the day the phone's clock showed, not to the one that had just ended
+in London. It is keyed
 with the recovery code in **passphrase form** — `PRAGMA key = 'CODE'` — rather than
 the raw-hex form the live database uses (`PRAGMA key = "x'<hex>'"`, see
 `docs/security-model.md`). Passphrase form makes SQLCipher run its own key
@@ -103,6 +106,18 @@ transcribed wrong — mistaken for `1` or `0` — and `U` is omitted so a run of
 characters can never spell something unfortunate. The result is five groups of
 five, hyphen-separated: `K7F2M-9XQ4B-...`.
 
+**The code exists before the file does.** `beginBackup()` mints the code and
+checks the device can share at all; nothing is written anywhere. The screen shows
+the code, the owner ticks "I have saved this code", and only that press calls
+`createBackup(code)`, which creates the file and hands it to the share sheet.
+The order is the whole point: with the share first and the code shown afterwards,
+anything that threw in between — the `lastBackupAt` write, a share-sheet
+rejection after the owner had already chosen "Save to Files", the process being
+killed — left a real backup in the owner's cloud storage whose only key had never
+been displayed, and a backup nobody can open is worse than no backup, because it
+looks like one. The confirmation gating the share is what the design called for
+from the start.
+
 **The code is generated, never chosen.** An owner-picked passphrase is the usual
 design for an encrypted export, and it was rejected here on purpose: the file may
 end up in cloud storage, and a human-chosen secret is the weak link in that
@@ -139,8 +154,8 @@ only fill in what the phone doesn't already have. That is what makes restoring
 idempotent — running it a second time adds nothing the first run didn't — which
 matters for a feature whose whole purpose is to be trusted under stress.
 
-The entirety of that policy is one statement, run once per table in the manifest
-below:
+Almost the entirety of that policy is one statement, run once per table in the
+manifest below:
 
 ```sql
 INSERT OR IGNORE INTO main.<table> SELECT * FROM backup.<table>;
@@ -159,6 +174,66 @@ already needed; it does not add a second one.
 `apps/mobile/src/services/backup.ts` runs it once per table, inside the
 transaction described below — which is also where the foreign-key handling this
 one statement depends on lives.
+
+### The one thing the device does not win: a row it seeded to itself
+
+"Device wins" is about the owner's work. A row the app wrote to _itself_ seconds
+earlier is not the owner's work, and treating it as authoritative is a misreading
+of the rule rather than an application of it.
+
+This is not a corner case; it is the disaster the feature exists for.
+`database.ts`'s `open()` runs `syncBuiltInCategories()` and `syncDefaultRules()`
+on every launch, so a fresh install holds every shipped category and every
+shipped rule before a restore can start. `INSERT OR IGNORE` alone then skipped
+all of them, and an owner who had renamed "Groceries", recoloured it, archived a
+category and disabled two rules got their movements back under the shipped names
+and colours, with the archived category visible again and every rule edit gone —
+permanently, because `syncBuiltInCategories()` only ever writes shipped values
+back.
+
+So where the live row is still provably in its seeded state, the backup wins;
+where the owner has touched it, the device still does. Both statements are built
+in `packages/core/src/backup.ts` and run inside the same transaction as the
+merge, after the inserts:
+
+- **`categories`** — `reseedPristineCategoriesSql()` overwrites a live row from
+  the backup where `built_in = 1 AND customised = 0 AND archived = 0`.
+  `customised` is the flag `editCategory()` sets and `syncBuiltInCategories()`
+  already reads for exactly this question. `built_in` keeps a category the owner
+  created out of it. `archived` is there because archiving is the one edit that
+  leaves `customised` at 0 — `archiveCategory()` writes nothing else — so a
+  hidden category would otherwise look pristine and be unhidden by an older
+  backup. Naming it also settles `archived` in the other direction on purpose: a
+  row that _is_ pristine takes the backup's `archived` along with everything
+  else, which is what brings back a category the owner had archived on the phone
+  they lost.
+- **`rules`** — there is no `customised` column here, so "untouched" is
+  established by comparison instead. `pristineShippedRuleIds()` calls a rule
+  seeded-and-untouched only when its live row still equals this release's
+  `DEFAULT_RULES` entry in category, priority, `enabled`, `learned` and the exact
+  `match_json` string the seeder wrote. A rule the owner disabled, re-pointed,
+  reprioritised or wrote themselves fails that comparison and keeps the phone's
+  version. `created_at` is excluded: a seeded row carries the moment this phone
+  first launched, which differs from the backup's for every rule and says nothing
+  about whether anything was edited. The comparison errs the safe way — a match
+  string that differs only in key order reads as edited, and an edited rule is
+  one the device keeps.
+- **`rules`, deleted ones** — a shipped rule the owner deleted leaves a tombstone
+  in the `retiredShippedRules` setting, which only arrives _with_ the restore,
+  by which time the launch-time install has already put the rule back. The merge
+  reads that list straight out of the attached file and deletes the rules it
+  names, but only those still in their seeded state. A rule the owner has since
+  edited is theirs, whatever an older tombstone says.
+
+An `UPDATE` from the attached file, never a `DELETE` and re-`INSERT`: deleting a
+category would take the owner's own rows with it — `transactions.category_id` is
+`ON DELETE SET NULL`, `rules` and `budgets` cascade — and no restore may ever
+cost a categorisation. The column list comes from the live `PRAGMA table_info`
+that `assertColumnsMatch` has just proved identical to the backup's, so a column
+added by a future migration is carried across without anyone editing a list.
+
+Restoring twice is still a no-op the second time: the first run has already made
+the live row equal to the backup's, so the same `UPDATE` writes the same values.
 
 ## Restore
 
@@ -261,11 +336,55 @@ corrupts quietly without saying so.
 
 ### Cleanup
 
-The working copy is deleted on every path out of a restore: immediately, if
-`inspectBackup` itself throws before returning a preview; by `discardBackup`, if
-the owner reviews the preview and backs out without merging; and by
-`mergeBackup`'s own `finally`, whether the merge commits or rolls back. No path
-leaves it behind in cache.
+Three files are involved in a restore, and each one has an owner.
+
+The **working copy** `inspectBackup` stages is deleted on every path out:
+immediately, if `inspectBackup` throws before returning a preview; by
+`discardBackup`, if the owner reviews the preview and backs out; and by
+`mergeBackup`'s own `finally`, whether the merge commits or rolls back.
+
+The **picker's copy** is the one that used to be missed. `app/backup.tsx` asks
+`DocumentPicker` for `copyToCacheDirectory: true`, so the file the owner chooses
+is duplicated into cache before FinAnt sees a URI at all, and `inspectBackup`
+copies _that_ into its working file. `discardPickedBackup()` drops it when the
+pick is replaced and when a restore finishes, through the same `isOwnCopy` check
+`share-intake-files.ts` uses: only a copy the app itself caused to exist may be
+deleted, and a file the owner opened in place is never touched.
+
+The **exported file** is deleted as soon as the share sheet resolves — on iOS.
+On Android it is deliberately left behind; see the limitation below.
+
+Every one of those deletes is guarded. `File.delete()` throws on a file that is
+already gone or that the OS will not unlink, and these run in `finally` blocks
+that sit around work which has already committed or already been shared: an
+unguarded throw there would reject a restore that succeeded and tell the owner
+nothing was changed about the database that had just changed. Cleanup failing is
+never allowed to become the caller's failure.
+
+What that leaves behind is swept at the next launch. `sweepBackupCache()`, run
+from `app/_layout.tsx` beside `sweepShareIntakeCache()`, removes anything in the
+cache directory matching `finant-backup-*.finantbackup` or
+`restore-*.finantbackup` — the Android export above, and whatever a process kill
+mid-export or mid-restore stranded under a name no code path will ever say again.
+
+### Known limitation: Android deletes the shared file at the next launch, not at the share
+
+`Sharing.shareAsync` resolves when the Android chooser returns, not when the app
+the owner picked has finished reading. Android hands the receiver a `content://`
+stream it opens on its own schedule, so deleting the file the moment the promise
+resolves could give Drive, Gmail or Nextcloud a truncated read — or nothing at
+all — while `lastBackupAt` recorded a success. There is no completion callback to
+wait for, and no way to ask the receiver whether it is done.
+
+So on Android the file stays in the app's own cache until `sweepBackupCache()`
+removes it at the next launch. The cost is stated rather than hidden: for that
+window, an encrypted copy of the whole database sits in cache instead of being
+gone within seconds. It is the app's private cache directory and the file is
+SQLCipher-encrypted under the recovery code, which is the same protection it has
+wherever the owner saves it — and a backup that arrives at the receiving app
+intact is the entire point of the feature. iOS has no such gap:
+`UIActivityViewController` reads the item while the sheet is up, so the file is
+deleted the moment the sheet closes.
 
 ## Table manifest
 
@@ -275,9 +394,25 @@ exclusion_rules, transactions, assets, investment_legs, quotes,
 price_history, notification_sources, notification_routes, settings
 ```
 
-`settings` merges the same way as every other table, which is why the phone's own
-locale, currency and app-lock choice survive a restore instead of being
-overwritten by whatever the backup's phone had set.
+`settings` merges the same way as every other table — `INSERT OR IGNORE`, no
+seeded-row exception — which is why the phone's own locale, currency and app-lock
+choice survive a restore instead of being overwritten by whatever the backup's
+phone had set.
+
+That is deliberate, and it was re-checked against the fresh-install problem
+above, because a settings row the app wrote to itself would deserve the same
+treatment as a seeded category. It writes none. Nothing in `open()` seeds
+`settings`: `locale` is written only by `setLocale()`, when the owner picks a
+language; there is no writer for `currency` at all; `appLock`,
+`lastImportAccount`, `lastBackupAt` and the assistant's rows are all written by
+an owner action. So every row present on a fresh install before a restore is one
+the owner deliberately created on _this_ phone, minutes ago, and device-wins is
+exactly right for it — the language they just chose should not be replaced by the
+language their old phone was in.
+
+The one settings row the merge does act on is `retiredShippedRules`, and not by
+overwriting it: it is read out of the backup to find shipped rules the owner had
+deleted, as described under the merge rule above.
 
 ## What a merge cannot represent
 

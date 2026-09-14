@@ -217,7 +217,15 @@ Not defended against:
   protecting a backup, and FinAnt has no way to notice where the owner saves it.
   A code written next to the file — the same cloud folder, the same note, the
   same photo of a sticky note — turns two things an attacker would otherwise have
-  to find separately into one thing they only have to find once.
+  to find separately into one thing they only have to find once. The copy button
+  on the recovery-code sheet is one route into exactly that: `Clipboard.setStringAsync`
+  puts the code on the system pasteboard with no expiry and no restriction on who
+  reads it, and on iOS Universal Clipboard then syncs it to the owner's nearby
+  Mac and iPad, where it sits until something else is copied. The button stays —
+  a twenty-five character code typed by hand into a password manager is a code
+  that gets transcribed wrong, and the realistic alternative is the owner
+  photographing the screen — but pasting it anywhere that syncs or persists puts
+  the code and the file one search apart.
 
 ## Rules for contributors
 
