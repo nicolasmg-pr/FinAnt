@@ -21,6 +21,7 @@
     "expo-localization": "~57.0.1",
     "expo-router": "~57.0.17",
     "expo-secure-store": "~57.0.2",
+    "expo-sharing": "~57.0.19",
     "expo-sqlite": "~57.0.2",
     "expo-status-bar": "~57.0.1",
     "i18next": "^26.4.0",
