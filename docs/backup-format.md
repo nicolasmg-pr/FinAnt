@@ -36,10 +36,10 @@ CREATE TABLE backup_meta (
 `backup_meta` is the only way to tell a FinAnt backup from any other file. A
 SQLCipher database is indistinguishable from random bytes until something opens it
 with the right key, so there is no header to sniff and no extension worth trusting
-— identification happens after decryption, never before. What a reader should do
-with a file that opens under the typed code but carries no `backup_meta` table is
-restore's job, not a property of the file format itself — see "Restore: designed,
-not yet built" below for where that is headed.
+— identification happens after decryption, never before. Telling a wrong recovery
+code apart from a file that opens but isn't a FinAnt backup at all is restore's
+job, not a property of the file format itself — see "Restore" below for how
+`inspectBackup` does it.
 
 ## The `sqlcipher_export()` / `user_version` gotcha
 
@@ -155,37 +155,114 @@ indexes that already guard against importing the same statement row twice —
 import_hash)`. A restore therefore reuses exactly the dedupe machinery an import
 already needed; it does not add a second one.
 
-`mergeTableSql()` and the statement above are real, present in
-`packages/core/src/backup.ts` today and covered by
-`packages/core/tests/backup.test.ts`. What calls it is not: there is no
-`restoreBackup()` in `apps/mobile/src/services/backup.ts` and no screen that
-reads a picked file, asks for a code, or writes anything back into the live
-database. The rest of this section is what that call is designed to do once it
-exists, not a description of code that runs today.
+`mergeTableSql()` builds that exact statement, and `mergeBackup()` in
+`apps/mobile/src/services/backup.ts` runs it once per table, inside the
+transaction described below — which is also where the foreign-key handling this
+one statement depends on lives.
 
-### Restore: designed, not yet built
+## Restore
 
-Everything below is the shape restore is designed to take — from
-`docs/superpowers/specs/2026-09-14-backup-restore-design.md` — kept here so the
-reasoning is on record and this document does not have to be reconstructed from
-scratch once the orchestration lands. None of it should be read as describing
-what the app does today; it will be rewritten to state it as current fact once
-verified against real code.
+Restoring happens in two steps the owner can see the seam between:
+`inspectBackup(uri, code)` builds a preview with nothing written anywhere, and
+`mergeBackup(preview, code)` — called only once the owner confirms that preview —
+does the writing. `discardBackup(preview)` is the third: it deletes the working
+copy `inspectBackup` created, and it runs whether the owner backs out after
+seeing the preview or the merge finishes.
 
-The design runs the merge in one transaction with `PRAGMA defer_foreign_keys =
-ON`, table by table in manifest order — foreign-key parents before children.
-Deferring enforcement to commit, rather than turning it off, is meant to make a
-single orphaned row anywhere in the backup roll back the whole restore cleanly
-instead of leaving the database half-merged. That is only safe once both sides of
-every table have the same columns, which the design has restore assert rather
-than assume: `PRAGMA table_info` compared for `main` and `backup` on every
-manifest table before the merge starts, which is what would make `SELECT *` — a
-positional copy — safe to use here.
+### The preview writes nothing to the live database
 
-The same design has restore treat a file that opens under the typed code but
-carries no `backup_meta` table as not a FinAnt backup at all — distinct from a
-wrong code, which fails before `backup_meta` is ever reached, and distinct from a
-`schema_version` newer than this build knows how to read.
+`inspectBackup` copies the picked file into a working copy in cache and opens
+_that_ on its own connection — the live database is never opened by this
+function at all. Migrating the working copy forward (below) does write to that
+disposable copy, but nothing about the live database changes until
+`mergeBackup` runs afterwards, on the owner's explicit confirmation. That
+ordering is the point: a restore that wrote before showing what it was about to
+write would be a leap, and this is the one feature whose entire job is to be
+trustworthy under stress.
+
+### Telling a wrong code from a file that is not a backup
+
+A code that fails the recovery-code pattern is rejected before it reaches
+SQLCipher at all, and is reported the same way a code that reaches SQLCipher and
+fails to decrypt is: from the owner's side, both mean "you typed it wrong."
+
+Past that, SQLCipher cannot tell the two failure modes apart at the byte level.
+`PRAGMA key` itself never fails, wrong code or right one — it accepts anything
+unconditionally, and the wrongness only shows up on the first real read
+afterwards. `inspectBackup`'s first read is the `SELECT` against `backup_meta`,
+so that is where both a wrong code and a right code on a non-backup file surface
+identically, as one thrown error. Telling them apart costs a second, cheaper
+probe on the same connection — `SELECT count(*) FROM sqlite_master` — run only
+when the first query fails. If the probe also fails, nothing on the connection is
+readable, which only happens with the wrong key, so that is reported as _wrong
+code_. If the probe succeeds, the connection is readable and the key was
+therefore right; the file just isn't a FinAnt backup, so that is reported as
+_not a FinAnt backup_, never as corruption. A `backup_meta` row that reads back
+fine but names a `format` other than `finant-backup-1` — or no format at all —
+gets that same _not a backup_ answer, since the table existing is not the same
+claim as the file being one of these.
+
+### Migrating forward, refusing to go back
+
+Once `backup_meta` reads back clean, its `schema_version` decides what happens
+next. Newer than this build's `LATEST_VERSION` is refused outright — there is no
+migration a build could run backwards, so that is reported as made by a newer
+FinAnt. Older is brought forward by running the same `MIGRATIONS` array from
+`src/db/schema.ts` against the working copy's own connection, one migration at a
+time, each in its own transaction, exactly as it runs against the live database
+on first launch after an update — there is no second migration list for restore
+to drift out of sync with.
+
+### `assertColumnsMatch`: the precondition that makes `SELECT *` safe
+
+`INSERT OR IGNORE ... SELECT *` copies column 1 into column 1 and column 2 into
+column 2; it has no idea one is called `amount` and the other `id`. That is only
+safe once both sides agree on column order and count, and `assertColumnsMatch` is
+what turns "the backup was just migrated to this schema, so it should agree"
+from an assumption into a checked fact: for every manifest table, it reads
+`PRAGMA main.table_info` and `PRAGMA backup.table_info`, joins each side's
+ordered column names into one string, and refuses the whole restore — named
+_schema mismatch_ — the moment the two strings differ. It also refuses when both
+strings come back **empty**: two empty strings are equal, so without that
+explicit check a table missing on both sides — a typo in the manifest, or an
+attach that silently didn't happen — would pass the "they match" test by
+trivially agreeing on nothing.
+
+### One transaction, and why the connection needs two pragmas, not one
+
+The merge runs table by table, in manifest order, inside one transaction, and
+`mergeTableSql`'s `INSERT OR IGNORE` is the only statement any table gets. If a
+single row anywhere in the manifest fails — an orphaned foreign key is the
+realistic case — the whole transaction rolls back, every table included, not
+only the one that failed: nothing about a restore applies partially. One bad row
+fails the entire restore, on purpose, rather than leaving some tables merged and
+others not.
+
+That guarantee depends on foreign-key enforcement actually running, which took
+two pragmas rather than the one the design called for. Foreign keys default
+**off** on any new SQLite connection, and `apps/mobile/src/db/database.ts` turns
+them on only for the connection the rest of the app already holds open.
+`mergeBackup` opens its own connection — deliberately, for the same reason
+`createBackup` does: sharing the app's connection leaves `DETACH` failing with
+`database is locked` — and a fresh connection inherits none of that. `PRAGMA
+defer_foreign_keys = ON` alone, which is as far as the design went, would
+therefore have been a silent no-op: with enforcement itself off there is nothing
+to defer, and an orphaned row would have inserted quietly instead of rolling
+anything back. The implementation runs `PRAGMA foreign_keys = ON;` and then
+`PRAGMA defer_foreign_keys = ON;`, in that order, before the transaction opens —
+neither pragma can be changed once a transaction is under way, and SQLite clears
+`defer_foreign_keys` automatically at every commit, so there is exactly one
+window where either statement can run. It reads like a stray line of setup; it
+is actually the difference between a restore that fails safely and one that
+corrupts quietly without saying so.
+
+### Cleanup
+
+The working copy is deleted on every path out of a restore: immediately, if
+`inspectBackup` itself throws before returning a preview; by `discardBackup`, if
+the owner reviews the preview and backs out without merging; and by
+`mergeBackup`'s own `finally`, whether the merge commits or rolls back. No path
+leaves it behind in cache.
 
 ## Table manifest
 
