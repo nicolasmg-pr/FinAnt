@@ -14,6 +14,7 @@ import { Sheet } from '../src/components/ui/Sheet';
 import { Touchable } from '../src/components/ui/Touchable';
 import {
   BackupError,
+  beginBackup,
   createBackup,
   discardBackup,
   inspectBackup,
@@ -30,6 +31,7 @@ export default function BackupScreen() {
 
   const [lastBackup, setLastBackup] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [code, setCode] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -91,19 +93,42 @@ export default function BackupScreen() {
       day: 'numeric',
     });
 
+  // Step one of two, and it writes nothing: it mints the code and shows it.
+  // The file is not created until `share()` below, which the sheet's own
+  // confirmation gates — so a code the owner has not saved can never be the
+  // key to a file that already exists somewhere they cannot take it back from.
   const create = async () => {
     setBusy(true);
     setError(null);
     try {
-      const result = await createBackup();
-      setCode(result.code);
+      const minted = await beginBackup();
       setSaved(false);
       setCopied(false);
-      setLastBackup(result.createdAt);
+      setCode(minted);
     } catch (thrown) {
       setError(message(thrown));
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Step two: only reachable once the owner has ticked "I have saved this
+  // code". The code is dropped from state either way — it is shown once and
+  // never stored — and on failure nothing has been shared, so there is no file
+  // anywhere that the discarded code was the key to.
+  const share = async () => {
+    if (!code) return;
+    setSharing(true);
+    setError(null);
+    try {
+      const { createdAt } = await createBackup(code);
+      setCode(null);
+      setLastBackup(createdAt);
+    } catch (thrown) {
+      setCode(null);
+      setError(message(thrown));
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -265,13 +290,13 @@ export default function BackupScreen() {
 
       <Sheet
         visible={code !== null}
-        // Backdrop tap, hardware back and the drag-down gesture all resolve
-        // to this same handler. The code is shown exactly once and never
-        // stored, so a dismissal the checkbox hasn't cleared would lose it
-        // for good while the backup file it opens keeps existing — silently,
-        // until the day it is needed and cannot be opened.
+        // Backdrop tap, hardware back and the drag-down gesture all resolve to
+        // this same handler. Dismissing now abandons the export before any file
+        // exists — the code was the key to nothing — so the only dismissal that
+        // has to be refused is one arriving mid-share, which would leave the
+        // owner holding a file whose code just left the screen.
         onDismiss={() => {
-          if (saved) setCode(null);
+          if (!sharing) setCode(null);
         }}
         title={t('backup.codeTitle')}
       >
@@ -293,13 +318,23 @@ export default function BackupScreen() {
           <Text style={[type.label, { color: theme.textMuted }]}>{t('backup.codeCopied')}</Text>
         ) : null}
         <Text style={[type.body, { color: theme.textMuted }]}>{t('backup.codeBody')}</Text>
-        <Touchable onPress={() => setSaved((was) => !was)} accessibilityRole="checkbox">
+        <Touchable
+          onPress={() => {
+            if (!sharing) setSaved((was) => !was);
+          }}
+          accessibilityRole="checkbox"
+        >
           <Text style={[type.body, { color: saved ? theme.accent : theme.textMuted }]}>
             {saved ? '☑ ' : '☐ '}
             {t('backup.codeConfirm')}
           </Text>
         </Touchable>
-        <Button label={t('common.done')} disabled={!saved} onPress={() => setCode(null)} />
+        <Button
+          label={sharing ? t('backup.creating') : t('backup.share')}
+          loading={sharing}
+          disabled={!saved}
+          onPress={() => void share()}
+        />
       </Sheet>
 
       <Sheet visible={preview !== null} onDismiss={closePreview} title={t('backup.previewTitle')}>
