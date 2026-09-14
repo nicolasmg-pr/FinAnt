@@ -1,33 +1,26 @@
 import Feather from '@expo/vector-icons/Feather';
-import { Tabs } from 'expo-router';
+import { TopTabs } from 'expo-router/js-top-tabs';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View, type ColorValue } from 'react-native';
 import { AskOverlay } from '../../src/components/AskOverlay';
-import { radius, spacing, type, useElevation, useTheme } from '../../src/design';
+import { TabBar, type TabBarProps } from '../../src/components/TabBar';
+import { useTheme } from '../../src/design';
 
 /** The active tab's icon sits in a filled pill, so the current tab reads from
- * shape as well as from colour. */
-function TabIcon({
-  name,
-  color,
-  size,
-  focused,
-}: {
-  name: keyof typeof Feather.glyphMap;
-  // The navigator hands back a ColorValue, not a string.
-  color: ColorValue;
-  size: number;
-  focused: boolean;
-}) {
-  const theme = useTheme();
-  return (
-    <View style={[styles.icon, focused ? { backgroundColor: theme.accentSoft } : null]}>
-      <Feather name={name} color={color as string} size={size} />
-    </View>
-  );
+ * shape as well as from colour. The pill itself is drawn by `TabBar`; this
+ * only supplies the glyph. */
+function TabIcon({ name, color }: { name: keyof typeof Feather.glyphMap; color: ColorValue }) {
+  return <Feather name={name} color={color as string} size={22} />;
 }
 
 /**
+ * The five tabs are a swipeable pager: a horizontal drag moves to the
+ * neighbouring tab and follows the finger, so dashboard, movements, banks,
+ * budgets and settings are one continuous surface. That is why this is
+ * `TopTabs` — expo-router's material top-tab navigator, the only one of its
+ * navigators built on a pager — with its bar moved to the bottom and
+ * rewritten (see `TabBar`). The declaration order below is the swipe order.
+ *
  * Every tab screen renders its own large title in its scroll body, so none of
  * them keeps a navigator header: a bar repeating the title costs a fifth of
  * the screen and scrolls with nothing.
@@ -35,58 +28,64 @@ function TabIcon({
 export default function TabsLayout() {
   const theme = useTheme();
   const { t } = useTranslation();
-  const elevation = useElevation(2);
 
   return (
     <View style={styles.root}>
-      <Tabs
+      <TopTabs
+        tabBarPosition="bottom"
+        tabBar={(props: TabBarProps) => <TabBar {...props} />}
         screenOptions={{
-          headerShown: false,
+          swipeEnabled: true,
           sceneStyle: { backgroundColor: theme.background },
-          tabBarActiveTintColor: theme.accent,
-          tabBarInactiveTintColor: theme.textMuted,
-          // The caption role's tracking is too wide for a fifth of the bar:
-          // it truncated "Movimientos" and "Presupuestos".
-          tabBarLabelStyle: { ...type.caption, fontSize: 10, letterSpacing: 0 },
-          tabBarStyle: [styles.bar, { backgroundColor: theme.surface }, elevation],
+          // Five screens that each query the database would otherwise all
+          // mount at launch. The neighbour is preloaded instead, so the screen
+          // a swipe is heading for is already rendered when the finger lands.
+          lazy: true,
+          lazyPreloadDistance: 1,
         }}
       >
-        <Tabs.Screen
+        <TopTabs.Screen
           name="index"
           options={{
             title: t('nav.dashboard'),
-            tabBarIcon: (props) => <TabIcon name="pie-chart" {...props} />,
+            tabBarIcon: ({ color }: { color: ColorValue }) => (
+              <TabIcon name="pie-chart" color={color} />
+            ),
           }}
         />
-        <Tabs.Screen
+        <TopTabs.Screen
           name="transactions"
           options={{
             title: t('nav.transactions'),
-            tabBarIcon: (props) => <TabIcon name="list" {...props} />,
+            tabBarIcon: ({ color }: { color: ColorValue }) => <TabIcon name="list" color={color} />,
           }}
         />
-        <Tabs.Screen
+        <TopTabs.Screen
           name="banks"
           options={{
             title: t('nav.banks'),
-            tabBarIcon: (props) => <TabIcon name="home" {...props} />,
+            tabBarIcon: ({ color }: { color: ColorValue }) => <TabIcon name="home" color={color} />,
           }}
         />
-        <Tabs.Screen
+        <TopTabs.Screen
           name="budgets"
           options={{
             title: t('nav.budgets'),
-            tabBarIcon: (props) => <TabIcon name="target" {...props} />,
+            tabBarIcon: ({ color }: { color: ColorValue }) => (
+              <TabIcon name="target" color={color} />
+            ),
           }}
         />
-        <Tabs.Screen
+        <TopTabs.Screen
           name="settings"
           options={{
             title: t('nav.settings'),
-            tabBarIcon: (props) => <TabIcon name="settings" {...props} />,
+            tabBarIcon: ({ color }: { color: ColorValue }) => (
+              <TabIcon name="settings" color={color} />
+            ),
           }}
         />
-      </Tabs>
+      </TopTabs>
       {/* Above the navigator, so the bubble survives a tab change rather than
           remounting halfway through a drag. */}
       <AskOverlay />
@@ -96,12 +95,4 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  bar: { borderTopWidth: 0 },
-  icon: {
-    minWidth: 40,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 });
