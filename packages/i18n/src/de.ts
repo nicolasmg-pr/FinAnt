@@ -317,7 +317,7 @@ export const de: Translations = {
     enterCodeHint: 'Der Code, der beim Erstellen des Backups angezeigt wurde.',
     previewTitle: 'Dieses Backup',
     previewMade: 'Erstellt am {{date}} mit FinAnt {{version}}',
-    previewRows: '{{count}} Zeile',
+    previewRows_one: '{{count}} Zeile',
     previewRows_other: '{{count}} Zeilen',
     previewBody:
       'Die Wiederherstellung ergänzt, was auf deinem Telefon fehlt. Nichts, was schon da ist, wird geändert oder entfernt — du kannst sie also gefahrlos zweimal ausführen.',
@@ -325,7 +325,7 @@ export const de: Translations = {
     restoring: 'Wird wiederhergestellt…',
     doneTitle: 'Wiederhergestellt',
     doneNothing: 'Alles aus diesem Backup war schon vorhanden.',
-    doneAdded: '{{count}} Zeile hinzugefügt.',
+    doneAdded_one: '{{count}} Zeile hinzugefügt.',
     doneAdded_other: '{{count}} Zeilen hinzugefügt.',
     errorWrongCode: 'Dieser Wiederherstellungscode passt nicht zu dieser Datei.',
     errorNotABackup: 'Diese Datei ist kein FinAnt-Backup.',

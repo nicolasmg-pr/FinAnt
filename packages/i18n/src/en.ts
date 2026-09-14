@@ -314,7 +314,7 @@ export const en = {
     enterCodeHint: 'The code shown when the backup was made.',
     previewTitle: 'This backup',
     previewMade: 'Made {{date}} with FinAnt {{version}}',
-    previewRows: '{{count}} row',
+    previewRows_one: '{{count}} row',
     previewRows_other: '{{count}} rows',
     previewBody:
       'Restoring adds what your phone is missing. Nothing already here is changed or removed, so it is safe to run twice.',
@@ -322,7 +322,7 @@ export const en = {
     restoring: 'Restoring…',
     doneTitle: 'Restored',
     doneNothing: 'Everything in that backup was already here.',
-    doneAdded: '{{count}} row added.',
+    doneAdded_one: '{{count}} row added.',
     doneAdded_other: '{{count}} rows added.',
     errorWrongCode: 'That recovery code does not match this file.',
     errorNotABackup: 'That file is not a FinAnt backup.',
