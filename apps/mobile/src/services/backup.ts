@@ -52,8 +52,38 @@ export function posixPath(uri: string): string {
   return decodeURIComponent(uri.replace(/^file:\/\//, ''));
 }
 
+/**
+ * `finant-backup-YYYY-MM-DD.finantbackup`, dated in the owner's own time zone.
+ *
+ * `toISOString()` names the UTC day, which is the wrong day for half of every
+ * evening in CET: a backup taken at 00:30 on the 4th would be filed as the 3rd,
+ * and the owner looking for the file they made "last night" would find a date
+ * that never matched what their phone showed them.
+ */
 function backupFileName(now: Date): string {
-  return `finant-backup-${now.toISOString().slice(0, 10)}.finantbackup`;
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `finant-backup-${year}-${month}-${day}.finantbackup`;
+}
+
+/**
+ * Deletes a file the app itself put in cache, and never lets that failure
+ * become the caller's problem.
+ *
+ * Cleanup runs in `finally` blocks that sit around work which has already
+ * committed or already shared. `File.delete()` throws on a file that is
+ * already gone or that the OS will not unlink, and an unguarded throw there
+ * turns a restore that succeeded into "nothing was changed" on screen — a
+ * false statement about the owner's only copy. The same guarded shape as the
+ * DETACH cleanup below. Nothing is logged: the reason would carry the path.
+ */
+function discardCacheFile(file: File): void {
+  try {
+    if (file.exists) file.delete();
+  } catch {
+    // Best-effort. A copy left in cache is swept at the next launch.
+  }
 }
 
 /**
@@ -134,7 +164,7 @@ export async function createBackup(): Promise<{ code: string; createdAt: string 
     // The cache copy is encrypted, but it is also the owner's whole financial
     // history sitting in a directory the OS may hand to anything that asks for
     // free space. It has been shared by now; it has no reason to stay.
-    if (file.exists) file.delete();
+    discardCacheFile(file);
   }
 }
 
@@ -153,6 +183,12 @@ export type BackupPreview = {
    */
   readonly uri: string;
   readonly appVersion: string;
+  /**
+   * The schema version the file itself declares — what it was exported at, not
+   * what the working copy has since been migrated to. Reporting
+   * `LATEST_VERSION` here made the field say only "this build's version",
+   * which is a fact about the phone and tells a reader nothing about the file.
+   */
   readonly schemaVersion: number;
   readonly createdAt: string;
   readonly counts: Readonly<Record<string, number>>;
@@ -232,12 +268,12 @@ export async function inspectBackup(uri: string, code: string): Promise<BackupPr
       path: posixPath(working.uri),
       uri: working.uri,
       appVersion: meta.app_version,
-      schemaVersion: LATEST_VERSION,
+      schemaVersion: meta.schema_version,
       createdAt: meta.created_at,
       counts,
     };
   } catch (error) {
-    if (working.exists) working.delete();
+    discardCacheFile(working);
     throw error;
   } finally {
     // Same reasoning as the DETACH guard in createBackup(): a failed close
@@ -261,10 +297,17 @@ async function opensAtAll(db: SQLite.SQLiteDatabase): Promise<boolean> {
   }
 }
 
-/** Drops the working copy when the owner backs out of a preview. */
+/**
+ * Drops the working copy when the owner backs out of a preview, or once a
+ * merge is over.
+ *
+ * Never throws. It is called from `finally` blocks on both sides of a merge
+ * that has already committed, and a file that is already gone is the outcome
+ * this function wanted anyway.
+ */
 export async function discardBackup(preview: BackupPreview): Promise<void> {
-  const file = new File(preview.uri);
-  if (file.exists) file.delete();
+  discardCacheFile(new File(preview.uri));
+  return Promise.resolve();
 }
 
 /**
@@ -362,6 +405,11 @@ export async function mergeBackup(
     }
     return added;
   } finally {
+    // The merge has committed by the time this runs, so cleanup here cannot be
+    // allowed to fail the call: a throw would reject a restore that already
+    // succeeded, and the screen would tell the owner nothing was changed about
+    // the database that just changed. `discardBackup` swallows its own
+    // failure for that reason; the leftover is swept at the next launch.
     await discardBackup(preview);
   }
 }
