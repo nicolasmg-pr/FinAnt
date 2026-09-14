@@ -25,3 +25,9 @@ export const SETTING_ASSISTANT_ENABLED = 'assistantEnabled';
  * bubble the owner stops moving.
  */
 export const SETTING_ASSISTANT_BUBBLE_POSITION = 'assistantBubblePosition';
+/**
+ * When the last backup was written, ISO 8601. Shown on the backup screen so
+ * the owner can see at a glance how stale their safety net is — the only
+ * prompt this feature gives them, since it takes no backups on its own.
+ */
+export const SETTING_LAST_BACKUP_AT = 'lastBackupAt';

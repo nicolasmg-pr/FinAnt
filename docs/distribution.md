@@ -117,5 +117,17 @@ The two real routes, neither of which involves this repository:
   Requires enrolment, an app record, and either `eas.json` or an
   `xcodebuild` + `notarytool`/`altool` pipeline.
 
+Reinstalling over an expired free-Apple-ID signature deletes the app first, which
+destroys its database — per `security-model.md`, the database is the only copy.
+`docs/backup-format.md` is the answer: export before the 7 days run out, not after.
+
+The same hazard shows up moving the other direction, from a free personal team to
+a paid Apple Developer Program account, even without an uninstall in between. The
+Team ID changes with the account, the keychain entry the database's key lives
+under is scoped to the old Team ID, and the database is unreadable under the new
+signing identity even though the file is still sitting on disk untouched. Export a
+backup before making that switch, not after finding out the app can no longer open
+its own data.
+
 Deliberately not set up. Revisit when the app is worth 99 EUR a year to the
 owner, or when a 7-day reinstall becomes annoying enough to automate.

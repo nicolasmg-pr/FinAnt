@@ -11,7 +11,8 @@ import { destroyDatabaseKey, getOrCreateDatabaseKey } from '../security/keys';
 import { LATEST_VERSION, MIGRATIONS } from './schema';
 import { SETTING_RETIRED_SHIPPED_RULES } from './settings-keys';
 
-const DATABASE_NAME = 'finant.db';
+/** Exported because the backup service opens its own connection to this file. */
+export const DATABASE_NAME = 'finant.db';
 
 let instance: SQLite.SQLiteDatabase | null = null;
 let opening: Promise<SQLite.SQLiteDatabase> | null = null;
