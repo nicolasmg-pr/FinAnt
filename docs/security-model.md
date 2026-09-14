@@ -2,15 +2,27 @@
 
 ## What is stored, and where
 
-| Data                                        | Location                                                       | Protection                                                                                              |
-| ------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Movements, categories, rules, budgets       | `finant.db` in app storage                                     | SQLCipher, key from the device keychain                                                                 |
-| SQLCipher passphrase                        | iOS Keychain / Android Keystore                                | iOS `WHEN_UNLOCKED_THIS_DEVICE_ONLY`; Android non-exportable Keystore key, `allowBackup: false`         |
-| Notification allowlist (package names only) | Android `SharedPreferences` (`finant.capture`, key `packages`) | Not encrypted; holds no amount, narrative, account or IBAN — see "Notification capture (Android)" below |
+| Data                                        | Location                                                                                             | Protection                                                                                              |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Movements, categories, rules, budgets       | `finant.db` in app storage                                                                           | SQLCipher, key from the device keychain                                                                 |
+| SQLCipher passphrase                        | iOS Keychain / Android Keystore                                                                      | iOS `WHEN_UNLOCKED_THIS_DEVICE_ONLY`; Android non-exportable Keystore key, `allowBackup: false`         |
+| Notification allowlist (package names only) | Android `SharedPreferences` (`finant.capture`, key `packages`)                                       | Not encrypted; holds no amount, narrative, account or IBAN — see "Notification capture (Android)" below |
+| A backup file, once the owner creates one   | Wherever the owner puts it — iCloud Drive, AirDrop, a file manager, anywhere the share sheet reaches | SQLCipher, keyed by the recovery code alone — see below and `docs/backup-format.md`                     |
 
 The optional assistant model file also lives in app storage, unencrypted. It is
 a public file of model weights containing nothing about the owner, and SQLCipher
 is for the ledger.
+
+A backup file is the one exception to every guarantee above it in that table.
+`WHEN_UNLOCKED_THIS_DEVICE_ONLY`, `allowBackup: false` and the iCloud exclusion are
+properties of the live database and the keychain entry that unlocks it — they say
+nothing about a copy the owner deliberately asked the app to write and hand to the
+share sheet. None of the three reach a backup file: it is free to sit in iCloud
+Drive, an email to the owner's own address, a USB stick, wherever it ends up, and
+the recovery code is the only thing standing between that file and whoever finds
+it. That is not an oversight; it is what "portable copy" has to mean for a file
+that must open on a different phone with no keychain of its own to read. See
+`docs/backup-format.md` for the file format and exactly what the code protects.
 
 There are no API credentials of any kind: the app talks to no bank, no
 aggregator and no FinAnt server. A movement enters the database in one of
@@ -201,6 +213,11 @@ Not defended against:
   can already read the app's private storage learns which banks the owner
   holds accounts with, and nothing else — no amount, narrative, account or
   IBAN is stored there.
+- A recovery code stored beside the file it unlocks. The code is the only thing
+  protecting a backup, and FinAnt has no way to notice where the owner saves it.
+  A code written next to the file — the same cloud folder, the same note, the
+  same photo of a sticky note — turns two things an attacker would otherwise have
+  to find separately into one thing they only have to find once.
 
 ## Rules for contributors
 
