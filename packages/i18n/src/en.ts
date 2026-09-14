@@ -324,7 +324,8 @@ export const en = {
     doneNothing: 'Everything in that backup was already here.',
     doneAdded_one: '{{count}} row added.',
     doneAdded_other: '{{count}} rows added.',
-    errorWrongCode: 'That recovery code does not match this file.',
+    errorWrongCode:
+      'That recovery code does not match this file. If you are sure the code is right, the file may be damaged or incomplete.',
     errorNotABackup: 'That file is not a FinAnt backup.',
     errorTooNew: 'That backup was made by a newer version of FinAnt. Update the app and try again.',
     errorSchemaMismatch: 'That backup does not match this version of FinAnt. Nothing was changed.',

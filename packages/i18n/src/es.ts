@@ -328,7 +328,8 @@ export const es: Translations = {
     doneNothing: 'Todo lo de esa copia ya estaba aquí.',
     doneAdded_one: '{{count}} fila añadida.',
     doneAdded_other: '{{count}} filas añadidas.',
-    errorWrongCode: 'Ese código de recuperación no corresponde a este archivo.',
+    errorWrongCode:
+      'Ese código de recuperación no corresponde a este archivo. Si el código es correcto, el archivo podría estar dañado o incompleto.',
     errorNotABackup: 'Ese archivo no es una copia de seguridad de FinAnt.',
     errorTooNew:
       'Esa copia de seguridad se hizo con una versión de FinAnt más reciente. Actualiza la aplicación e inténtalo de nuevo.',

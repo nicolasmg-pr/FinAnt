@@ -327,7 +327,8 @@ export const de: Translations = {
     doneNothing: 'Alles aus diesem Backup war schon vorhanden.',
     doneAdded_one: '{{count}} Zeile hinzugefügt.',
     doneAdded_other: '{{count}} Zeilen hinzugefügt.',
-    errorWrongCode: 'Dieser Wiederherstellungscode passt nicht zu dieser Datei.',
+    errorWrongCode:
+      'Dieser Wiederherstellungscode passt nicht zu dieser Datei. Wenn du sicher bist, dass der Code stimmt, ist die Datei vielleicht beschädigt oder unvollständig.',
     errorNotABackup: 'Diese Datei ist kein FinAnt-Backup.',
     errorTooNew:
       'Dieses Backup wurde mit einer neueren Version von FinAnt erstellt. Aktualisiere die App und versuch es erneut.',

@@ -194,8 +194,11 @@ so that is where both a wrong code and a right code on a non-backup file surface
 identically, as one thrown error. Telling them apart costs a second, cheaper
 probe on the same connection — `SELECT count(*) FROM sqlite_master` — run only
 when the first query fails. If the probe also fails, nothing on the connection is
-readable, which only happens with the wrong key, so that is reported as _wrong
-code_. If the probe succeeds, the connection is readable and the key was
+readable — which happens with a wrong key, but just as well with a file that is
+corrupt, truncated, or was never fully downloaded, and the two are
+indistinguishable from here. That is reported as _wrong code_, but the message
+itself names both possibilities, since there is no way to tell which one
+actually happened. If the probe succeeds, the connection is readable and the key was
 therefore right; the file just isn't a FinAnt backup, so that is reported as
 _not a FinAnt backup_, never as corruption. A `backup_meta` row that reads back
 fine but names a `format` other than `finant-backup-1` — or no format at all —
