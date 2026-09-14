@@ -317,7 +317,7 @@ export const en = {
     previewRows_one: '{{count}} row',
     previewRows_other: '{{count}} rows',
     previewBody:
-      'Restoring adds what your phone is missing. Nothing already here is changed or removed, so it is safe to run twice.',
+      'Restoring adds what your phone is missing, and puts your own names, colours and rules back over the ones this phone set up by itself. Nothing you have changed here is touched, so it is safe to run twice.',
     confirmRestore: 'Restore',
     restoring: 'Restoring…',
     doneTitle: 'Restored',

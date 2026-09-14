@@ -321,7 +321,7 @@ export const es: Translations = {
     previewRows_one: '{{count}} fila',
     previewRows_other: '{{count}} filas',
     previewBody:
-      'Restaurar añade lo que le falta a tu teléfono. Nada de lo que ya hay aquí cambia ni se elimina, así que es seguro hacerlo dos veces.',
+      'Restaurar añade lo que le falta a tu teléfono y devuelve tus propios nombres, colores y reglas sobre los que este teléfono creó por su cuenta. Nada de lo que hayas cambiado aquí se toca, así que es seguro hacerlo dos veces.',
     confirmRestore: 'Restaurar',
     restoring: 'Restaurando…',
     doneTitle: 'Restaurado',

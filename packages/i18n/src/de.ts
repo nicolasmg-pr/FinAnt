@@ -320,7 +320,7 @@ export const de: Translations = {
     previewRows_one: '{{count}} Zeile',
     previewRows_other: '{{count}} Zeilen',
     previewBody:
-      'Die Wiederherstellung ergänzt, was auf deinem Telefon fehlt. Nichts, was schon da ist, wird geändert oder entfernt — du kannst sie also gefahrlos zweimal ausführen.',
+      'Die Wiederherstellung ergänzt, was auf deinem Telefon fehlt, und legt deine eigenen Namen, Farben und Regeln wieder über die, die dieses Telefon selbst angelegt hat. Was du hier geändert hast, bleibt unberührt — du kannst sie also gefahrlos zweimal ausführen.',
     confirmRestore: 'Wiederherstellen',
     restoring: 'Wird wiederhergestellt…',
     doneTitle: 'Wiederhergestellt',

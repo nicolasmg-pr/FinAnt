@@ -8,18 +8,26 @@ import {
   BACKUP_META_TABLE,
   BACKUP_TABLES,
   createMetaTableSql,
+  DEFAULT_RULES,
+  deleteRetiredShippedRulesSql,
   detachBackupSql,
   EXCLUDED_TABLES,
   exportBackupSql,
   formatRecoveryCode,
   mergeTableSql,
   openBackupSql,
+  parseRetiredShippedRules,
+  pristineShippedRuleIds,
+  reseedPristineCategoriesSql,
+  reseedPristineRulesSql,
+  type StoredRuleRow,
 } from '@finant/core';
 import * as SQLite from 'expo-sqlite';
 import { DATABASE_NAME } from '../db/database';
 import { getOrCreateDatabaseKey } from '../security/keys';
 import { LATEST_VERSION, MIGRATIONS } from '../db/schema';
 import { SETTING_LAST_BACKUP_AT, writeSetting } from '../db/settings-repo';
+import { SETTING_RETIRED_SHIPPED_RULES } from '../db/settings-keys';
 
 export type BackupErrorCode =
   'wrong-code' | 'not-a-backup' | 'too-new' | 'schema-mismatch' | 'sharing-unavailable';
@@ -289,7 +297,16 @@ export async function mergeBackup(
       await db.execAsync(attachBackupSql(preview.path, code));
       attached = true;
 
-      await assertColumnsMatch(db);
+      const columns = await assertColumnsMatch(db);
+      // Both reads happen before the transaction opens, and both read the
+      // *live* side: which shipped rules this phone is still holding exactly
+      // as it seeded them, and which ones the backup's phone had deleted.
+      // Neither is a decision the merge can make from inside the loop, since
+      // the loop's own inserts would change the answer.
+      const pristineRules = pristineShippedRuleIds(DEFAULT_RULES, await liveRules(db));
+      const retiredRules = (await retiredShippedRulesFromBackup(db)).filter((id) =>
+        pristineRules.includes(id),
+      );
       // foreign_keys defaults OFF on a fresh connection — database.ts turns it
       // on for the app's own connection, once, and this is a different
       // connection entirely. defer_foreign_keys only changes *when* a foreign
@@ -305,6 +322,28 @@ export async function mergeBackup(
           const before = await countRows(db, `main.${table}`);
           await db.execAsync(mergeTableSql(table));
           added[table] = (await countRows(db, `main.${table}`)) - before;
+        }
+
+        // `INSERT OR IGNORE` above skipped every row whose id this phone
+        // already holds — which, on the fresh install a restore matters most
+        // on, is every shipped category and every shipped rule, seeded by
+        // `open()` before this screen could exist. Those rows are the app's
+        // own work, not the owner's, so the backup's version replaces them
+        // here. A row the owner has touched is excluded by the statements
+        // themselves and keeps the phone's version, which is device-wins as
+        // designed. Inside the same transaction, so a failure anywhere still
+        // rolls the whole restore back.
+        const categoryColumns = columns['categories'];
+        if (categoryColumns) {
+          await db.execAsync(reseedPristineCategoriesSql(categoryColumns));
+        }
+        const ruleColumns = columns['rules'];
+        if (ruleColumns && pristineRules.length > 0) {
+          await db.execAsync(reseedPristineRulesSql(ruleColumns, pristineRules));
+        }
+        if (retiredRules.length > 0) {
+          await db.execAsync(deleteRetiredShippedRulesSql(retiredRules));
+          added['rules'] = (added['rules'] ?? 0) - retiredRules.length;
         }
       });
     } finally {
@@ -341,16 +380,67 @@ async function countRows(db: SQLite.SQLiteDatabase, qualified: string): Promise<
  * the precondition that lets the merge use `SELECT *`, and `SELECT *` across
  * mismatched columns would write values into the wrong fields silently.
  */
-async function assertColumnsMatch(db: SQLite.SQLiteDatabase): Promise<void> {
+async function assertColumnsMatch(
+  db: SQLite.SQLiteDatabase,
+): Promise<Readonly<Record<string, readonly string[]>>> {
+  const columns: Record<string, readonly string[]> = {};
   for (const table of BACKUP_TABLES) {
     const [mine, theirs] = await Promise.all([
       db.getAllAsync<{ name: string }>(`PRAGMA main.table_info(${table});`),
       db.getAllAsync<{ name: string }>(`PRAGMA backup.table_info(${table});`),
     ]);
-    const a = mine.map((column) => column.name).join(',');
+    const names = mine.map((column) => column.name);
+    const a = names.join(',');
     const b = theirs.map((column) => column.name).join(',');
     if (a !== b || a === '') {
       throw new BackupError('schema-mismatch');
     }
+    columns[table] = names;
   }
+  // Handed back rather than thrown away: the reseed statements are built from
+  // the live column list, and this is the function that has just proved the
+  // backup declares the same one. Reading the columns a second time would
+  // reopen the window this check exists to close.
+  return columns;
+}
+
+/**
+ * The live `rules` rows, in the shape `pristineShippedRuleIds` compares.
+ *
+ * `match_json` is a pattern the owner may have typed, so it stays in memory
+ * and never reaches a log — the Boundaries rule in CLAUDE.md.
+ */
+async function liveRules(db: SQLite.SQLiteDatabase): Promise<StoredRuleRow[]> {
+  const rows = await db.getAllAsync<{
+    id: string;
+    category_id: string;
+    priority: number;
+    enabled: number;
+    learned: number;
+    match_json: string;
+  }>('SELECT id, category_id, priority, enabled, learned, match_json FROM main.rules;');
+  return rows.map((row) => ({
+    id: row.id,
+    categoryId: row.category_id,
+    priority: row.priority,
+    enabled: row.enabled === 1,
+    learned: row.learned === 1,
+    matchJson: row.match_json,
+  }));
+}
+
+/**
+ * The shipped rules the backup's phone had deleted.
+ *
+ * Read straight from the attached file rather than waiting for `settings` to
+ * merge: by the time the tombstone lands in `main.settings` the rules it names
+ * have already been reinstated by `syncDefaultRules()` at launch, and nothing
+ * would ever look at it again.
+ */
+async function retiredShippedRulesFromBackup(db: SQLite.SQLiteDatabase): Promise<string[]> {
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM backup.settings WHERE key = ?;',
+    SETTING_RETIRED_SHIPPED_RULES,
+  );
+  return parseRetiredShippedRules(row?.value ?? null);
 }
