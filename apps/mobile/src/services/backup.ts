@@ -200,6 +200,9 @@ export async function createBackup(code: string): Promise<{ createdAt: string }>
   }
 }
 
+/** The two names this file writes into cache, and nothing else. */
+const BACKUP_CACHE_FILE = /^(finant-backup-|restore-).*\.finantbackup$/;
+
 /**
  * Removes backup working files this app left in its own cache.
  *
@@ -212,8 +215,6 @@ export async function createBackup(code: string): Promise<{ createdAt: string }>
  * Safe to run at launch: nothing else is in flight that early, and it only
  * ever matches the two name shapes this file creates.
  */
-const BACKUP_CACHE_FILE = /^(finant-backup-|restore-).*\.finantbackup$/;
-
 export async function sweepBackupCache(): Promise<void> {
   try {
     for (const entry of Paths.cache.list()) {
