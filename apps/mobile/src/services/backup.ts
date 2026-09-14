@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import { File, Paths } from 'expo-file-system';
+import { Platform } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import Constants from 'expo-constants';
 import {
@@ -28,6 +29,7 @@ import { getOrCreateDatabaseKey } from '../security/keys';
 import { LATEST_VERSION, MIGRATIONS } from '../db/schema';
 import { SETTING_LAST_BACKUP_AT, writeSetting } from '../db/settings-repo';
 import { SETTING_RETIRED_SHIPPED_RULES } from '../db/settings-keys';
+import { isOwnCopy } from './share-intake-files';
 
 export type BackupErrorCode =
   'wrong-code' | 'not-a-backup' | 'too-new' | 'schema-mismatch' | 'sharing-unavailable';
@@ -182,9 +184,69 @@ export async function createBackup(code: string): Promise<{ createdAt: string }>
   } finally {
     // The cache copy is encrypted, but it is also the owner's whole financial
     // history sitting in a directory the OS may hand to anything that asks for
-    // free space. It has been shared by now; it has no reason to stay.
-    discardCacheFile(file);
+    // free space. It has no reason to outlive the share.
+    //
+    // Except on Android, where it does. `Sharing.shareAsync` resolves when the
+    // chooser returns, not when the app the owner picked has finished reading:
+    // Android hands the receiver a content:// stream it opens on its own
+    // schedule, so Drive, Gmail or Nextcloud reading lazily would find a file
+    // this line had already unlinked — and `lastBackupAt` would record a
+    // backup that arrived truncated or not at all. There is no completion
+    // callback to wait for, so the file stays and `sweepBackupCache()` removes
+    // it at the next launch instead, by which time every reader is long done.
+    // iOS has no such gap: UIActivityViewController reads the item while the
+    // sheet is up and its completion fires afterwards.
+    if (Platform.OS !== 'android') discardCacheFile(file);
   }
+}
+
+/**
+ * Removes backup working files this app left in its own cache.
+ *
+ * Two things end up here. An Android export deliberately leaves its shared
+ * file behind (see the `finally` above), and either platform can be killed
+ * mid-export or mid-restore, stranding a file no code path will ever name
+ * again. Both are the owner's whole ledger in a file a recovery code opens, so
+ * they do not get to sit there until the OS feels like reclaiming space.
+ *
+ * Safe to run at launch: nothing else is in flight that early, and it only
+ * ever matches the two name shapes this file creates.
+ */
+const BACKUP_CACHE_FILE = /^(finant-backup-|restore-).*\.finantbackup$/;
+
+export async function sweepBackupCache(): Promise<void> {
+  try {
+    for (const entry of Paths.cache.list()) {
+      if (entry instanceof File && BACKUP_CACHE_FILE.test(entry.name)) {
+        discardCacheFile(entry);
+      }
+    }
+  } catch {
+    // Best-effort, exactly like `sweepShareIntakeCache`: a sweep that cannot
+    // run leaves a file in the app's own cache rather than breaking startup.
+    // Not logged — the reason would carry a file name.
+  }
+  return Promise.resolve();
+}
+
+/**
+ * Drops the copy `DocumentPicker` made of the file the owner picked.
+ *
+ * `copyToCacheDirectory: true` duplicates the chosen file into the app's cache
+ * before `inspectBackup` ever sees it, and `inspectBackup` then copies *that*
+ * into its own working file and only ever deletes its own. Left alone, every
+ * restore stranded a complete, code-openable copy of the entire ledger in
+ * cache, forever.
+ *
+ * `isOwnCopy` is the same check `discardShare` uses, for the same reason: only
+ * a copy the app itself caused to exist may be deleted. A URI outside the
+ * app's own directories is the owner's original file, in place, and deleting
+ * that would be FinAnt removing a document it was only ever lent.
+ */
+export async function discardPickedBackup(uri: string): Promise<void> {
+  if (!isOwnCopy(uri)) return;
+  discardCacheFile(new File(uri));
+  return Promise.resolve();
 }
 
 export type BackupPreview = {

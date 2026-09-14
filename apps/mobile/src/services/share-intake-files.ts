@@ -7,7 +7,9 @@ const SHARE_INTAKE_CACHE_DIR = 'share-intake';
 /**
  * True only for a URI this app itself wrote a copy to, and so is ours to
  * delete: its own cache directory (where the Android native module copies an
- * `ACTION_SEND` or `content://` share — see `modules/share-intake`), or the
+ * `ACTION_SEND` or `content://` share — see `modules/share-intake` — and where
+ * `expo-document-picker` puts its `copyToCacheDirectory` duplicate, which
+ * `services/backup.ts` disposes of through this same check), or the
  * `Documents/Inbox` directory iOS uses when a document provider hands over a
  * duplicate rather than the original in place.
  *
@@ -19,7 +21,7 @@ const SHARE_INTAKE_CACHE_DIR = 'share-intake';
  * presumed to be the owner's own file, in place, and is never a candidate for
  * deletion.
  */
-function isOwnCopy(uri: string): boolean {
+export function isOwnCopy(uri: string): boolean {
   return uri.startsWith(Paths.cache.uri) || uri.startsWith(`${Paths.document.uri}Inbox/`);
 }
 

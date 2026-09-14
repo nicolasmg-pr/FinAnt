@@ -13,6 +13,7 @@ import { spacing, type, useTheme } from '../src/design';
 import ShareIntakeModule, { SHARE_TOO_LARGE, SHARE_UNREADABLE } from '../modules/share-intake';
 import { peekPendingShare, setPendingShare, type SharedFile } from '../src/services/share-intake';
 import { sweepShareIntakeCache } from '../src/services/share-intake-files';
+import { sweepBackupCache } from '../src/services/backup';
 
 /**
  * What the share effects below hand to the flush effect: either a received
@@ -80,6 +81,12 @@ export default function RootLayout() {
       // `peekPendingShare()`, a read that (unlike `takePendingShare`) does
       // not consume it, leaving it for `app/import.tsx` to read later.
       await sweepShareIntakeCache(peekPendingShare()?.uri);
+      // The same idea for the other cache directory this app writes whole
+      // copies of the database into: an Android export leaves its shared file
+      // behind on purpose (the receiving app may still be reading it when the
+      // chooser returns), and a process killed mid-export or mid-restore
+      // strands one nothing will name again. Neither may outlive the session.
+      await sweepBackupCache();
       setReady(true);
     })();
   }, []);

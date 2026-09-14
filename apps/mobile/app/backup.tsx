@@ -17,6 +17,7 @@ import {
   beginBackup,
   createBackup,
   discardBackup,
+  discardPickedBackup,
   inspectBackup,
   mergeBackup,
   type BackupPreview,
@@ -135,15 +136,24 @@ export default function BackupScreen() {
   const pickFile = async () => {
     setRestoreError(null);
     setRestoreResult(null);
-    const picked = await DocumentPicker.getDocumentAsync({
-      type: '*/*',
-      copyToCacheDirectory: true,
-    });
-    if (picked.canceled) return;
-    const asset = picked.assets[0];
-    if (!asset) return;
-    setPickedUri(asset.uri);
-    setPickedName(asset.name);
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+      if (picked.canceled) return;
+      const asset = picked.assets[0];
+      if (!asset) return;
+      // The picker copies the chosen file into cache before handing it over,
+      // so replacing a pick has to drop the copy the previous one left behind.
+      if (pickedUri) void discardPickedBackup(pickedUri);
+      setPickedUri(asset.uri);
+      setPickedName(asset.name);
+    } catch (thrown) {
+      // Every other flow on this screen reports its failure rather than
+      // leaving an unhandled rejection behind; the picker is no different.
+      setRestoreError(message(thrown));
+    }
   };
 
   const inspect = async () => {
@@ -179,6 +189,10 @@ export default function BackupScreen() {
       const total = Object.values(added).reduce((sum, count) => sum + count, 0);
       setPreview(null);
       setRestoreResult(total);
+      // The restore is done with it, and it is a complete copy of the ledger a
+      // recovery code opens. The owner's own file, wherever they picked it
+      // from, is untouched — this only removes the picker's cache duplicate.
+      if (pickedUri) void discardPickedBackup(pickedUri);
       setPickedUri(null);
       setPickedName(null);
       setTypedCode('');
