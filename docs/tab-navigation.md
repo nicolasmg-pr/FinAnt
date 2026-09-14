@@ -33,10 +33,10 @@ The pager itself is not vendored. `MaterialTopTabView` requires
 `"Install the 'react-native-tab-view' package and its peer dependencies to use
 the Expo Router's TopTabs."` when it is missing, so two packages were added:
 
-| Package                  | Version | Why                                            |
-| ------------------------ | ------- | ---------------------------------------------- |
-| `react-native-tab-view`  | 4.3.2   | The `TabView` that `MaterialTopTabView` renders |
-| `react-native-pager-view` | 8.0.2  | Its peer dependency; the Expo SDK 57 pin        |
+| Package                   | Version | Why                                             |
+| ------------------------- | ------- | ----------------------------------------------- |
+| `react-native-tab-view`   | 4.3.2   | The `TabView` that `MaterialTopTabView` renders |
+| `react-native-pager-view` | 8.0.2   | Its peer dependency; the Expo SDK 57 pin        |
 
 `react-native-pager-view` is a native module: adding it needed
 `npx pod-install` for iOS and a Gradle rebuild for Android.
@@ -66,14 +66,27 @@ All five screens query the encrypted database. A pager mounts its scenes, so
 the current screen and its neighbour is mounted, and the neighbour is ready
 before a swipe lands on it.
 
-## Known interaction: the balance chart
+## The balance chart yields at its edges
 
-The dashboard's balance chart is itself a horizontal `ScrollView`
-(`src/components/BalanceChart.tsx`). A drag that starts on the chart scrolls
-the chart through its history and does not change tab; a drag that starts
-anywhere else on the dashboard changes tab. Verified on the Android emulator on
-2026-09-14. This is the useful division — the chart would otherwise be
-unreachable — but it means the chart band is a dead zone for tab swiping.
+The dashboard's balance chart pans sideways through years of history, so it
+and the pager want the same horizontal drag. A `ScrollView` cannot share one:
+it claims every horizontal drag whether or not it has anywhere left to go,
+which made the chart a dead zone for swiping between tabs.
+
+`src/components/BalanceChart.tsx` therefore pans with a gesture-handler `Pan`
+in `manualActivation` mode over a reanimated `translateX`, and decides per drag
+whether to take it:
+
+- mostly vertical — let through, it belongs to the screen's own scroll;
+- horizontal with room left in that direction — taken, the chart pans;
+- horizontal with no room (at the oldest end dragging right, at the newest end
+  dragging left) — let through, and the pager changes tab.
+
+A gesture that never activates does not block the pager underneath it, which is
+what makes the hand-off work on both platforms. Verified on the Android
+emulator on 2026-09-14: all three cases behave as listed. The chart still opens
+on its newest end, now by setting the pan offset rather than by
+`scrollToEnd()`.
 
 ## Sources
 

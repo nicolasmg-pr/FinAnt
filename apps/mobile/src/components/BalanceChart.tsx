@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Svg, {
   Circle,
   Defs,
@@ -9,7 +10,14 @@ import Svg, {
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
-import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  clamp,
+  useAnimatedProps,
+  useAnimatedStyle,
+  useSharedValue,
+  withDecay,
+  withTiming,
+} from 'react-native-reanimated';
 import {
   formatAxisAmount,
   money,
@@ -27,6 +35,9 @@ const PADDING = 8;
 const AXIS = 18;
 /** Below this a point has no room to be read, so the chart scrolls instead. */
 const MIN_SLOT = 26;
+/** How far a finger must travel before the drag is judged horizontal or
+ * vertical, and the chart decides whether to take it. */
+const DRAG_SLOP = 6;
 /** Long enough to cover any path this chart can draw at phone width. */
 const DASH_SPAN = 4000;
 /** Radius of a projected-tail grain, in SVG px. Drives both its own draw and
@@ -62,7 +73,6 @@ export function BalanceChart({
   const theme = useTheme();
   const motion = useMotion();
   const [width, setWidth] = useState(320);
-  const scroller = useRef<ScrollView | null>(null);
 
   // Drawn once, on mount. A line that redraws itself every time the data
   // changes is noise, not feedback.
@@ -120,6 +130,63 @@ export function BalanceChart({
       : '';
 
   const revealProps = useAnimatedProps(() => ({ strokeDashoffset: reveal.value }));
+
+  // How far the chart is panned from its oldest end, in px, and where that
+  // stood when the current drag began.
+  const maxPan = Math.max(0, chartWidth - width);
+  const pan = useSharedValue(0);
+  const panStart = useSharedValue(0);
+  const touchStart = useSharedValue({ x: 0, y: 0 });
+
+  // Opens on the newest end: years of history should not have to be scrolled
+  // past to see what the owner holds now.
+  useEffect(() => {
+    pan.value = maxPan;
+  }, [maxPan, pan]);
+
+  /**
+   * The tabs are a pager, so a horizontal drag over this chart is taken by
+   * whichever gesture claims it first — and a chart that always claimed it
+   * would be a dead zone for swiping between tabs. This one only claims a drag
+   * it has room to answer: at the oldest end a further drag right, and at the
+   * newest end a further drag left, are let through to the pager, which
+   * changes tab. A mostly-vertical drag is always let through too, since it
+   * belongs to the screen's own scroll. That is what a plain `ScrollView`
+   * could not do — it claims every horizontal drag, room or not.
+   */
+  const drag = Gesture.Pan()
+    .manualActivation(true)
+    .onTouchesDown((event) => {
+      const touch = event.allTouches[0];
+      if (touch) touchStart.value = { x: touch.absoluteX, y: touch.absoluteY };
+    })
+    .onTouchesMove((event, manager) => {
+      const touch = event.allTouches[0];
+      if (!touch) return;
+      const dx = touch.absoluteX - touchStart.value.x;
+      const dy = touch.absoluteY - touchStart.value.y;
+      if (Math.abs(dy) > Math.abs(dx)) {
+        manager.fail();
+        return;
+      }
+      if (Math.abs(dx) < DRAG_SLOP) return;
+      // Dragging left pulls newer periods in, which needs room ahead.
+      const room = dx < 0 ? pan.value < maxPan : pan.value > 0;
+      if (room) manager.activate();
+      else manager.fail();
+    })
+    .onStart(() => {
+      panStart.value = pan.value;
+    })
+    .onUpdate((event) => {
+      pan.value = clamp(panStart.value - event.translationX, 0, maxPan);
+    })
+    .onEnd((event) => {
+      if (!motion.enabled) return;
+      pan.value = withDecay({ velocity: -event.velocityX, clamp: [0, maxPan] });
+    });
+
+  const panned = useAnimatedStyle(() => ({ transform: [{ translateX: -pan.value }] }));
 
   /**
    * Gridlines and their values, in their own SVG behind the line and pinned to
@@ -218,19 +285,19 @@ export function BalanceChart({
     <View style={{ height: HEIGHT }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
       {guides}
       {chartWidth > width ? (
-        <ScrollView
-          ref={scroller}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          // Opens on the newest end: years of history should not have to be
-          // scrolled past to see what the owner holds now.
-          onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: false })}
-        >
-          {chart}
-        </ScrollView>
+        <View style={styles.viewport}>
+          <GestureDetector gesture={drag}>
+            <Animated.View style={[{ width: chartWidth }, panned]}>{chart}</Animated.View>
+          </GestureDetector>
+        </View>
       ) : (
         chart
       )}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  // The panned content is wider than the card, so it has to be clipped.
+  viewport: { flex: 1, overflow: 'hidden' },
+});
