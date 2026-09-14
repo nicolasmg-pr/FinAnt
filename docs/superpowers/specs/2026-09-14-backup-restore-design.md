@@ -293,3 +293,39 @@ If the probe fails, stop and revisit the design. The fallback is the approach re
 during brainstorming: an encrypted JSONL document using `@noble/hashes` for Argon2id
 and a new `@noble/ciphers` dependency for XChaCha20-Poly1305, with a hand-written
 serializer per table. Everything above except the file format survives that change.
+
+### Probe result (2026-09-14)
+
+Ran on an iOS 26.5 simulator against a populated database. All four assumptions hold:
+
+```
+dedicated connection keyed ok
+ATTACH ok
+sqlcipher_export ok
+attached user_version ok
+DETACH ok
+closed dedicated connection ok
+reopened user_version=12
+tables=16
+wrong code rejected ok: Error code 26: file is not a database
+PASS
+```
+
+Three things the probe settled that the design above did not know:
+
+1. **Export and merge must open their own connection**, with
+   `SQLite.openDatabaseAsync('finant.db', { useNewConnection: true })` and
+   `PRAGMA key = "x'<key>'"` on it. Without `useNewConnection`, expo-sqlite returns the
+   handle the app is already using, the running UI holds reads against it, and `DETACH`
+   fails with `database probe is locked`. This is also the better shape on its own
+   terms: an export cannot observe a half-written change on another connection.
+2. **A stale backup file must be deleted before `ATTACH`.** `sqlcipher_export()` into a
+   file that already holds the schema fails with `table accounts already exists`.
+3. **A wrong recovery code surfaces on the first query, not on `PRAGMA key`** — as
+   `SQLiteErrorException: Error code 26: file is not a database`. `PRAGMA key` itself
+   succeeds regardless. This confirms the restore flow's decision to detect a wrong key
+   at the first read of `backup_meta` and report it as a wrong code rather than as
+   corruption.
+
+`tables=16` is 15 manifest tables plus `notification_captures`, which cross-checks the
+manifest against a real database.

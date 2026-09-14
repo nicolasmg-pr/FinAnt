@@ -810,7 +810,20 @@ cd apps/mobile && npx expo install expo-sharing
 
 Expected: `expo-sharing` at `~57.x` in `apps/mobile/package.json`.
 
-- [ ] **Step 2: Write the service**
+- [ ] **Step 2: Export the database name**
+
+`DATABASE_NAME` is module-private in `apps/mobile/src/db/database.ts:14`. The backup
+service opens its own connection to the same file, so it needs the name. Change the
+declaration to:
+
+```ts
+/** Exported because the backup service opens its own connection to this file. */
+export const DATABASE_NAME = 'finant.db';
+```
+
+Nothing else in that file changes.
+
+- [ ] **Step 3: Write the service**
 
 Create `apps/mobile/src/services/backup.ts`:
 
@@ -829,7 +842,9 @@ import {
   exportBackupSql,
   formatRecoveryCode,
 } from '@finant/core';
-import { getDatabase } from '../db/database';
+import * as SQLite from 'expo-sqlite';
+import { DATABASE_NAME } from '../db/database';
+import { getOrCreateDatabaseKey } from '../security/keys';
 import { LATEST_VERSION } from '../db/schema';
 import { SETTING_LAST_BACKUP_AT, writeSetting } from '../db/settings-repo';
 
@@ -883,7 +898,12 @@ export async function createBackup(): Promise<{ code: string; createdAt: string 
   // opened with the wrong key and fail as "file is not a database".
   if (file.exists) file.delete();
 
-  const db = await getDatabase();
+  // Its own connection, never the app's. Without useNewConnection expo-sqlite
+  // returns the cached handle the UI is reading through, and DETACH then fails
+  // with "database is locked". Confirmed by the probe in Task 1.
+  const key = await getOrCreateDatabaseKey();
+  const db = await SQLite.openDatabaseAsync(DATABASE_NAME, { useNewConnection: true });
+  await db.execAsync(`PRAGMA key = "x'${key}'";`);
   const path = posixPath(file.uri);
 
   try {
@@ -908,6 +928,7 @@ export async function createBackup(): Promise<{ code: string; createdAt: string 
       );
     } finally {
       await db.execAsync(detachBackupSql());
+      await db.closeAsync();
     }
 
     await Sharing.shareAsync(file.uri, {
@@ -927,7 +948,7 @@ export async function createBackup(): Promise<{ code: string; createdAt: string 
 
 `EXCLUDED_TABLES` is interpolated into a `DELETE`. It is a module constant in `@finant/core`, never user input — the whitelist is the constant itself.
 
-- [ ] **Step 3: Typecheck**
+- [ ] **Step 4: Typecheck**
 
 ```bash
 npm run typecheck
@@ -935,12 +956,12 @@ npm run typecheck
 
 Expected: clean. If `Constants.expoConfig` is typed as possibly undefined, the `?? 'unknown'` above already covers it.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-npx prettier --write apps/mobile/src/services/backup.ts
+npx prettier --write apps/mobile/src/services/backup.ts apps/mobile/src/db/database.ts
 npx eslint --fix apps/mobile/src/services/backup.ts
-git add apps/mobile/src/services/backup.ts apps/mobile/package.json package-lock.json
+git add apps/mobile/src/services/backup.ts apps/mobile/src/db/database.ts apps/mobile/package.json package-lock.json
 git commit -m "feat(backup): write an encrypted backup and share it
 
 sqlcipher_export copies schema and rows but not user_version, so it is set by
@@ -1158,7 +1179,12 @@ export async function mergeBackup(
   preview: BackupPreview,
   code: string,
 ): Promise<Readonly<Record<string, number>>> {
-  const db = await getDatabase();
+  // Its own connection, for the same reason as the export: DETACH against the
+  // handle the UI is reading through fails with "database is locked". Rows
+  // committed here are visible to the app's connection immediately afterwards.
+  const key = await getOrCreateDatabaseKey();
+  const db = await SQLite.openDatabaseAsync(DATABASE_NAME, { useNewConnection: true });
+  await db.execAsync(`PRAGMA key = "x'${key}'";`);
   const added: Record<string, number> = {};
 
   try {
@@ -1175,7 +1201,7 @@ export async function mergeBackup(
       });
     } finally {
       await db.execAsync(detachBackupSql());
-      await db.execAsync('PRAGMA defer_foreign_keys = OFF;');
+      await db.closeAsync();
     }
     return added;
   } finally {
