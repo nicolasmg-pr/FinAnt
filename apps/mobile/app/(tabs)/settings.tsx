@@ -14,6 +14,7 @@ import { SegmentedControl } from '../../src/components/ui/SegmentedControl';
 import { Touchable } from '../../src/components/ui/Touchable';
 import { eraseEverything } from '../../src/db/database';
 import { deleteExclusionRule, listExclusionRules } from '../../src/db/exclusion-rules-repo';
+import { readSetting, SETTING_LAST_BACKUP_AT } from '../../src/db/settings-repo';
 import { listRules } from '../../src/db/rules-repo';
 import { applyRecategorisations, listAllTransactions } from '../../src/db/transactions-repo';
 import { currentLocale, setLocale } from '../../src/i18n';
@@ -31,24 +32,38 @@ export default function SettingsScreen() {
   const [exclusions, setExclusions] = useState<readonly ExclusionRule[]>([]);
   const [reapplying, setReapplying] = useState(false);
   const [reapplied, setReapplied] = useState<number | null>(null);
+  const [lastBackup, setLastBackup] = useState<string | null>(null);
 
   // Reloaded on focus: a rule is usually created on the movement screen, and
-  // the owner comes straight here to check what it now covers.
+  // the owner comes straight here to check what it now covers. The last
+  // backup date rides along on the same reload, since a backup made from this
+  // same screen should be reflected the moment the owner comes back to it.
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      listExclusionRules()
-        .then((rules) => {
-          if (!cancelled) setExclusions(rules);
+      Promise.all([listExclusionRules(), readSetting(SETTING_LAST_BACKUP_AT)])
+        .then(([rules, backupAt]) => {
+          if (cancelled) return;
+          setExclusions(rules);
+          setLastBackup(backupAt);
         })
         .catch(() => {
-          if (!cancelled) setExclusions([]);
+          if (cancelled) return;
+          setExclusions([]);
+          setLastBackup(null);
         });
       return () => {
         cancelled = true;
       };
     }, []),
   );
+
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString(INTL_LOCALE[currentLocale()], {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
 
   /**
    * Removing a rule stops it applying to future imports; it does not un-exclude
@@ -202,6 +217,17 @@ export default function SettingsScreen() {
       </Card>
 
       <Card title={t('settings.data')}>
+        <ListRow
+          title={t('backup.title')}
+          subtitle={
+            lastBackup
+              ? t('backup.lastBackup', { date: formatDate(lastBackup) })
+              : t('backup.never')
+          }
+          trailing={<Feather name="chevron-right" size={18} color={theme.textMuted} />}
+          onPress={() => router.push('/backup')}
+          divider
+        />
         {/* The one destructive action in the app. Its confirmation is
             unchanged; only the control around it is. */}
         <Button label={t('settings.eraseAll')} variant="danger" onPress={confirmErase} />
