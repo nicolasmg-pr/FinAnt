@@ -1034,7 +1034,9 @@ export type BackupPreview = {
  */
 export async function inspectBackup(uri: string, code: string): Promise<BackupPreview> {
   const working = new File(Paths.cache, `restore-${Date.now()}.finantbackup`);
-  new File(uri).copy(working);
+  // File.copy() returns a promise: without the await, SQLite can open the
+  // working file while the copy is still in flight.
+  await new File(uri).copy(working);
 
   let db: SQLite.SQLiteDatabase | null = null;
   try {
@@ -1191,6 +1193,11 @@ export async function mergeBackup(
     await db.execAsync(attachBackupSql(preview.path, code));
     try {
       await assertColumnsMatch(db);
+      // foreign_keys defaults OFF on every new connection — database.ts turns it
+      // on only for the app's own cached handle. Without this line
+      // defer_foreign_keys is a no-op: enforcement is off entirely and an orphan
+      // row inserts silently instead of rolling the restore back.
+      await db.execAsync('PRAGMA foreign_keys = ON;');
       await db.execAsync('PRAGMA defer_foreign_keys = ON;');
       await db.withTransactionAsync(async () => {
         for (const table of BACKUP_TABLES) {
@@ -1303,7 +1310,7 @@ Add to `packages/i18n/src/en.ts`, as a sibling of `settings`:
     enterCodeHint: 'The code shown when the backup was made.',
     previewTitle: 'This backup',
     previewMade: 'Made {{date}} with FinAnt {{version}}',
-    previewRows: '{{count}} row',
+    previewRows_one: '{{count}} row',
     previewRows_other: '{{count}} rows',
     previewBody:
       'Restoring adds what your phone is missing. Nothing already here is changed or removed, so it is safe to run twice.',
@@ -1311,7 +1318,7 @@ Add to `packages/i18n/src/en.ts`, as a sibling of `settings`:
     restoring: 'Restoring…',
     doneTitle: 'Restored',
     doneNothing: 'Everything in that backup was already here.',
-    doneAdded: '{{count}} row added.',
+    doneAdded_one: '{{count}} row added.',
     doneAdded_other: '{{count}} rows added.',
     errorWrongCode: 'That recovery code does not match this file.',
     errorNotABackup: 'That file is not a FinAnt backup.',
@@ -1471,7 +1478,17 @@ export default function BackupScreen() {
 
       {error ? <Text style={[type.body, { color: theme.expense }]}>{error}</Text> : null}
 
-      <Sheet visible={code !== null} onDismiss={() => setCode(null)} title={t('backup.codeTitle')}>
+      {/* Dismissal is gated on `saved`, not just the Done button: Sheet wires
+          onDismiss to the backdrop, the Android back button and the drag-down
+          gesture too, and losing the code while a real backup file exists is
+          the precise failure this screen is here to prevent. */}
+      <Sheet
+        visible={code !== null}
+        onDismiss={() => {
+          if (saved) setCode(null);
+        }}
+        title={t('backup.codeTitle')}
+      >
         <Touchable
           onPress={() => {
             if (code) void Clipboard.setStringAsync(code).then(() => setCopied(true));
