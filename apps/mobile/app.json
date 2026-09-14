@@ -3,7 +3,7 @@
     "name": "FinAnt",
     "slug": "finant",
     "scheme": "finant",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -36,6 +36,7 @@
     },
     "android": {
       "package": "com.finant.app",
+      "versionCode": 2,
       "allowBackup": false,
       "adaptiveIcon": {
         "backgroundColor": "#F2F6F5",
