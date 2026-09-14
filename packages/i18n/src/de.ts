@@ -336,6 +336,23 @@ export const de: Translations = {
     errorSharingUnavailable:
       'Dieses Gerät kann keine Dateien teilen, daher kann das Backup nicht gespeichert werden.',
     errorFailed: 'Das Backup konnte nicht abgeschlossen werden. Es wurde nichts geändert.',
+    tables: {
+      institutions: 'Banken',
+      accounts: 'Konten',
+      categories: 'Kategorien',
+      import_profiles: 'Importformate',
+      rules: 'Regeln zur Zuordnung',
+      budgets: 'Budgets',
+      exclusion_rules: 'Automatische Ausschlüsse',
+      transactions: 'Umsätze',
+      assets: 'Positionen',
+      investment_legs: 'Transaktionen',
+      quotes: 'Aktuelle Kurse',
+      price_history: 'Kursverlauf',
+      notification_sources: 'Bank-Benachrichtigungen',
+      notification_routes: 'Benachrichtigungsregeln',
+      settings: 'Einstellungen',
+    },
   },
   budgets: {
     title: 'Budgets',

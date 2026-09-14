@@ -172,23 +172,28 @@ export default function BackupScreen() {
     ? Object.entries(preview.counts).filter(([, count]) => count > 0)
     : [];
 
-  // A translated label for a manifest table, where one natural one exists.
+  // A translated label for every table the manifest can carry today.
   // `previewRows` above already hides zero-count tables, so this only ever
-  // renders for a table the backup actually carries; the raw name is a fine
-  // fallback for the handful — `accounts`, `investment_legs`, `quotes`,
-  // `price_history`, `notification_routes` — with no single-word translation
-  // to reach for.
+  // renders for a table the backup actually contains. The fallback to the
+  // raw table name stays only as protection against a future table added to
+  // `BACKUP_TABLES` without a matching translation, never as an accepted
+  // outcome for one of the fifteen that exist now.
   const tableLabels: Record<string, string> = {
-    institutions: t('banks.title'),
-    categories: t('categories.title'),
-    import_profiles: t('import.title'),
-    rules: t('settings.rulesTitle'),
-    budgets: t('budgets.title'),
-    exclusion_rules: t('settings.autoExclusions'),
-    transactions: t('transactions.title'),
-    assets: t('portfolio.title'),
-    notification_sources: t('notifications.title'),
-    settings: t('nav.settings'),
+    institutions: t('backup.tables.institutions'),
+    accounts: t('backup.tables.accounts'),
+    categories: t('backup.tables.categories'),
+    import_profiles: t('backup.tables.import_profiles'),
+    rules: t('backup.tables.rules'),
+    budgets: t('backup.tables.budgets'),
+    exclusion_rules: t('backup.tables.exclusion_rules'),
+    transactions: t('backup.tables.transactions'),
+    assets: t('backup.tables.assets'),
+    investment_legs: t('backup.tables.investment_legs'),
+    quotes: t('backup.tables.quotes'),
+    price_history: t('backup.tables.price_history'),
+    notification_sources: t('backup.tables.notification_sources'),
+    notification_routes: t('backup.tables.notification_routes'),
+    settings: t('backup.tables.settings'),
   };
 
   return (
@@ -258,7 +263,18 @@ export default function BackupScreen() {
         </Card>
       ) : null}
 
-      <Sheet visible={code !== null} onDismiss={() => setCode(null)} title={t('backup.codeTitle')}>
+      <Sheet
+        visible={code !== null}
+        // Backdrop tap, hardware back and the drag-down gesture all resolve
+        // to this same handler. The code is shown exactly once and never
+        // stored, so a dismissal the checkbox hasn't cleared would lose it
+        // for good while the backup file it opens keeps existing — silently,
+        // until the day it is needed and cannot be opened.
+        onDismiss={() => {
+          if (saved) setCode(null);
+        }}
+        title={t('backup.codeTitle')}
+      >
         <Touchable
           onPress={() => {
             if (code) void Clipboard.setStringAsync(code).then(() => setCopied(true));

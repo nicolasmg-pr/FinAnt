@@ -337,6 +337,23 @@ export const es: Translations = {
     errorSharingUnavailable:
       'Este dispositivo no puede compartir archivos, así que la copia de seguridad no se puede guardar.',
     errorFailed: 'No se ha podido completar la copia de seguridad. No se ha cambiado nada.',
+    tables: {
+      institutions: 'Bancos',
+      accounts: 'Cuentas',
+      categories: 'Categorías',
+      import_profiles: 'Formatos de importación',
+      rules: 'Reglas de clasificación',
+      budgets: 'Presupuestos',
+      exclusion_rules: 'Exclusiones automáticas',
+      transactions: 'Movimientos',
+      assets: 'Posiciones',
+      investment_legs: 'Operaciones',
+      quotes: 'Precios actuales',
+      price_history: 'Historial de precios',
+      notification_sources: 'Notificaciones bancarias',
+      notification_routes: 'Reglas de notificaciones',
+      settings: 'Ajustes',
+    },
   },
   budgets: {
     title: 'Presupuestos',
